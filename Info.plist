@@ -16,5 +16,7 @@
     <string>15.0</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright © 2025 Analytical Engines. All rights reserved.</string>
 </dict>
 </plist>
