@@ -16,11 +16,36 @@ struct ContentView: View {
                     // タップでフォーカスを確保
                 }
 
-            if let image = viewModel.currentImage {
-                // 画像表示
+            if viewModel.viewMode == .single, let image = viewModel.currentImage {
+                // 単ページ表示
                 VStack(spacing: 0) {
                     // 画像エリア
                     ImageDisplayView(image: image)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            // 画像タップでもフォーカスを確保
+                        }
+
+                    // ステータスバー
+                    HStack {
+                        Text(viewModel.archiveFileName)
+                            .foregroundColor(.white)
+                        Spacer()
+                        Text(viewModel.currentFileName)
+                            .foregroundColor(.gray)
+                        Spacer()
+                        Text(viewModel.pageInfo)
+                            .foregroundColor(.white)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color.black.opacity(0.8))
+                }
+            } else if viewModel.viewMode == .spread, let leftImage = viewModel.leftImage {
+                // 見開き表示
+                VStack(spacing: 0) {
+                    // 画像エリア
+                    SpreadView(rightImage: viewModel.rightImage, leftImage: leftImage)
                         .contentShape(Rectangle())
                         .onTapGesture {
                             // 画像タップでもフォーカスを確保
@@ -67,6 +92,7 @@ struct ContentView: View {
         .frame(minWidth: 800, minHeight: 600)
         .focusable()  // フォーカス可能にする
         .focusEffectDisabled()  // フォーカスリングを非表示
+        .focusedValue(\.bookViewModel, viewModel)  // メニューコマンドからアクセス可能に
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             handleDrop(providers: providers)
             return true

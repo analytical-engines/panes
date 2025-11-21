@@ -2,6 +2,12 @@ import Foundation
 import SwiftUI
 import AppKit
 
+/// 表示モード
+enum ViewMode {
+    case single  // 単ページ
+    case spread  // 見開き
+}
+
 /// 書籍（画像アーカイブ）の表示状態を管理するViewModel
 @Observable
 class BookViewModel {
@@ -10,6 +16,12 @@ class BookViewModel {
 
     // 現在表示中の画像
     var currentImage: NSImage?
+
+    // 見開き表示用：右ページの画像
+    var rightImage: NSImage?
+
+    // 見開き表示用：左ページの画像
+    var leftImage: NSImage?
 
     // 現在のページ番号（0始まり）
     var currentPage: Int = 0
@@ -22,6 +34,9 @@ class BookViewModel {
 
     // エラーメッセージ
     var errorMessage: String?
+
+    // 表示モード
+    var viewMode: ViewMode = .single
 
     /// 画像ソースを開く（zipまたは画像ファイル）
     func openSource(_ source: ImageSource) {
@@ -76,11 +91,23 @@ class BookViewModel {
 
     /// 現在のページの画像を読み込む
     private func loadCurrentPage() {
+        guard imageSource != nil else { return }
+
+        switch viewMode {
+        case .single:
+            loadSinglePage()
+        case .spread:
+            loadSpreadPages()
+        }
+    }
+
+    /// 単ページモードの画像読み込み
+    private func loadSinglePage() {
         guard let source = imageSource else { return }
 
         if let image = source.loadImage(at: currentPage) {
             self.currentImage = image
-            self.errorMessage = nil  // エラーをクリア
+            self.errorMessage = nil
         } else {
             let fileName = source.fileName(at: currentPage) ?? "不明"
             self.errorMessage = "画像の読み込みに失敗しました\nファイル: \(fileName)\nページ: \(currentPage + 1)/\(totalPages)"
@@ -88,19 +115,54 @@ class BookViewModel {
         }
     }
 
+    /// 見開きモードの画像読み込み（右ページ | 左ページ）
+    private func loadSpreadPages() {
+        guard let source = imageSource else { return }
+
+        // 右ページ（偶数インデックス = currentPage + 1）
+        if currentPage + 1 < source.imageCount {
+            self.rightImage = source.loadImage(at: currentPage + 1)
+        } else {
+            self.rightImage = nil
+        }
+
+        // 左ページ（奇数インデックス = currentPage）
+        self.leftImage = source.loadImage(at: currentPage)
+
+        self.errorMessage = nil
+    }
+
     /// 次のページへ
     func nextPage() {
         guard let source = imageSource else { return }
-        if currentPage < source.imageCount - 1 {
-            currentPage += 1
+
+        let step = viewMode == .spread ? 2 : 1
+        let newPage = currentPage + step
+
+        if newPage < source.imageCount {
+            currentPage = newPage
             loadCurrentPage()
         }
     }
 
     /// 前のページへ
     func previousPage() {
-        guard currentPage > 0 else { return }
-        currentPage -= 1
+        let step = viewMode == .spread ? 2 : 1
+        let newPage = currentPage - step
+
+        if newPage >= 0 {
+            currentPage = newPage
+            loadCurrentPage()
+        }
+    }
+
+    /// 表示モードを切り替え
+    func toggleViewMode() {
+        viewMode = viewMode == .single ? .spread : .single
+        // モード切り替え時は偶数ページに調整（見開きの最初のページ）
+        if viewMode == .spread && currentPage % 2 != 0 {
+            currentPage = max(0, currentPage - 1)
+        }
         loadCurrentPage()
     }
 
