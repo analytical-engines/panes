@@ -22,6 +22,10 @@ class ArchiveImageSource: ImageSource {
         return archiveReader.imageCount
     }
 
+    var sourceURL: URL? {
+        return archiveURL
+    }
+
     func loadImage(at index: Int) -> NSImage? {
         return archiveReader.loadImage(at: index)
     }

@@ -14,6 +14,9 @@ class BookViewModel {
     // 画像ソース
     private var imageSource: ImageSource?
 
+    // UserDefaultsのキー
+    private let viewModeKey = "viewMode"
+
     // 現在表示中の画像
     var currentImage: NSImage?
 
@@ -50,6 +53,9 @@ class BookViewModel {
         self.totalPages = source.imageCount
         self.currentPage = 0
         self.errorMessage = nil
+
+        // 保存された表示モードを復元
+        restoreViewMode()
 
         // 最初の画像を読み込む
         loadCurrentPage()
@@ -164,6 +170,32 @@ class BookViewModel {
             currentPage = max(0, currentPage - 1)
         }
         loadCurrentPage()
+
+        // 設定を保存
+        saveViewMode()
+    }
+
+    /// 表示モードを保存
+    private func saveViewMode() {
+        guard let source = imageSource,
+              let fileKey = source.generateFileKey() else {
+            return
+        }
+
+        let modeString = viewMode == .spread ? "spread" : "single"
+        UserDefaults.standard.set(modeString, forKey: "\(viewModeKey)-\(fileKey)")
+    }
+
+    /// 表示モードを復元
+    private func restoreViewMode() {
+        guard let source = imageSource,
+              let fileKey = source.generateFileKey() else {
+            return
+        }
+
+        if let modeString = UserDefaults.standard.string(forKey: "\(viewModeKey)-\(fileKey)") {
+            viewMode = modeString == "spread" ? .spread : .single
+        }
     }
 
     /// 現在のページ情報（表示用）

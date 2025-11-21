@@ -62,6 +62,11 @@ class FileImageSource: ImageSource {
         return imageURLs.count
     }
 
+    var sourceURL: URL? {
+        // 複数ファイルの場合は最初のファイルの親ディレクトリを返す
+        return imageURLs.first?.deletingLastPathComponent()
+    }
+
     func loadImage(at index: Int) -> NSImage? {
         guard index >= 0 && index < imageURLs.count else {
             return nil
