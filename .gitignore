@@ -16,6 +16,9 @@ xcuserdata/
 # App bundle
 *.app
 
+# Distribution files
+*.dmg
+
 # Build artifacts
 DerivedData/
 
