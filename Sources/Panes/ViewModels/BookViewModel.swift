@@ -18,6 +18,9 @@ class BookViewModel {
     private let viewModeKey = "viewMode"
     private let currentPageKey = "currentPage"
 
+    // 履歴管理（外部から注入される）
+    var historyManager: FileHistoryManager?
+
     // 現在表示中の画像
     var currentImage: NSImage?
 
@@ -54,6 +57,16 @@ class BookViewModel {
         self.totalPages = source.imageCount
         self.currentPage = 0
         self.errorMessage = nil
+
+        // 履歴に記録
+        if let fileKey = source.generateFileKey(),
+           let url = source.sourceURL {
+            historyManager?.recordAccess(
+                fileKey: fileKey,
+                filePath: url.path,
+                fileName: source.sourceName
+            )
+        }
 
         // 保存された表示状態を復元
         restoreViewState()
