@@ -16,6 +16,7 @@ class BookViewModel {
 
     // UserDefaultsのキー
     private let viewModeKey = "viewMode"
+    private let currentPageKey = "currentPage"
 
     // 現在表示中の画像
     var currentImage: NSImage?
@@ -54,10 +55,10 @@ class BookViewModel {
         self.currentPage = 0
         self.errorMessage = nil
 
-        // 保存された表示モードを復元
-        restoreViewMode()
+        // 保存された表示状態を復元
+        restoreViewState()
 
-        // 最初の画像を読み込む
+        // 画像を読み込む（復元されたページ）
         loadCurrentPage()
     }
 
@@ -148,6 +149,7 @@ class BookViewModel {
         if newPage < source.imageCount {
             currentPage = newPage
             loadCurrentPage()
+            saveViewState()
         }
     }
 
@@ -159,6 +161,7 @@ class BookViewModel {
         if newPage >= 0 {
             currentPage = newPage
             loadCurrentPage()
+            saveViewState()
         }
     }
 
@@ -172,29 +175,40 @@ class BookViewModel {
         loadCurrentPage()
 
         // 設定を保存
-        saveViewMode()
+        saveViewState()
     }
 
-    /// 表示モードを保存
-    private func saveViewMode() {
+    /// 表示状態を保存（モードとページ番号）
+    private func saveViewState() {
         guard let source = imageSource,
               let fileKey = source.generateFileKey() else {
             return
         }
 
+        // 表示モードを保存
         let modeString = viewMode == .spread ? "spread" : "single"
         UserDefaults.standard.set(modeString, forKey: "\(viewModeKey)-\(fileKey)")
+
+        // 現在のページ番号を保存
+        UserDefaults.standard.set(currentPage, forKey: "\(currentPageKey)-\(fileKey)")
     }
 
-    /// 表示モードを復元
-    private func restoreViewMode() {
+    /// 表示状態を復元（モードとページ番号）
+    private func restoreViewState() {
         guard let source = imageSource,
               let fileKey = source.generateFileKey() else {
             return
         }
 
+        // 表示モードを復元
         if let modeString = UserDefaults.standard.string(forKey: "\(viewModeKey)-\(fileKey)") {
             viewMode = modeString == "spread" ? .spread : .single
+        }
+
+        // ページ番号を復元
+        let savedPage = UserDefaults.standard.integer(forKey: "\(currentPageKey)-\(fileKey)")
+        if savedPage > 0 && savedPage < totalPages {
+            currentPage = savedPage
         }
     }
 
