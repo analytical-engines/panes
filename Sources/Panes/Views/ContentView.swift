@@ -42,15 +42,19 @@ struct ContentView: View {
                     .padding(.vertical, 8)
                     .background(Color.black.opacity(0.8))
                 }
-            } else if viewModel.viewMode == .spread, let leftImage = viewModel.leftImage {
+            } else if viewModel.viewMode == .spread, let firstPageImage = viewModel.firstPageImage {
                 // 見開き表示
                 VStack(spacing: 0) {
                     // 画像エリア
-                    SpreadView(rightImage: viewModel.rightImage, leftImage: leftImage)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            // 画像タップでもフォーカスを確保
-                        }
+                    SpreadView(
+                        readingDirection: viewModel.readingDirection,
+                        firstPageImage: firstPageImage,
+                        secondPageImage: viewModel.secondPageImage
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        // 画像タップでもフォーカスを確保
+                    }
 
                     // ステータスバー
                     HStack {
@@ -89,33 +93,61 @@ struct ContentView: View {
                     .buttonStyle(.borderedProminent)
 
                     // 履歴表示
-                    let recentHistory = historyManager.getRecentHistory(limit: 10)
+                    let recentHistory = historyManager.getRecentHistory(limit: 20)
                     if !recentHistory.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("最近開いたファイル:")
-                                .foregroundColor(.gray)
-                                .font(.headline)
-                                .padding(.top, 20)
+                            HStack {
+                                Text("最近開いたファイル:")
+                                    .foregroundColor(.gray)
+                                    .font(.headline)
+                                Spacer()
+                                Button("すべてクリア") {
+                                    historyManager.clearAllHistory()
+                                }
+                                .foregroundColor(.red)
+                                .font(.caption)
+                            }
+                            .padding(.top, 20)
 
-                            ForEach(recentHistory) { entry in
-                                Button(action: {
-                                    openHistoryFile(path: entry.filePath)
-                                }) {
-                                    HStack {
-                                        Text(entry.fileName)
-                                            .foregroundColor(.white)
-                                        Spacer()
-                                        Text("(\(entry.accessCount)回)")
-                                            .foregroundColor(.gray)
-                                            .font(.caption)
+                            ScrollView {
+                                VStack(spacing: 8) {
+                                    ForEach(recentHistory) { entry in
+                                        HStack(spacing: 0) {
+                                            Button(action: {
+                                                if entry.isAccessible {
+                                                    openHistoryFile(path: entry.filePath)
+                                                }
+                                            }) {
+                                                HStack {
+                                                    Text(entry.fileName)
+                                                        .foregroundColor(entry.isAccessible ? .white : .gray)
+                                                    Spacer()
+                                                    Text("(\(entry.accessCount)回)")
+                                                        .foregroundColor(.gray)
+                                                        .font(.caption)
+                                                }
+                                            }
+                                            .buttonStyle(.plain)
+                                            .disabled(!entry.isAccessible)
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 6)
+
+                                            Button(action: {
+                                                historyManager.removeEntry(withId: entry.id)
+                                            }) {
+                                                Image(systemName: "xmark.circle.fill")
+                                                    .foregroundColor(.gray)
+                                                    .opacity(0.6)
+                                            }
+                                            .buttonStyle(.plain)
+                                            .padding(.trailing, 8)
+                                        }
+                                        .background(Color.white.opacity(entry.isAccessible ? 0.1 : 0.05))
+                                        .cornerRadius(4)
                                     }
                                 }
-                                .buttonStyle(.plain)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(Color.white.opacity(0.1))
-                                .cornerRadius(4)
                             }
+                            .frame(maxHeight: 300)
                         }
                         .frame(maxWidth: 500)
                         .padding(.horizontal, 20)

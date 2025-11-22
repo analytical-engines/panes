@@ -17,6 +17,11 @@ struct FileHistoryEntry: Codable, Identifiable {
         self.lastAccessDate = Date()
         self.accessCount = 1
     }
+
+    /// ファイルがアクセス可能かどうか
+    var isAccessible: Bool {
+        FileManager.default.fileExists(atPath: filePath)
+    }
 }
 
 /// ファイル履歴を管理するクラス
@@ -74,11 +79,26 @@ class FileHistoryManager {
         saveHistory()
     }
 
-    /// 最近の履歴を取得（最新n件、ファイルが存在するもののみ）
+    /// 最近の履歴を取得（最新n件）
     func getRecentHistory(limit: Int = 10) -> [FileHistoryEntry] {
-        return history
-            .filter { FileManager.default.fileExists(atPath: $0.filePath) }
-            .prefix(limit)
-            .map { $0 }
+        return Array(history.prefix(limit))
+    }
+
+    /// 指定したエントリを削除
+    func removeEntry(withId id: String) {
+        history.removeAll(where: { $0.id == id })
+        saveHistory()
+    }
+
+    /// 指定したfileKeyのエントリを削除
+    func removeEntry(withFileKey fileKey: String) {
+        history.removeAll(where: { $0.fileKey == fileKey })
+        saveHistory()
+    }
+
+    /// 全ての履歴をクリア
+    func clearAllHistory() {
+        history.removeAll()
+        saveHistory()
     }
 }

@@ -8,6 +8,12 @@ enum ViewMode {
     case spread  // 見開き
 }
 
+/// 読み方向
+enum ReadingDirection {
+    case rightToLeft  // 右→左（漫画）
+    case leftToRight  // 左→右（洋書）
+}
+
 /// 書籍（画像アーカイブ）の表示状態を管理するViewModel
 @Observable
 class BookViewModel {
@@ -21,14 +27,14 @@ class BookViewModel {
     // 履歴管理（外部から注入される）
     var historyManager: FileHistoryManager?
 
-    // 現在表示中の画像
+    // 現在表示中の画像（単ページモード用）
     var currentImage: NSImage?
 
-    // 見開き表示用：右ページの画像
-    var rightImage: NSImage?
+    // 見開き表示用：最初のページ（currentPage）
+    var firstPageImage: NSImage?
 
-    // 見開き表示用：左ページの画像
-    var leftImage: NSImage?
+    // 見開き表示用：2番目のページ（currentPage + 1）
+    var secondPageImage: NSImage?
 
     // 現在のページ番号（0始まり）
     var currentPage: Int = 0
@@ -44,6 +50,9 @@ class BookViewModel {
 
     // 表示モード
     var viewMode: ViewMode = .single
+
+    // 読み方向
+    var readingDirection: ReadingDirection = .rightToLeft
 
     /// 画像ソースを開く（zipまたは画像ファイル）
     func openSource(_ source: ImageSource) {
@@ -135,19 +144,46 @@ class BookViewModel {
         }
     }
 
-    /// 見開きモードの画像読み込み（右ページ | 左ページ）
+    /// 見開きモードの画像読み込み
     private func loadSpreadPages() {
+        switch readingDirection {
+        case .rightToLeft:
+            loadSpreadPages_RightToLeft()
+        case .leftToRight:
+            loadSpreadPages_LeftToRight()
+        }
+    }
+
+    /// 見開きモードの画像読み込み（右→左読み：漫画）
+    private func loadSpreadPages_RightToLeft() {
         guard let source = imageSource else { return }
 
-        // 右ページ（偶数インデックス = currentPage + 1）
+        // 最初のページ = currentPage（右側に表示）
+        self.firstPageImage = source.loadImage(at: currentPage)
+
+        // 2番目のページ = currentPage + 1（左側に表示）
         if currentPage + 1 < source.imageCount {
-            self.rightImage = source.loadImage(at: currentPage + 1)
+            self.secondPageImage = source.loadImage(at: currentPage + 1)
         } else {
-            self.rightImage = nil
+            self.secondPageImage = nil
         }
 
-        // 左ページ（奇数インデックス = currentPage）
-        self.leftImage = source.loadImage(at: currentPage)
+        self.errorMessage = nil
+    }
+
+    /// 見開きモードの画像読み込み（左→右読み：洋書）
+    private func loadSpreadPages_LeftToRight() {
+        guard let source = imageSource else { return }
+
+        // 最初のページ = currentPage（左側に表示）
+        self.firstPageImage = source.loadImage(at: currentPage)
+
+        // 2番目のページ = currentPage + 1（右側に表示）
+        if currentPage + 1 < source.imageCount {
+            self.secondPageImage = source.loadImage(at: currentPage + 1)
+        } else {
+            self.secondPageImage = nil
+        }
 
         self.errorMessage = nil
     }
@@ -191,6 +227,15 @@ class BookViewModel {
         saveViewState()
     }
 
+    /// 読み方向を切り替え
+    func toggleReadingDirection() {
+        readingDirection = readingDirection == .rightToLeft ? .leftToRight : .rightToLeft
+        // 見開きモードの場合は再読み込み
+        if viewMode == .spread {
+            loadCurrentPage()
+        }
+    }
+
     /// 表示状態を保存（モードとページ番号）
     private func saveViewState() {
         guard let source = imageSource,
@@ -228,13 +273,51 @@ class BookViewModel {
     /// 現在のページ情報（表示用）
     var pageInfo: String {
         guard totalPages > 0 else { return "" }
-        return "\(currentPage + 1) / \(totalPages)"
+
+        switch viewMode {
+        case .single:
+            return "\(currentPage + 1) / \(totalPages)"
+        case .spread:
+            let firstPage = currentPage + 1
+            let secondPage = currentPage + 2
+
+            // 2ページ目が存在する場合
+            if secondPage <= totalPages {
+                switch readingDirection {
+                case .rightToLeft:
+                    // 右→左: first secondの順（右側が先）
+                    return "\(firstPage) \(secondPage) / \(totalPages)"
+                case .leftToRight:
+                    // 左→右: first secondの順（左側が先）
+                    return "\(firstPage) \(secondPage) / \(totalPages)"
+                }
+            } else {
+                // 最後のページが1ページだけの場合
+                return "\(firstPage) / \(totalPages)"
+            }
+        }
     }
 
     /// 現在のファイル名
     var currentFileName: String {
         guard let source = imageSource else { return "" }
-        return source.fileName(at: currentPage) ?? ""
+
+        switch viewMode {
+        case .single:
+            return source.fileName(at: currentPage) ?? ""
+        case .spread:
+            let firstFileName = source.fileName(at: currentPage) ?? ""
+
+            // 2ページ目が存在する場合
+            if currentPage + 1 < source.imageCount {
+                let secondFileName = source.fileName(at: currentPage + 1) ?? ""
+                // 読み方向に関わらず、first secondの順で表示
+                return "\(firstFileName)  \(secondFileName)"
+            } else {
+                // 1ページのみの場合
+                return firstFileName
+            }
+        }
     }
 
     // 下位互換のためにarchiveFileNameをsourceNameのエイリアスとして定義

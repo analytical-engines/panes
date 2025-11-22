@@ -41,6 +41,22 @@ struct ImageViewerApp: App {
                     )
                 }
                 .disabled(focusedViewModel == nil)
+
+                Divider()
+
+                Button(action: {
+                    focusedViewModel?.toggleReadingDirection()
+                }) {
+                    Label(
+                        focusedViewModel?.readingDirection == .rightToLeft
+                            ? "Reading Direction: Right to Left"
+                            : "Reading Direction: Left to Right",
+                        systemImage: focusedViewModel?.readingDirection == .rightToLeft
+                            ? "arrow.left"
+                            : "arrow.right"
+                    )
+                }
+                .disabled(focusedViewModel == nil)
             }
         }
     }

@@ -14,7 +14,9 @@ let package = Package(
     ],
     dependencies: [
         // ZIPファイル読み込み用
-        .package(url: "https://github.com/weichsel/ZIPFoundation.git", .upToNextMajor(from: "0.9.0"))
+        .package(url: "https://github.com/weichsel/ZIPFoundation.git", .upToNextMajor(from: "0.9.0")),
+        // Swift Testing フレームワーク
+        .package(url: "https://github.com/apple/swift-testing.git", from: "0.10.0")
     ],
     targets: [
         .executableTarget(
@@ -30,7 +32,10 @@ let package = Package(
         ),
         .testTarget(
             name: "PanesTests",
-            dependencies: ["Panes"],
+            dependencies: [
+                "Panes",
+                .product(name: "Testing", package: "swift-testing")
+            ],
             path: "Tests/PanesTests"
         )
     ]
