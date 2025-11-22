@@ -23,6 +23,7 @@ class BookViewModel {
     // UserDefaultsのキー
     private let viewModeKey = "viewMode"
     private let currentPageKey = "currentPage"
+    private let readingDirectionKey = "readingDirection"
 
     // 履歴管理（外部から注入される）
     var historyManager: FileHistoryManager?
@@ -234,9 +235,11 @@ class BookViewModel {
         if viewMode == .spread {
             loadCurrentPage()
         }
+        // 設定を保存
+        saveViewState()
     }
 
-    /// 表示状態を保存（モードとページ番号）
+    /// 表示状態を保存（モード、ページ番号、読み方向）
     private func saveViewState() {
         guard let source = imageSource,
               let fileKey = source.generateFileKey() else {
@@ -249,9 +252,13 @@ class BookViewModel {
 
         // 現在のページ番号を保存
         UserDefaults.standard.set(currentPage, forKey: "\(currentPageKey)-\(fileKey)")
+
+        // 読み方向を保存
+        let directionString = readingDirection == .rightToLeft ? "rightToLeft" : "leftToRight"
+        UserDefaults.standard.set(directionString, forKey: "\(readingDirectionKey)-\(fileKey)")
     }
 
-    /// 表示状態を復元（モードとページ番号）
+    /// 表示状態を復元（モード、ページ番号、読み方向）
     private func restoreViewState() {
         guard let source = imageSource,
               let fileKey = source.generateFileKey() else {
@@ -267,6 +274,11 @@ class BookViewModel {
         let savedPage = UserDefaults.standard.integer(forKey: "\(currentPageKey)-\(fileKey)")
         if savedPage > 0 && savedPage < totalPages {
             currentPage = savedPage
+        }
+
+        // 読み方向を復元
+        if let directionString = UserDefaults.standard.string(forKey: "\(readingDirectionKey)-\(fileKey)") {
+            readingDirection = directionString == "rightToLeft" ? .rightToLeft : .leftToRight
         }
     }
 
