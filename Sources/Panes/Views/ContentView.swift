@@ -29,19 +29,21 @@ struct ContentView: View {
                         }
 
                     // ステータスバー
-                    HStack {
-                        Text(viewModel.archiveFileName)
-                            .foregroundColor(.white)
-                        Spacer()
-                        Text(viewModel.currentFileName)
-                            .foregroundColor(.gray)
-                        Spacer()
-                        Text(viewModel.pageInfo)
-                            .foregroundColor(.white)
+                    if viewModel.showStatusBar {
+                        HStack {
+                            Text(viewModel.archiveFileName)
+                                .foregroundColor(.white)
+                            Spacer()
+                            Text(viewModel.currentFileName)
+                                .foregroundColor(.gray)
+                            Spacer()
+                            Text(viewModel.pageInfo)
+                                .foregroundColor(.white)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.black.opacity(0.8))
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.black.opacity(0.8))
                 }
             } else if viewModel.viewMode == .spread, let firstPageImage = viewModel.firstPageImage {
                 // 見開き表示
@@ -59,19 +61,21 @@ struct ContentView: View {
                     }
 
                     // ステータスバー
-                    HStack {
-                        Text(viewModel.archiveFileName)
-                            .foregroundColor(.white)
-                        Spacer()
-                        Text(viewModel.currentFileName)
-                            .foregroundColor(.gray)
-                        Spacer()
-                        Text(viewModel.pageInfo)
-                            .foregroundColor(.white)
+                    if viewModel.showStatusBar {
+                        HStack {
+                            Text(viewModel.archiveFileName)
+                                .foregroundColor(.white)
+                            Spacer()
+                            Text(viewModel.currentFileName)
+                                .foregroundColor(.gray)
+                            Spacer()
+                            Text(viewModel.pageInfo)
+                                .foregroundColor(.white)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.black.opacity(0.8))
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.black.opacity(0.8))
                 }
             } else {
                 // ファイル未選択時の表示

@@ -59,6 +59,21 @@ struct ImageViewerApp: App {
                 }
                 .disabled(focusedViewModel == nil)
 
+                Button(action: {
+                    focusedViewModel?.toggleStatusBar()
+                }) {
+                    Label(
+                        focusedViewModel?.showStatusBar == true
+                            ? "Hide Status Bar"
+                            : "Show Status Bar",
+                        systemImage: focusedViewModel?.showStatusBar == true
+                            ? "eye.slash"
+                            : "eye"
+                    )
+                }
+                .keyboardShortcut("b", modifiers: .command)
+                .disabled(focusedViewModel == nil)
+
                 Divider()
 
                 Button(action: {

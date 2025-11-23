@@ -81,6 +81,9 @@ class BookViewModel {
     // 読み方向
     var readingDirection: ReadingDirection = .rightToLeft
 
+    // ステータスバー表示
+    var showStatusBar: Bool = true
+
     /// デバッグ出力（レベル指定）
     private func debugLog(_ message: String, level: DebugLevel = .normal) {
         guard Self.debugLevel.rawValue >= level.rawValue else { return }
@@ -428,6 +431,11 @@ class BookViewModel {
         saveViewState()
     }
 
+    /// ステータスバー表示を切り替え
+    func toggleStatusBar() {
+        showStatusBar.toggle()
+    }
+
     /// 現在のページの単ページ表示属性を切り替え
     func toggleCurrentPageSingleDisplay() {
         pageDisplaySettings.toggleForceSinglePage(at: currentPage)
@@ -556,6 +564,11 @@ class BookViewModel {
         case .single:
             return "\(currentPage + 1) / \(totalPages)"
         case .spread:
+            // 単ページ表示属性がある場合は1つだけ表示
+            if shouldShowCurrentPageAsSingle() {
+                return "\(currentPage + 1) / \(totalPages)"
+            }
+
             let firstPage = currentPage + 1
             let secondPage = currentPage + 2
 
