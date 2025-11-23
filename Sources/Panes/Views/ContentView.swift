@@ -193,6 +193,14 @@ struct ContentView: View {
             }
             return .ignored
         }
+        .onKeyPress(.home) {
+            viewModel.goToFirstPage()
+            return .handled
+        }
+        .onKeyPress(.end) {
+            viewModel.goToLastPage()
+            return .handled
+        }
     }
 
     private func toggleFullScreen() {
