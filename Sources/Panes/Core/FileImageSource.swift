@@ -82,4 +82,19 @@ class FileImageSource: ImageSource {
         }
         return imageURLs[index].lastPathComponent
     }
+
+    func imageSize(at index: Int) -> CGSize? {
+        guard index >= 0 && index < imageURLs.count else {
+            return nil
+        }
+
+        let url = imageURLs[index]
+
+        // NSImageRepを使ってサイズ情報のみ取得
+        guard let imageRep = NSImageRep(contentsOf: url) else {
+            return nil
+        }
+
+        return CGSize(width: imageRep.pixelsWide, height: imageRep.pixelsHigh)
+    }
 }

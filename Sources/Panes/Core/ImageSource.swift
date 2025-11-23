@@ -18,6 +18,9 @@ protocol ImageSource {
 
     /// 指定されたインデックスのファイル名
     func fileName(at index: Int) -> String?
+
+    /// 指定されたインデックスの画像サイズを取得（画像全体を読み込まずに）
+    func imageSize(at index: Int) -> CGSize?
 }
 
 extension ImageSource {

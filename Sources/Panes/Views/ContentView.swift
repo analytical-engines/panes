@@ -49,7 +49,8 @@ struct ContentView: View {
                     SpreadView(
                         readingDirection: viewModel.readingDirection,
                         firstPageImage: firstPageImage,
-                        secondPageImage: viewModel.secondPageImage
+                        secondPageImage: viewModel.secondPageImage,
+                        singlePageAlignment: viewModel.currentPageAlignment
                     )
                     .contentShape(Rectangle())
                     .onTapGesture {

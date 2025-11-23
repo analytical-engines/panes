@@ -115,4 +115,36 @@ class ArchiveReader {
         }
         return (imageEntries[index].path as NSString).lastPathComponent
     }
+
+    /// 指定されたインデックスの画像サイズを取得（画像全体を読み込まずに）
+    func imageSize(at index: Int) -> CGSize? {
+        guard index >= 0 && index < imageEntries.count else {
+            return nil
+        }
+
+        let entry = imageEntries[index]
+        var imageData = Data()
+
+        do {
+            // 画像ヘッダーを読み込むために必要な最小データ量（大きめに取る）
+            let headerSize = min(entry.uncompressedSize, 8192) // 8KB
+            var readBytes = 0
+
+            _ = try archive.extract(entry) { data in
+                if readBytes < headerSize {
+                    imageData.append(data)
+                    readBytes += data.count
+                }
+            }
+
+            // NSImageRepを使ってサイズ情報のみ取得
+            guard let imageRep = NSBitmapImageRep(data: imageData) else {
+                return nil
+            }
+
+            return CGSize(width: imageRep.pixelsWide, height: imageRep.pixelsHigh)
+        } catch {
+            return nil
+        }
+    }
 }

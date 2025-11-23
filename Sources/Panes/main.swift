@@ -57,6 +57,62 @@ struct ImageViewerApp: App {
                     )
                 }
                 .disabled(focusedViewModel == nil)
+
+                Divider()
+
+                Button(action: {
+                    focusedViewModel?.toggleCurrentPageSingleDisplay()
+                }) {
+                    Label(
+                        focusedViewModel?.isCurrentPageForcedSingle == true
+                            ? "Remove Single Page Attribute"
+                            : "Force Single Page Display",
+                        systemImage: focusedViewModel?.isCurrentPageForcedSingle == true
+                            ? "checkmark.square"
+                            : "square"
+                    )
+                }
+                .keyboardShortcut("s", modifiers: .command)
+                .disabled(focusedViewModel == nil)
+
+                Divider()
+
+                // 単ページ配置設定（見開きモード中の単ページ表示時のみ有効）
+                Menu("Single Page Alignment") {
+                    Button(action: {
+                        focusedViewModel?.setCurrentPageAlignment(.right)
+                    }) {
+                        Label(
+                            "Right Side",
+                            systemImage: focusedViewModel?.currentPageAlignment == .right
+                                ? "checkmark"
+                                : ""
+                        )
+                    }
+
+                    Button(action: {
+                        focusedViewModel?.setCurrentPageAlignment(.left)
+                    }) {
+                        Label(
+                            "Left Side",
+                            systemImage: focusedViewModel?.currentPageAlignment == .left
+                                ? "checkmark"
+                                : ""
+                        )
+                    }
+
+                    Button(action: {
+                        focusedViewModel?.setCurrentPageAlignment(.center)
+                    }) {
+                        Label(
+                            "Center (Window Fitting)",
+                            systemImage: focusedViewModel?.currentPageAlignment == .center
+                                ? "checkmark"
+                                : ""
+                        )
+                    }
+                }
+                .disabled(focusedViewModel == nil || focusedViewModel?.viewMode != .spread)
             }
         }
     }
