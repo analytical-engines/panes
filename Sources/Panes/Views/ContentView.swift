@@ -177,6 +177,19 @@ struct ContentView: View {
                 }
                 return event // 他のイベントは通常通り処理
             }
+
+            // Finderから「このアプリケーションで開く」でファイルを開く通知を受け取る
+            NotificationCenter.default.addObserver(
+                forName: NSNotification.Name("OpenFiles"),
+                object: nil,
+                queue: .main
+            ) { [viewModel] notification in
+                if let urls = notification.userInfo?["urls"] as? [URL] {
+                    Task { @MainActor in
+                        viewModel.openFiles(urls: urls)
+                    }
+                }
+            }
         }
         .onDisappear {
             // イベントモニターをクリーンアップ

@@ -28,6 +28,7 @@ struct ImageViewerApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1200, height: 800)
+        .handlesExternalEvents(matching: Set(arrayLiteral: "*"))
         .commands {
             CommandGroup(after: .sidebar) {
                 Button(action: {
@@ -128,5 +129,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         // 最後のウィンドウを閉じたらアプリを終了
         return true
+    }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        // Finderから「このアプリケーションで開く」でファイルが渡される
+        // NotificationCenterを使ってContentViewに通知
+        NotificationCenter.default.post(
+            name: NSNotification.Name("OpenFiles"),
+            object: nil,
+            userInfo: ["urls": urls]
+        )
     }
 }
