@@ -348,6 +348,27 @@ class BookViewModel {
         saveViewState()
     }
 
+    /// 指定したページ数だけ前に進む
+    func skipForward(pages: Int = 10) {
+        guard let source = imageSource else { return }
+        let newPage = min(currentPage + pages, source.imageCount - 1)
+        if newPage != currentPage {
+            currentPage = newPage
+            loadCurrentPage()
+            saveViewState()
+        }
+    }
+
+    /// 指定したページ数だけ後ろに戻る
+    func skipBackward(pages: Int = 10) {
+        let newPage = max(currentPage - pages, 0)
+        if newPage != currentPage {
+            currentPage = newPage
+            loadCurrentPage()
+            saveViewState()
+        }
+    }
+
     /// 次のページへのステップ数を計算
     private func calculateNextPageStep() -> Int {
         if viewMode == .single {

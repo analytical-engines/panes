@@ -6,6 +6,7 @@ struct ContentView: View {
     @State private var historyManager = FileHistoryManager()
     @State private var isFilePickerPresented = false
     @Environment(\.openWindow) private var openWindow
+    @State private var eventMonitor: Any?
 
     var body: some View {
         ZStack {
@@ -163,6 +164,26 @@ struct ContentView: View {
         .onAppear {
             // viewModelに履歴マネージャーを設定
             viewModel.historyManager = historyManager
+
+            // Shift+Tabのキーイベントを直接監視
+            // (SwiftUIの.onKeyPressではShift+Tabがフォーカス移動用に予約されているため捕捉できない)
+            eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                // Tabキーの場合
+                if event.keyCode == 48 { // 48 = Tab key
+                    if event.modifierFlags.contains(.shift) {
+                        viewModel.skipBackward(pages: 10)
+                        return nil // イベントを消費
+                    }
+                }
+                return event // 他のイベントは通常通り処理
+            }
+        }
+        .onDisappear {
+            // イベントモニターをクリーンアップ
+            if let monitor = eventMonitor {
+                NSEvent.removeMonitor(monitor)
+                eventMonitor = nil
+            }
         }
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             handleDrop(providers: providers)
@@ -199,6 +220,11 @@ struct ContentView: View {
         }
         .onKeyPress(.end) {
             viewModel.goToLastPage()
+            return .handled
+        }
+        .onKeyPress(keys: [.tab]) { press in
+            // 通常Tabで10ページ進む (Shift+Tabは上記のNSEventモニターで処理)
+            viewModel.skipForward(pages: 10)
             return .handled
         }
     }
