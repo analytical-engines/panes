@@ -346,7 +346,41 @@ class BookViewModel {
     /// 最終ページへ移動
     func goToLastPage() {
         guard let source = imageSource else { return }
-        currentPage = source.imageCount - 1
+        let lastIndex = source.imageCount - 1
+
+        // 単ページモードの場合は常に最後の画像を表示
+        if viewMode == .single {
+            currentPage = lastIndex
+            loadCurrentPage()
+            saveViewState()
+            return
+        }
+
+        // 見開きモードの場合：
+        // 最後の画像データが単ページ属性つきなら単ページで表示
+        if pageDisplaySettings.isForcedSinglePage(lastIndex) {
+            currentPage = lastIndex
+            loadCurrentPage()
+            saveViewState()
+            return
+        }
+
+        // 最後の画像データの１つ前が単ページ属性つきの場合、
+        // 最後の画像と見開きするペアがないので単ページで表示
+        if lastIndex > 0 && pageDisplaySettings.isForcedSinglePage(lastIndex - 1) {
+            currentPage = lastIndex
+            loadCurrentPage()
+            saveViewState()
+            return
+        }
+
+        // それ以外の場合、最後の２つの画像データで見開き表示
+        // （見開き表示では左ページのインデックスを currentPage とする）
+        if lastIndex > 0 {
+            currentPage = lastIndex - 1
+        } else {
+            currentPage = lastIndex
+        }
         loadCurrentPage()
         saveViewState()
     }
@@ -354,12 +388,17 @@ class BookViewModel {
     /// 指定したページ数だけ前に進む
     func skipForward(pages: Int = 10) {
         guard let source = imageSource else { return }
-        let newPage = min(currentPage + pages, source.imageCount - 1)
-        if newPage != currentPage {
-            currentPage = newPage
-            loadCurrentPage()
-            saveViewState()
+        let targetPage = currentPage + pages
+
+        // 最終ページを超える場合は、goToLastPage()と同じロジックを適用
+        if targetPage >= source.imageCount - 1 {
+            goToLastPage()
+            return
         }
+
+        currentPage = targetPage
+        loadCurrentPage()
+        saveViewState()
     }
 
     /// 指定したページ数だけ後ろに戻る
@@ -409,15 +448,44 @@ class BookViewModel {
 
     /// 表示モードを切り替え
     func toggleViewMode() {
+        let previousMode = viewMode
         viewMode = viewMode == .single ? .spread : .single
-        // モード切り替え時は偶数ページに調整（見開きの最初のページ）
-        if viewMode == .spread && currentPage % 2 != 0 {
-            currentPage = max(0, currentPage - 1)
+
+        // 単ページモード → 見開きモードに切り替える場合、適切な見開き位置に調整
+        if previousMode == .single && viewMode == .spread {
+            adjustCurrentPageForSpreadMode()
         }
+
         loadCurrentPage()
 
         // 設定を保存
         saveViewState()
+    }
+
+    /// 単ページモードから見開きモードに切り替える際の currentPage 調整
+    private func adjustCurrentPageForSpreadMode() {
+        guard let source = imageSource else { return }
+
+        // currentPage が単ページ属性なら調整不要（単ページ表示される）
+        if pageDisplaySettings.isForcedSinglePage(currentPage) {
+            return
+        }
+
+        // currentPage+1 が存在しない場合は調整不要（単ページ表示される）
+        if currentPage + 1 >= source.imageCount {
+            return
+        }
+
+        // currentPage+1 が単ページ属性の場合、ペアにできない
+        if pageDisplaySettings.isForcedSinglePage(currentPage + 1) {
+            // currentPage-1 を調べる
+            if currentPage > 0 && !pageDisplaySettings.isForcedSinglePage(currentPage - 1) {
+                // currentPage-1 が単ページ属性でないなら、1つ前にずらして見開き表示
+                currentPage = currentPage - 1
+            }
+            // currentPage-1 が単ページ属性、または存在しない場合は調整不要（currentPage を単ページ表示）
+        }
+        // currentPage+1 が単ページ属性でない場合は調整不要（currentPage と currentPage+1 で見開き表示）
     }
 
     /// 読み方向を切り替え

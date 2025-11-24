@@ -6,7 +6,14 @@ struct ContentView: View {
     @State private var historyManager = FileHistoryManager()
     @State private var isFilePickerPresented = false
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.appearsActive) private var appearsActive
+    @State private var isWindowActive = false
     @State private var eventMonitor: Any?
+    private let windowID = UUID()
+
+    // 最後に作成されたウィンドウのIDを保持する静的変数
+    private static var lastCreatedWindowID: UUID?
+    private static var lastCreatedWindowIDLock = NSLock()
 
     var body: some View {
         ZStack {
@@ -165,29 +172,73 @@ struct ContentView: View {
         .focusable()  // フォーカス可能にする
         .focusEffectDisabled()  // フォーカスリングを非表示
         .focusedValue(\.bookViewModel, viewModel)  // メニューコマンドからアクセス可能に
+        .onChange(of: appearsActive) { oldValue, newValue in
+            isWindowActive = newValue
+        }
         .onAppear {
             // viewModelに履歴マネージャーを設定
             viewModel.historyManager = historyManager
 
+            // ウィンドウのアクティブ状態を初期化
+            isWindowActive = appearsActive
+
+            // このウィンドウを最後に作成されたウィンドウとして登録
+            ContentView.lastCreatedWindowIDLock.lock()
+            ContentView.lastCreatedWindowID = windowID
+            ContentView.lastCreatedWindowIDLock.unlock()
+
             // Shift+Tabのキーイベントを直接監視
             // (SwiftUIの.onKeyPressではShift+Tabがフォーカス移動用に予約されているため捕捉できない)
-            eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak viewModel] event in
                 // Tabキーの場合
                 if event.keyCode == 48 { // 48 = Tab key
+                    // このウィンドウがアクティブな場合のみ処理
+                    guard self.isWindowActive else {
+                        return event
+                    }
+
                     if event.modifierFlags.contains(.shift) {
-                        viewModel.skipBackward(pages: 10)
+                        viewModel?.skipBackward(pages: 10)
                         return nil // イベントを消費
                     }
                 }
                 return event // 他のイベントは通常通り処理
             }
 
-            // Finderから「このアプリケーションで開く」でファイルを開く通知を受け取る
+            // Finderから「このアプリケーションで開く」で新しいウィンドウを開く通知を受け取る
             NotificationCenter.default.addObserver(
-                forName: NSNotification.Name("OpenFiles"),
+                forName: NSNotification.Name("OpenFilesInNewWindow"),
                 object: nil,
                 queue: .main
-            ) { [viewModel] notification in
+            ) { [openWindow] notification in
+                if let urls = notification.userInfo?["urls"] as? [URL] {
+                    // Command+Nで新しいウィンドウを開く
+                    Task { @MainActor in
+                        openWindow(id: "new")
+                        // 少し待ってから、新しいウィンドウにファイルオープンの通知を送る
+                        try? await Task.sleep(nanoseconds: 200_000_000) // 0.2秒
+                        NotificationCenter.default.post(
+                            name: NSNotification.Name("OpenFilesInNewlyCreatedWindow"),
+                            object: nil,
+                            userInfo: ["urls": urls]
+                        )
+                    }
+                }
+            }
+
+            // 新しく作成されたウィンドウ用のファイルオープン通知
+            NotificationCenter.default.addObserver(
+                forName: NSNotification.Name("OpenFilesInNewlyCreatedWindow"),
+                object: nil,
+                queue: .main
+            ) { [viewModel, windowID] notification in
+                // このウィンドウが最後に作成されたウィンドウの場合のみファイルを開く
+                ContentView.lastCreatedWindowIDLock.lock()
+                let isLastCreated = ContentView.lastCreatedWindowID == windowID
+                ContentView.lastCreatedWindowIDLock.unlock()
+
+                guard isLastCreated else { return }
+
                 if let urls = notification.userInfo?["urls"] as? [URL] {
                     Task { @MainActor in
                         viewModel.openFiles(urls: urls)
