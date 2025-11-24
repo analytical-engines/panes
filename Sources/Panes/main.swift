@@ -17,10 +17,12 @@ extension FocusedValues {
 struct ImageViewerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @FocusedValue(\.bookViewModel) private var focusedViewModel: BookViewModel?
+    @State private var historyManager = FileHistoryManager()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(historyManager)
                 .onAppear {
                     // ウィンドウを最前面に
                     NSApp.activate(ignoringOtherApps: true)

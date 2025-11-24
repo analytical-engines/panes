@@ -3,7 +3,7 @@ import AppKit
 
 struct ContentView: View {
     @State private var viewModel = BookViewModel()
-    @State private var historyManager = FileHistoryManager()
+    @Environment(FileHistoryManager.self) private var historyManager
     @State private var isFilePickerPresented = false
     @Environment(\.openWindow) private var openWindow
     @State private var eventMonitor: Any?
