@@ -14,26 +14,9 @@ enum ReadingDirection {
     case leftToRight  // 左→右（洋書）
 }
 
-/// デバッグレベル
-enum DebugLevel: Int {
-    case off = 0      // デバッグ出力なし
-    case minimal = 1  // 最小限（エラーのみ）
-    case normal = 2   // 通常（主要な処理）
-    case verbose = 3  // 詳細（すべて）
-}
-
 /// 書籍（画像アーカイブ）の表示状態を管理するViewModel
 @Observable
 class BookViewModel {
-    // デバッグレベル（環境変数 DEBUG_LEVEL で設定可能、デフォルトは off）
-    private static let debugLevel: DebugLevel = {
-        if let levelStr = ProcessInfo.processInfo.environment["DEBUG_LEVEL"],
-           let levelInt = Int(levelStr),
-           let level = DebugLevel(rawValue: levelInt) {
-            return level
-        }
-        return .off
-    }()
 
     // 横長画像判定のアスペクト比閾値（幅/高さ）
     // TODO: 後でアプリ設定で変更可能にする
@@ -86,8 +69,7 @@ class BookViewModel {
 
     /// デバッグ出力（レベル指定）
     private func debugLog(_ message: String, level: DebugLevel = .normal) {
-        guard Self.debugLevel.rawValue >= level.rawValue else { return }
-        print("DEBUG: \(message)")
+        DebugLogger.log("DEBUG: \(message)", level: level)
     }
 
     /// 指定されたページが横長かどうかを判定して、必要なら単ページ属性を設定

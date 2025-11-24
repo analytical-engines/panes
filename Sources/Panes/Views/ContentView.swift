@@ -6,9 +6,8 @@ struct ContentView: View {
     @State private var historyManager = FileHistoryManager()
     @State private var isFilePickerPresented = false
     @Environment(\.openWindow) private var openWindow
-    @Environment(\.appearsActive) private var appearsActive
-    @State private var isWindowActive = false
     @State private var eventMonitor: Any?
+    @State private var myWindowNumber: Int?
     private let windowID = UUID()
 
     // 最後に作成されたウィンドウのIDを保持する静的変数
@@ -172,15 +171,18 @@ struct ContentView: View {
         .focusable()  // フォーカス可能にする
         .focusEffectDisabled()  // フォーカスリングを非表示
         .focusedValue(\.bookViewModel, viewModel)  // メニューコマンドからアクセス可能に
-        .onChange(of: appearsActive) { oldValue, newValue in
-            isWindowActive = newValue
-        }
+        .background(WindowNumberGetter(windowNumber: $myWindowNumber))
         .onAppear {
+            // ウィンドウ番号を取得（少し遅延させて確実に取得）
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                if let window = NSApp.windows.first(where: { $0.isKeyWindow }) {
+                    self.myWindowNumber = window.windowNumber
+                    DebugLogger.log("🪟 Window number set in onAppear: \(window.windowNumber)", level: .verbose)
+                }
+            }
+
             // viewModelに履歴マネージャーを設定
             viewModel.historyManager = historyManager
-
-            // ウィンドウのアクティブ状態を初期化
-            isWindowActive = appearsActive
 
             // このウィンドウを最後に作成されたウィンドウとして登録
             ContentView.lastCreatedWindowIDLock.lock()
@@ -192,14 +194,27 @@ struct ContentView: View {
             eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak viewModel] event in
                 // Tabキーの場合
                 if event.keyCode == 48 { // 48 = Tab key
-                    // このウィンドウがアクティブな場合のみ処理
-                    guard self.isWindowActive else {
+                    DebugLogger.log("🔑 Tab key detected", level: .verbose)
+                    DebugLogger.log("   myWindowNumber: \(String(describing: self.myWindowNumber))", level: .verbose)
+                    DebugLogger.log("   keyWindow?.windowNumber: \(String(describing: NSApp.keyWindow?.windowNumber))", level: .verbose)
+
+                    // このウィンドウがキーウィンドウかチェック
+                    let keyWindowNumber = NSApp.keyWindow?.windowNumber
+                    let isMyWindowActive = (self.myWindowNumber == keyWindowNumber)
+
+                    DebugLogger.log("   isMyWindowActive: \(isMyWindowActive)", level: .verbose)
+
+                    guard isMyWindowActive else {
+                        DebugLogger.log("   ❌ Not my window, ignoring", level: .verbose)
                         return event
                     }
 
                     if event.modifierFlags.contains(.shift) {
+                        DebugLogger.log("   ✅ Shift+Tab detected in my window, skipping backward", level: .normal)
                         viewModel?.skipBackward(pages: 10)
                         return nil // イベントを消費
+                    } else {
+                        DebugLogger.log("   Tab without shift, passing through", level: .verbose)
                     }
                 }
                 return event // 他のイベントは通常通り処理
@@ -346,6 +361,28 @@ struct ContentView: View {
                 if !urls.isEmpty {
                     self.viewModel.openFiles(urls: urls)
                 }
+            }
+        }
+    }
+}
+
+// ウィンドウ番号を取得するヘルパー
+struct WindowNumberGetter: NSViewRepresentable {
+    @Binding var windowNumber: Int?
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        // ウィンドウが利用可能になるまで待つ
+        DispatchQueue.main.async {
+            if let window = nsView.window {
+                self.windowNumber = window.windowNumber
+                DebugLogger.log("🪟 Window number captured: \(window.windowNumber)", level: .verbose)
+            } else {
+                DebugLogger.log("⚠️ Window not yet available", level: .verbose)
             }
         }
     }
