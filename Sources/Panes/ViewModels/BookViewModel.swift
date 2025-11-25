@@ -196,18 +196,27 @@ class BookViewModel {
     private func shouldShowCurrentPageAsSingle() -> Bool {
         guard let source = imageSource else { return false }
 
-        // currentPage のアスペクト比を判定（未判定なら自動判定）
+        // 1. currentPage 自身が単ページ表示属性なら単ページ表示
         let currentIsSingle = checkAndSetLandscapeAttribute(for: currentPage)
         if currentIsSingle {
             return true
         }
 
-        // 次のページ（currentPage+1）も判定
-        // 見開きで表示する予定のページが横長なら、currentPageも単ページ表示にする
+        // 2. 次のページ（右側に表示されるページ）が単ページ表示属性の場合
         if currentPage + 1 < source.imageCount {
             let nextIsSingle = checkAndSetLandscapeAttribute(for: currentPage + 1)
             if nextIsSingle {
-                return true
+                // 前のページも単ページ表示属性かチェック
+                if currentPage > 0 {
+                    let prevIsSingle = checkAndSetLandscapeAttribute(for: currentPage - 1)
+                    if prevIsSingle {
+                        // 前も次も単ページ表示属性 → currentPageは単ページ表示（ペアがない）
+                        return true
+                    }
+                } else {
+                    // currentPageが先頭 → ペアがないので単ページ表示
+                    return true
+                }
             }
         }
 
@@ -253,7 +262,7 @@ class BookViewModel {
         let isOddShift = pageDisplaySettings.hasOddSinglePagesUpTo(currentPage)
 
         if isOddShift {
-            // シフトあり: currentPage が右側、currentPage+1 が左側
+            // シフトあり: currentPage が左側、currentPage+1 が右側
             self.firstPageImage = source.loadImage(at: currentPage)
             if currentPage + 1 < source.imageCount {
                 self.secondPageImage = source.loadImage(at: currentPage + 1)
@@ -261,7 +270,7 @@ class BookViewModel {
                 self.secondPageImage = nil
             }
         } else {
-            // シフトなし: currentPage が右側、currentPage+1 が左側
+            // シフトなし: currentPage が左側、currentPage+1 が右側
             self.firstPageImage = source.loadImage(at: currentPage)
             if currentPage + 1 < source.imageCount {
                 self.secondPageImage = source.loadImage(at: currentPage + 1)
@@ -339,8 +348,11 @@ class BookViewModel {
         }
 
         // 見開きモードの場合：
+        // 最後の画像の横長判定を先に行う
+        let lastIsSingle = checkAndSetLandscapeAttribute(for: lastIndex)
+
         // 最後の画像データが単ページ属性つきなら単ページで表示
-        if pageDisplaySettings.isForcedSinglePage(lastIndex) {
+        if lastIsSingle {
             currentPage = lastIndex
             loadCurrentPage()
             saveViewState()
@@ -349,11 +361,14 @@ class BookViewModel {
 
         // 最後の画像データの１つ前が単ページ属性つきの場合、
         // 最後の画像と見開きするペアがないので単ページで表示
-        if lastIndex > 0 && pageDisplaySettings.isForcedSinglePage(lastIndex - 1) {
-            currentPage = lastIndex
-            loadCurrentPage()
-            saveViewState()
-            return
+        if lastIndex > 0 {
+            let prevIsSingle = checkAndSetLandscapeAttribute(for: lastIndex - 1)
+            if prevIsSingle {
+                currentPage = lastIndex
+                loadCurrentPage()
+                saveViewState()
+                return
+            }
         }
 
         // それ以外の場合、最後の２つの画像データで見開き表示
@@ -416,8 +431,19 @@ class BookViewModel {
         }
 
         // 見開きモードの場合
-        // 現在のページが単ページ表示なら1ページ戻る
+        // 現在のページが単ページ表示なら、次に表示すべきページを計算
         if shouldShowCurrentPageAsSingle() {
+            // 1ページ戻った位置をチェック
+            if currentPage > 0 {
+                let prevPage = currentPage - 1
+                // 前のページも単ページ表示属性なら1ページ戻る
+                if checkAndSetLandscapeAttribute(for: prevPage) {
+                    return 1
+                }
+                // 前のページが単ページ表示属性でなければ、その前のページとペアになる
+                // したがって2ページ戻る
+                return 2
+            }
             return 1
         }
 
