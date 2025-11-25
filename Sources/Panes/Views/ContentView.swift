@@ -172,6 +172,7 @@ struct ContentView: View {
         .focusEffectDisabled()  // フォーカスリングを非表示
         .focusedValue(\.bookViewModel, viewModel)  // メニューコマンドからアクセス可能に
         .background(WindowNumberGetter(windowNumber: $myWindowNumber))
+        .navigationTitle(viewModel.windowTitle)
         .onAppear {
             // ウィンドウ番号を取得（少し遅延させて確実に取得）
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -366,7 +367,7 @@ struct ContentView: View {
     }
 }
 
-// ウィンドウ番号を取得するヘルパー
+// ウィンドウ番号を取得し、タイトルバーの設定を行うヘルパー
 struct WindowNumberGetter: NSViewRepresentable {
     @Binding var windowNumber: Int?
 
@@ -380,6 +381,11 @@ struct WindowNumberGetter: NSViewRepresentable {
         DispatchQueue.main.async {
             if let window = nsView.window {
                 self.windowNumber = window.windowNumber
+
+                // タイトルバーの文字色を白に設定
+                window.titlebarAppearsTransparent = true
+                window.appearance = NSAppearance(named: .darkAqua)
+
                 DebugLogger.log("🪟 Window number captured: \(window.windowNumber)", level: .verbose)
             } else {
                 DebugLogger.log("⚠️ Window not yet available", level: .verbose)

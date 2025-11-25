@@ -126,7 +126,7 @@ class ArchiveReader {
         var imageData = Data()
 
         do {
-            // 画像ヘッダーを読み込むために必要な最小データ量（大きめに取る）
+            // まず画像ヘッダーだけ読み込んでみる
             let headerSize = min(entry.uncompressedSize, 8192) // 8KB
             var readBytes = 0
 
@@ -138,6 +138,16 @@ class ArchiveReader {
             }
 
             // NSImageRepを使ってサイズ情報のみ取得
+            if let imageRep = NSBitmapImageRep(data: imageData) {
+                return CGSize(width: imageRep.pixelsWide, height: imageRep.pixelsHigh)
+            }
+
+            // ヘッダーだけでは取得できなかった場合、画像全体をロード
+            imageData.removeAll()
+            _ = try archive.extract(entry) { data in
+                imageData.append(data)
+            }
+
             guard let imageRep = NSBitmapImageRep(data: imageData) else {
                 return nil
             }

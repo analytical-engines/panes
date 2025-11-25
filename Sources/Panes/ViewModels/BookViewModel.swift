@@ -416,6 +416,11 @@ class BookViewModel {
         }
 
         // 見開きモードの場合
+        // 現在のページが単ページ表示なら1ページ戻る
+        if shouldShowCurrentPageAsSingle() {
+            return 1
+        }
+
         // 1ページ戻った位置が単ページ表示なら1ページ戻る
         if currentPage > 0 {
             let prevPage = currentPage - 1
@@ -678,5 +683,49 @@ class BookViewModel {
     // 下位互換のためにarchiveFileNameをsourceNameのエイリアスとして定義
     var archiveFileName: String {
         return sourceName
+    }
+
+    /// ウィンドウタイトル
+    var windowTitle: String {
+        guard let source = imageSource else { return "Panes" }
+
+        // アーカイブ名（zipファイル名 or 画像フォルダの親/フォルダ名）
+        let archiveName: String
+        if source is ArchiveImageSource {
+            // zipファイル: ファイル名のみ
+            archiveName = sourceName
+        } else {
+            // 画像ファイル: 親フォルダ/フォルダ名
+            let pathComponents = sourceName.split(separator: "/")
+            if pathComponents.count >= 2 {
+                // 最後の2要素を取得
+                archiveName = pathComponents.suffix(2).joined(separator: "/")
+            } else {
+                archiveName = sourceName
+            }
+        }
+
+        switch viewMode {
+        case .single:
+            // 単ページ表示: ファイル名のみ
+            return source.fileName(at: currentPage) ?? "Panes"
+
+        case .spread:
+            // 見開き表示
+            if shouldShowCurrentPageAsSingle() {
+                // 単ページ（見開きモード中）: アーカイブ名 / ファイル名
+                let fileName = source.fileName(at: currentPage) ?? ""
+                return "\(archiveName) / \(fileName)"
+            } else {
+                // 見開き: アーカイブ名 / ファイル1 - ファイル2
+                let firstFileName = source.fileName(at: currentPage) ?? ""
+                if currentPage + 1 < source.imageCount {
+                    let secondFileName = source.fileName(at: currentPage + 1) ?? ""
+                    return "\(archiveName) / \(firstFileName) - \(secondFileName)"
+                } else {
+                    return "\(archiveName) / \(firstFileName)"
+                }
+            }
+        }
     }
 }
