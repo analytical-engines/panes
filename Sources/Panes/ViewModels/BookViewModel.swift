@@ -203,20 +203,11 @@ class BookViewModel {
         }
 
         // 2. 次のページ（右側に表示されるページ）が単ページ表示属性の場合
+        //    currentPageも単ページ表示（次のページと見開きにできないため）
         if currentPage + 1 < source.imageCount {
             let nextIsSingle = checkAndSetLandscapeAttribute(for: currentPage + 1)
             if nextIsSingle {
-                // 前のページも単ページ表示属性かチェック
-                if currentPage > 0 {
-                    let prevIsSingle = checkAndSetLandscapeAttribute(for: currentPage - 1)
-                    if prevIsSingle {
-                        // 前も次も単ページ表示属性 → currentPageは単ページ表示（ペアがない）
-                        return true
-                    }
-                } else {
-                    // currentPageが先頭 → ペアがないので単ページ表示
-                    return true
-                }
+                return true
             }
         }
 
@@ -410,6 +401,8 @@ class BookViewModel {
 
     /// 次のページへのステップ数を計算
     private func calculateNextPageStep() -> Int {
+        guard let source = imageSource else { return 1 }
+
         if viewMode == .single {
             return 1
         }
@@ -418,6 +411,15 @@ class BookViewModel {
         // 現在のページが単ページ表示なら1ページ進む
         if shouldShowCurrentPageAsSingle() {
             return 1
+        }
+
+        // 見開き表示の場合、次の2ページをチェック
+        // currentPage+1 が単ページ表示属性なら step=1
+        if currentPage + 1 < source.imageCount {
+            let nextIsSingle = checkAndSetLandscapeAttribute(for: currentPage + 1)
+            if nextIsSingle {
+                return 1
+            }
         }
 
         // 見開き表示なら2ページ進む
