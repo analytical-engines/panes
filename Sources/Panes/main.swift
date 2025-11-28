@@ -18,11 +18,13 @@ struct ImageViewerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @FocusedValue(\.bookViewModel) private var focusedViewModel: BookViewModel?
     @State private var historyManager = FileHistoryManager()
+    @State private var appSettings = AppSettings()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environment(historyManager)
+                .environment(appSettings)
                 .onAppear {
                     // ウィンドウを最前面に
                     NSApp.activate(ignoringOtherApps: true)
@@ -36,7 +38,9 @@ struct ImageViewerApp: App {
                     focusedViewModel?.toggleViewMode()
                 }) {
                     Label(
-                        focusedViewModel?.viewMode == .spread ? "Single View" : "Spread View",
+                        focusedViewModel?.viewMode == .spread
+                            ? L("menu_single_view")
+                            : L("menu_spread_view"),
                         systemImage: focusedViewModel?.viewMode == .spread
                             ? "rectangle"
                             : "rectangle.split.2x1"
@@ -51,8 +55,8 @@ struct ImageViewerApp: App {
                 }) {
                     Label(
                         focusedViewModel?.readingDirection == .rightToLeft
-                            ? "Reading Direction: Right to Left"
-                            : "Reading Direction: Left to Right",
+                            ? L("menu_reading_direction_rtl")
+                            : L("menu_reading_direction_ltr"),
                         systemImage: focusedViewModel?.readingDirection == .rightToLeft
                             ? "arrow.left"
                             : "arrow.right"
@@ -65,8 +69,8 @@ struct ImageViewerApp: App {
                 }) {
                     Label(
                         focusedViewModel?.showStatusBar == true
-                            ? "Hide Status Bar"
-                            : "Show Status Bar",
+                            ? L("menu_hide_status_bar")
+                            : L("menu_show_status_bar"),
                         systemImage: focusedViewModel?.showStatusBar == true
                             ? "eye.slash"
                             : "eye"
@@ -82,8 +86,8 @@ struct ImageViewerApp: App {
                 }) {
                     Label(
                         focusedViewModel?.isCurrentPageForcedSingle == true
-                            ? "Remove Single Page Attribute"
-                            : "Force Single Page Display",
+                            ? L("menu_remove_single_page_attribute")
+                            : L("menu_force_single_page"),
                         systemImage: focusedViewModel?.isCurrentPageForcedSingle == true
                             ? "checkmark.square"
                             : "square"
@@ -95,12 +99,12 @@ struct ImageViewerApp: App {
                 Divider()
 
                 // 単ページ配置設定（見開きモード中の単ページ表示時のみ有効）
-                Menu("Single Page Alignment") {
+                Menu(L("menu_single_page_alignment")) {
                     Button(action: {
                         focusedViewModel?.setCurrentPageAlignment(.right)
                     }) {
                         Label(
-                            "Right Side",
+                            L("menu_align_right"),
                             systemImage: focusedViewModel?.currentPageAlignment == .right
                                 ? "checkmark"
                                 : ""
@@ -111,7 +115,7 @@ struct ImageViewerApp: App {
                         focusedViewModel?.setCurrentPageAlignment(.left)
                     }) {
                         Label(
-                            "Left Side",
+                            L("menu_align_left"),
                             systemImage: focusedViewModel?.currentPageAlignment == .left
                                 ? "checkmark"
                                 : ""
@@ -122,7 +126,7 @@ struct ImageViewerApp: App {
                         focusedViewModel?.setCurrentPageAlignment(.center)
                     }) {
                         Label(
-                            "Center (Window Fitting)",
+                            L("menu_align_center"),
                             systemImage: focusedViewModel?.currentPageAlignment == .center
                                 ? "checkmark"
                                 : ""
@@ -131,6 +135,13 @@ struct ImageViewerApp: App {
                 }
                 .disabled(focusedViewModel == nil || focusedViewModel?.viewMode != .spread)
             }
+        }
+
+        // 設定ウィンドウ
+        Settings {
+            SettingsView()
+                .environment(appSettings)
+                .environment(historyManager)
         }
     }
 }

@@ -3,6 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "Panes",
+    defaultLocalization: "en",
     platforms: [
         .macOS(.v15)
     ],
@@ -24,7 +25,8 @@ let package = Package(
             dependencies: ["ZIPFoundation"],
             path: "Sources/Panes",
             resources: [
-                .process("../../Resources")
+                .process("../../Resources"),
+                .process("Resources")
             ],
             swiftSettings: [
                 .unsafeFlags(["-parse-as-library"])

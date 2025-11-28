@@ -1,0 +1,76 @@
+/*
+  Localizable.strings (English)
+  Panes
+*/
+
+// MARK: - ContentView
+
+"open_file" = "Open File";
+"recent_files" = "Recent Files:";
+"loading" = "Loading...";
+"drop_files_hint" = "Drop zip or image files here";
+"access_count_format" = "(%d times)";
+
+// MARK: - SettingsView - Tabs
+
+"tab_general" = "General";
+"tab_history" = "History";
+
+// MARK: - SettingsView - Display Settings
+
+"section_display" = "Display Settings";
+"default_view_mode" = "Default View Mode";
+"view_mode_single" = "Single Page";
+"view_mode_spread" = "Spread";
+"default_reading_direction" = "Default Reading Direction";
+"reading_direction_rtl" = "Right to Left (Manga)";
+"reading_direction_ltr" = "Left to Right (Western)";
+"show_status_bar" = "Show Status Bar";
+
+// MARK: - SettingsView - Image Detection
+
+"section_image_detection" = "Image Detection";
+"landscape_threshold" = "Landscape Threshold";
+"landscape_threshold_unit" = "(Width/Height)";
+"landscape_threshold_description" = "Images with aspect ratio above this value are detected as landscape and displayed as single page";
+
+// MARK: - SettingsView - History Settings
+
+"section_history_settings" = "History Settings";
+"max_history_count" = "Maximum History Count";
+"history_count_unit" = "items";
+"max_history_description" = "Maximum number of files to save in history";
+
+// MARK: - SettingsView - History Management
+
+"section_history_management" = "History Management";
+"current_history_count_format" = "Current history count: %d items";
+"clear_all" = "Clear All";
+
+// MARK: - Status Bar
+
+"single_page_indicator" = "[Single]";
+
+// MARK: - Menu Items
+
+"menu_single_view" = "Single View";
+"menu_spread_view" = "Spread View";
+"menu_reading_direction_rtl" = "Reading Direction: Right to Left";
+"menu_reading_direction_ltr" = "Reading Direction: Left to Right";
+"menu_hide_status_bar" = "Hide Status Bar";
+"menu_show_status_bar" = "Show Status Bar";
+"menu_remove_single_page_attribute" = "Remove Single Page Attribute";
+"menu_force_single_page" = "Force Single Page Display";
+"menu_single_page_alignment" = "Single Page Alignment";
+"menu_align_right" = "Right Side";
+"menu_align_left" = "Left Side";
+"menu_align_center" = "Center (Window Fitting)";
+
+// MARK: - Error Messages
+
+"error_no_images_found" = "No images found";
+"error_cannot_open_zip" = "Could not open zip file";
+"error_cannot_open_images" = "Could not open image files";
+"error_no_file_selected" = "No file selected";
+"error_cannot_open_file" = "Could not open file";
+"error_image_load_failed_format" = "Failed to load image\nFile: %@\nPage: %d/%d";

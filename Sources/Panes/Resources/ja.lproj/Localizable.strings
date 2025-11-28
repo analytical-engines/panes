@@ -1,0 +1,76 @@
+/*
+  Localizable.strings (Japanese)
+  Panes
+*/
+
+// MARK: - ContentView
+
+"open_file" = "ファイルを開く";
+"recent_files" = "最近開いたファイル:";
+"loading" = "読み込み中...";
+"drop_files_hint" = "zipファイルまたは画像ファイルをドロップ";
+"access_count_format" = "(%d回)";
+
+// MARK: - SettingsView - Tabs
+
+"tab_general" = "一般";
+"tab_history" = "履歴";
+
+// MARK: - SettingsView - Display Settings
+
+"section_display" = "表示設定";
+"default_view_mode" = "デフォルト表示モード";
+"view_mode_single" = "単ページ";
+"view_mode_spread" = "見開き";
+"default_reading_direction" = "デフォルト読み方向";
+"reading_direction_rtl" = "右→左（漫画）";
+"reading_direction_ltr" = "左→右（洋書）";
+"show_status_bar" = "ステータスバーを表示";
+
+// MARK: - SettingsView - Image Detection
+
+"section_image_detection" = "画像判定";
+"landscape_threshold" = "横長判定の閾値";
+"landscape_threshold_unit" = "（幅/高さ）";
+"landscape_threshold_description" = "この値以上のアスペクト比の画像を横長と判定し、単ページ表示します";
+
+// MARK: - SettingsView - History Settings
+
+"section_history_settings" = "履歴設定";
+"max_history_count" = "最大保存件数";
+"history_count_unit" = "件";
+"max_history_description" = "履歴に保存するファイルの最大件数です";
+
+// MARK: - SettingsView - History Management
+
+"section_history_management" = "履歴の管理";
+"current_history_count_format" = "現在の履歴件数: %d件";
+"clear_all" = "すべてクリア";
+
+// MARK: - Status Bar
+
+"single_page_indicator" = "[単]";
+
+// MARK: - Menu Items
+
+"menu_single_view" = "単ページ表示";
+"menu_spread_view" = "見開き表示";
+"menu_reading_direction_rtl" = "読み方向: 右から左";
+"menu_reading_direction_ltr" = "読み方向: 左から右";
+"menu_hide_status_bar" = "ステータスバーを隠す";
+"menu_show_status_bar" = "ステータスバーを表示";
+"menu_remove_single_page_attribute" = "単ページ属性を解除";
+"menu_force_single_page" = "単ページ表示を強制";
+"menu_single_page_alignment" = "単ページの配置";
+"menu_align_right" = "右側";
+"menu_align_left" = "左側";
+"menu_align_center" = "中央（ウィンドウフィット）";
+
+// MARK: - Error Messages
+
+"error_no_images_found" = "画像が見つかりませんでした";
+"error_cannot_open_zip" = "zipファイルを開けませんでした";
+"error_cannot_open_images" = "画像ファイルを開けませんでした";
+"error_no_file_selected" = "ファイルが選択されていません";
+"error_cannot_open_file" = "ファイルを開けませんでした";
+"error_image_load_failed_format" = "画像の読み込みに失敗しました\nファイル: %@\nページ: %d/%d";

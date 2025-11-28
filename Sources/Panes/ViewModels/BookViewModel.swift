@@ -19,8 +19,14 @@ enum ReadingDirection {
 class BookViewModel {
 
     // 横長画像判定のアスペクト比閾値（幅/高さ）
-    // TODO: 後でアプリ設定で変更可能にする
-    private let landscapeAspectRatioThreshold: CGFloat = 1.2
+    private var landscapeAspectRatioThreshold: CGFloat = 1.2
+
+    // アプリ全体設定への参照
+    var appSettings: AppSettings? {
+        didSet {
+            applyDefaultSettings()
+        }
+    }
 
     // 画像ソース
     private var imageSource: ImageSource?
@@ -106,7 +112,7 @@ class BookViewModel {
     /// 画像ソースを開く（zipまたは画像ファイル）
     func openSource(_ source: ImageSource) {
         guard source.imageCount > 0 else {
-            errorMessage = "画像が見つかりませんでした"
+            errorMessage = L("error_no_images_found")
             return
         }
 
@@ -138,7 +144,7 @@ class BookViewModel {
         if let source = ArchiveImageSource(url: url) {
             openSource(source)
         } else {
-            errorMessage = "zipファイルを開けませんでした"
+            errorMessage = L("error_cannot_open_zip")
         }
     }
 
@@ -147,23 +153,38 @@ class BookViewModel {
         if let source = FileImageSource(urls: urls) {
             openSource(source)
         } else {
-            errorMessage = "画像ファイルを開けませんでした"
+            errorMessage = L("error_cannot_open_images")
         }
     }
 
-    /// URLから適切なソースを自動判定して開く
+    /// URLから適切なソースを自動判定して開く（バックグラウンドで読み込み）
     func openFiles(urls: [URL]) {
         guard !urls.isEmpty else {
-            errorMessage = "ファイルが選択されていません"
+            errorMessage = L("error_no_file_selected")
             return
         }
 
-        // zipファイルの場合
-        if urls.count == 1 && urls[0].pathExtension.lowercased() == "zip" {
-            openArchive(url: urls[0])
-        } else {
-            // 画像ファイルの場合
-            openImageFiles(urls: urls)
+        // バックグラウンドスレッドでファイル読み込み
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let source: ImageSource?
+
+            // zipファイルの場合
+            if urls.count == 1 && urls[0].pathExtension.lowercased() == "zip" {
+                source = ArchiveImageSource(url: urls[0])
+            } else {
+                // 画像ファイルの場合
+                source = FileImageSource(urls: urls)
+            }
+
+            // メインスレッドでUI更新
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                if let source = source {
+                    self.openSource(source)
+                } else {
+                    self.errorMessage = L("error_cannot_open_file")
+                }
+            }
         }
     }
 
@@ -229,8 +250,8 @@ class BookViewModel {
             }
             self.errorMessage = nil
         } else {
-            let fileName = source.fileName(at: currentPage) ?? "不明"
-            self.errorMessage = "画像の読み込みに失敗しました\nファイル: \(fileName)\nページ: \(currentPage + 1)/\(totalPages)"
+            let fileName = source.fileName(at: currentPage) ?? "unknown"
+            self.errorMessage = L("error_image_load_failed_format", fileName, currentPage + 1, totalPages)
             debugLog("Failed to load image at index \(currentPage), file: \(fileName)", level: .minimal)
         }
     }
@@ -639,6 +660,15 @@ class BookViewModel {
         }
     }
 
+    /// 単ページ表示属性インジケーター（表示用）
+    var singlePageIndicator: String {
+        guard viewMode == .spread else { return "" }
+        if isCurrentPageForcedSingle {
+            return L("single_page_indicator")
+        }
+        return ""
+    }
+
     /// 現在のページ情報（表示用）
     var pageInfo: String {
         guard totalPages > 0 else { return "" }
@@ -755,5 +785,20 @@ class BookViewModel {
                 }
             }
         }
+    }
+
+    /// AppSettingsからデフォルト値を適用（ファイルが読み込まれていない場合のみ）
+    private func applyDefaultSettings() {
+        guard let settings = appSettings else { return }
+
+        // ファイルが読み込まれていない場合のみデフォルト値を適用
+        if imageSource == nil {
+            viewMode = settings.defaultViewMode
+            readingDirection = settings.defaultReadingDirection
+            showStatusBar = settings.defaultShowStatusBar
+        }
+
+        // 横長判定閾値は常に最新の設定値を使用
+        landscapeAspectRatioThreshold = settings.defaultLandscapeThreshold
     }
 }

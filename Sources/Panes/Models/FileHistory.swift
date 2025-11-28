@@ -28,7 +28,14 @@ struct FileHistoryEntry: Codable, Identifiable {
 @Observable
 class FileHistoryManager {
     private let historyKey = "fileHistory"
-    private let maxHistoryCount = 50
+
+    // アプリ設定への参照（最大件数を取得するため）
+    var appSettings: AppSettings?
+
+    /// 最大履歴件数（AppSettingsから取得、未設定時は50）
+    private var maxHistoryCount: Int {
+        appSettings?.maxHistoryCount ?? 50
+    }
 
     var history: [FileHistoryEntry] = []
 
