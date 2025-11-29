@@ -73,6 +73,14 @@ class BookViewModel {
     // ステータスバー表示
     var showStatusBar: Bool = true
 
+    // 現在開いているファイルのパス
+    private(set) var currentFilePath: String?
+
+    /// 現在開いているファイルのキー（セッション保存用）
+    var currentFileKey: String? {
+        imageSource?.generateFileKey()
+    }
+
     /// デバッグ出力（レベル指定）
     private func debugLog(_ message: String, level: DebugLevel = .normal) {
         DebugLogger.log("DEBUG: \(message)", level: level)
@@ -124,6 +132,7 @@ class BookViewModel {
         secondPageImage = nil
         errorMessage = nil
         pageDisplaySettings = PageDisplaySettings()
+        currentFilePath = nil
     }
 
     /// ファイルが開いているかどうか
@@ -143,6 +152,7 @@ class BookViewModel {
         self.totalPages = source.imageCount
         self.currentPage = 0
         self.errorMessage = nil
+        self.currentFilePath = source.sourceURL?.path
 
         // 履歴に記録
         if let fileKey = source.generateFileKey(),

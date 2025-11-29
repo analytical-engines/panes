@@ -12,6 +12,8 @@ class AppSettings {
         static let defaultShowStatusBar = "defaultShowStatusBar"
         static let defaultLandscapeThreshold = "defaultLandscapeThreshold"
         static let maxHistoryCount = "maxHistoryCount"
+        static let sessionRestoreEnabled = "sessionRestoreEnabled"
+        static let sessionConcurrentLoadingLimit = "sessionConcurrentLoadingLimit"
     }
 
     // MARK: - 表示設定
@@ -41,6 +43,18 @@ class AppSettings {
     /// 履歴の最大保存件数
     var maxHistoryCount: Int {
         didSet { defaults.set(maxHistoryCount, forKey: Keys.maxHistoryCount) }
+    }
+
+    // MARK: - セッション設定
+
+    /// セッション復元を有効にするか
+    var sessionRestoreEnabled: Bool {
+        didSet { defaults.set(sessionRestoreEnabled, forKey: Keys.sessionRestoreEnabled) }
+    }
+
+    /// セッション復元時の同時読み込み数
+    var sessionConcurrentLoadingLimit: Int {
+        didSet { defaults.set(sessionConcurrentLoadingLimit, forKey: Keys.sessionConcurrentLoadingLimit) }
     }
 
     // MARK: - 初期化
@@ -79,6 +93,20 @@ class AppSettings {
             maxHistoryCount = defaults.integer(forKey: Keys.maxHistoryCount)
         } else {
             maxHistoryCount = 50  // デフォルト: 50件
+        }
+
+        // セッション復元の読み込み
+        if defaults.object(forKey: Keys.sessionRestoreEnabled) != nil {
+            sessionRestoreEnabled = defaults.bool(forKey: Keys.sessionRestoreEnabled)
+        } else {
+            sessionRestoreEnabled = false  // デフォルト: 無効
+        }
+
+        // 同時読み込み数の読み込み
+        if defaults.object(forKey: Keys.sessionConcurrentLoadingLimit) != nil {
+            sessionConcurrentLoadingLimit = defaults.integer(forKey: Keys.sessionConcurrentLoadingLimit)
+        } else {
+            sessionConcurrentLoadingLimit = 1  // デフォルト: 1
         }
     }
 

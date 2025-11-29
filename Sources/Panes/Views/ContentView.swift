@@ -12,11 +12,12 @@ struct ContentView: View {
     @State private var viewModel = BookViewModel()
     @Environment(FileHistoryManager.self) private var historyManager
     @Environment(AppSettings.self) private var appSettings
+    @Environment(SessionManager.self) private var sessionManager
     @State private var isFilePickerPresented = false
     @Environment(\.openWindow) private var openWindow
     @State private var eventMonitor: Any?
     @State private var myWindowNumber: Int?
-    private let windowID = UUID()
+    @State private var windowID = UUID()
 
     // 「このアプリケーションで開く」からのファイル待ち状態
     @State private var isWaitingForFile = false
@@ -31,6 +32,15 @@ struct ContentView: View {
     // 次に作成されるウィンドウがファイル待ち状態かどうか
     private static var nextWindowShouldWaitForFile = false
 
+    // セッション復元用のエントリ
+    @State private var restorationEntry: WindowSessionEntry?
+
+    // 画像表示後に適用するフレーム（復元用）
+    @State private var pendingRestorationFrame: CGRect?
+
+    // ウィンドウフレーム追跡用
+    @State private var currentWindowFrame: CGRect?
+
     @ViewBuilder
     private var mainContent: some View {
         if viewModel.viewMode == .single, let image = viewModel.currentImage {
@@ -44,6 +54,7 @@ struct ContentView: View {
                 pageInfo: viewModel.pageInfo,
                 contextMenuBuilder: { pageIndex in imageContextMenu(for: pageIndex) }
             )
+            .onAppear { applyPendingRestorationFrame() }
         } else if viewModel.viewMode == .spread, let firstPageImage = viewModel.firstPageImage {
             SpreadPageView(
                 readingDirection: viewModel.readingDirection,
@@ -59,6 +70,7 @@ struct ContentView: View {
                 pageInfo: viewModel.pageInfo,
                 contextMenuBuilder: { pageIndex in imageContextMenu(for: pageIndex) }
             )
+            .onAppear { applyPendingRestorationFrame() }
         } else if isWaitingForFile {
             LoadingView()
         } else {
@@ -68,6 +80,37 @@ struct ContentView: View {
                 onOpenHistoryFile: openHistoryFile
             )
             .contextMenu { initialScreenContextMenu }
+        }
+    }
+
+    /// 画像表示後にフレームを適用する
+    private func applyPendingRestorationFrame() {
+        guard let targetFrame = pendingRestorationFrame else { return }
+        pendingRestorationFrame = nil
+
+        DebugLogger.log("📐 Starting frame application: \(targetFrame) for windowID: \(windowID)", level: .normal)
+
+        // フレーム適用を複数回行い、SwiftUIのレイアウト調整に対抗する
+        // より長い遅延も追加してSwiftUIのリサイズ後にも対応
+        for delay in [0.1, 0.3, 0.5, 1.0, 2.0, 3.0] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                guard let windowNumber = self.myWindowNumber else {
+                    DebugLogger.log("⚠️ Window number not yet available (delay \(delay)s)", level: .normal)
+                    return
+                }
+
+                if let window = NSApp.windows.first(where: { $0.windowNumber == windowNumber }) {
+                    let currentFrame = window.frame
+                    if currentFrame != targetFrame {
+                        DebugLogger.log("📐 Applying frame (delay \(delay)s): \(targetFrame) to window: \(windowNumber) (was: \(currentFrame))", level: .normal)
+                        window.setFrame(targetFrame, display: true, animate: false)
+                    } else {
+                        DebugLogger.log("📐 Frame already correct (delay \(delay)s): \(targetFrame) window: \(windowNumber)", level: .verbose)
+                    }
+                } else {
+                    DebugLogger.log("❌ Window not found: \(windowNumber) (delay \(delay)s)", level: .normal)
+                }
+            }
         }
     }
 
@@ -331,10 +374,57 @@ struct ContentView: View {
             }
         }
         .onChange(of: viewModel.hasOpenFile) { _, hasFile in
-            // ファイルが閉じられたらローディング状態をリセット
-            if !hasFile {
+            if hasFile {
+                // 復元モードの場合はフレームを設定して完了通知
+                if let entry = restorationEntry {
+                    // 復元フレームでウィンドウを登録
+                    sessionManager.registerWindow(
+                        id: windowID,
+                        filePath: viewModel.currentFilePath ?? "",
+                        fileKey: viewModel.currentFileKey,
+                        currentPage: viewModel.currentPage,
+                        frame: entry.frame
+                    )
+
+                    // 画像表示後にフレームを適用するために保存
+                    let targetFrame = self.validateWindowFrame(entry.frame)
+                    pendingRestorationFrame = targetFrame
+                    DebugLogger.log("📐 Pending frame for image display: \(targetFrame) windowID: \(windowID)", level: .normal)
+
+                    // myWindowNumber がまだ設定されていない場合、ここで取得を試みる
+                    if myWindowNumber == nil {
+                        // WindowNumberGetter がまだ実行されていない場合、キーウィンドウから取得
+                        if let window = NSApp.keyWindow {
+                            myWindowNumber = window.windowNumber
+                            DebugLogger.log("🪟 Window number captured from keyWindow in onChange: \(window.windowNumber)", level: .normal)
+                        }
+                    }
+
+                    // onChange から直接フレームを適用（onAppearより先に実行される可能性があるため）
+                    applyPendingRestorationFrame()
+
+                    sessionManager.windowDidFinishLoading(id: windowID)
+                    restorationEntry = nil
+                } else if let frame = currentWindowFrame {
+                    // 通常モード：現在のフレームでウィンドウを登録
+                    sessionManager.registerWindow(
+                        id: windowID,
+                        filePath: viewModel.currentFilePath ?? "",
+                        fileKey: viewModel.currentFileKey,
+                        currentPage: viewModel.currentPage,
+                        frame: frame
+                    )
+                }
+            } else {
+                // ファイルが閉じられたらローディング状態をリセット
                 isWaitingForFile = false
+                // セッションマネージャーからも削除
+                sessionManager.removeWindow(id: windowID)
             }
+        }
+        .onChange(of: viewModel.currentPage) { _, newPage in
+            // ページが変わったらセッションマネージャーを更新
+            sessionManager.updateWindowState(id: windowID, currentPage: newPage)
         }
         .onKeyPress(.leftArrow) { viewModel.nextPage(); return .handled }
         .onKeyPress(.rightArrow) { viewModel.previousPage(); return .handled }
@@ -356,11 +446,19 @@ struct ContentView: View {
     }
 
     private func handleOnAppear() {
-        // ウィンドウ番号を取得（少し遅延させて確実に取得）
+        // ウィンドウ番号とフレームを取得（WindowNumberGetterで設定された番号を使用）
+        // isKeyWindow は複数ウィンドウ作成時に間違ったウィンドウを返す可能性があるため使用しない
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            if let window = NSApp.windows.first(where: { $0.isKeyWindow }) {
-                self.myWindowNumber = window.windowNumber
-                DebugLogger.log("🪟 Window number set in onAppear: \(window.windowNumber)", level: .verbose)
+            // myWindowNumber は WindowNumberGetter で設定される
+            if let windowNumber = self.myWindowNumber,
+               let window = NSApp.windows.first(where: { $0.windowNumber == windowNumber }) {
+                self.currentWindowFrame = window.frame
+                DebugLogger.log("🪟 Window frame captured in onAppear: \(window.frame) windowNumber: \(windowNumber)", level: .verbose)
+
+                // ウィンドウフレーム変更の監視を設定
+                setupWindowFrameObserver(for: window)
+            } else {
+                DebugLogger.log("⚠️ Window not yet available in onAppear, waiting for WindowNumberGetter", level: .verbose)
             }
         }
 
@@ -373,7 +471,9 @@ struct ContentView: View {
 
         // このウィンドウを最後に作成されたウィンドウとして登録
         ContentView.lastCreatedWindowIDLock.lock()
+        let previousID = ContentView.lastCreatedWindowID
         ContentView.lastCreatedWindowID = windowID
+        DebugLogger.log("🪟 Registered as lastCreatedWindow: \(windowID) (previous: \(String(describing: previousID)))", level: .normal)
         if ContentView.nextWindowShouldWaitForFile {
             isWaitingForFile = true
             ContentView.nextWindowShouldWaitForFile = false
@@ -382,6 +482,164 @@ struct ContentView: View {
 
         setupEventMonitor()
         setupNotificationObservers()
+        setupSessionObservers()
+    }
+
+    /// ウィンドウフレーム変更の監視を設定
+    private func setupWindowFrameObserver(for window: NSWindow) {
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didMoveNotification,
+            object: window,
+            queue: .main
+        ) { [weak window] _ in
+            if let frame = window?.frame {
+                self.currentWindowFrame = frame
+                self.sessionManager.updateWindowFrame(id: self.windowID, frame: frame)
+            }
+        }
+
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didResizeNotification,
+            object: window,
+            queue: .main
+        ) { [weak window] _ in
+            if let frame = window?.frame {
+                self.currentWindowFrame = frame
+                self.sessionManager.updateWindowFrame(id: self.windowID, frame: frame)
+            }
+        }
+    }
+
+    /// セッション復元通知の監視を設定
+    private func setupSessionObservers() {
+        // 復元通知を受け取る
+        NotificationCenter.default.addObserver(
+            forName: .restoreWindow,
+            object: nil,
+            queue: .main
+        ) { notification in
+            // 最後に作成されたウィンドウのみが処理
+            ContentView.lastCreatedWindowIDLock.lock()
+            let lastID = ContentView.lastCreatedWindowID
+            let isLastCreated = lastID == windowID
+            ContentView.lastCreatedWindowIDLock.unlock()
+
+            DebugLogger.log("📬 restoreWindow notification received - windowID: \(windowID), lastID: \(String(describing: lastID)), isLast: \(isLastCreated)", level: .normal)
+
+            guard isLastCreated else {
+                DebugLogger.log("📬 Ignoring - not the last created window", level: .verbose)
+                return
+            }
+
+            if let entry = notification.userInfo?["entry"] as? WindowSessionEntry {
+                DebugLogger.log("📬 Processing entry: \(entry.filePath)", level: .normal)
+                restoreFromSession(entry)
+            }
+        }
+
+        // 新しいウィンドウ作成リクエストを受け取る（2つ目以降のセッション復元用）
+        NotificationCenter.default.addObserver(
+            forName: .needNewRestoreWindow,
+            object: nil,
+            queue: .main
+        ) { [openWindow] _ in
+            // 最後に作成されたウィンドウのみが処理
+            ContentView.lastCreatedWindowIDLock.lock()
+            let lastID = ContentView.lastCreatedWindowID
+            let isLastCreated = lastID == windowID
+            ContentView.lastCreatedWindowIDLock.unlock()
+
+            DebugLogger.log("📬 needNewRestoreWindow notification received - windowID: \(windowID), lastID: \(String(describing: lastID)), isLast: \(isLastCreated)", level: .normal)
+
+            guard isLastCreated else {
+                DebugLogger.log("📬 Ignoring needNewRestoreWindow - not the last created window", level: .verbose)
+                return
+            }
+
+            // 新しいウィンドウを作成して復元
+            Task { @MainActor in
+                DebugLogger.log("🪟 Creating new window for restoration from windowID: \(windowID)", level: .normal)
+                openWindow(id: "restore")
+                try? await Task.sleep(nanoseconds: 200_000_000)
+
+                // 新しいウィンドウに復元エントリを渡す
+                if let entry = sessionManager.pendingRestoreEntry {
+                    DebugLogger.log("📬 Posting restoreWindow for: \(entry.filePath)", level: .normal)
+                    sessionManager.pendingRestoreEntry = nil
+                    NotificationCenter.default.post(
+                        name: .restoreWindow,
+                        object: nil,
+                        userInfo: ["entry": entry]
+                    )
+                } else {
+                    DebugLogger.log("⚠️ No pending restore entry!", level: .normal)
+                }
+            }
+        }
+    }
+
+    /// セッションからウィンドウを復元
+    private func restoreFromSession(_ entry: WindowSessionEntry) {
+        DebugLogger.log("🔄 Restoring window from session: \(entry.filePath) windowID: \(windowID)", level: .normal)
+
+        // ファイルがアクセス可能か確認
+        guard entry.isFileAccessible else {
+            showFileNotFoundNotification(filePath: entry.filePath)
+            sessionManager.windowDidFinishLoading(id: windowID)
+            return
+        }
+
+        // 復元エントリを保存（フレーム設定は onChange(of: viewModel.hasOpenFile) で行う）
+        restorationEntry = entry
+        DebugLogger.log("📐 Target frame saved: \(entry.frame) windowID: \(windowID)", level: .normal)
+
+        // ファイルを開く
+        let url = URL(fileURLWithPath: entry.filePath)
+        isWaitingForFile = true
+        pendingURLs = [url]
+    }
+
+    /// ウィンドウフレームが画面内に収まるか検証
+    private func validateWindowFrame(_ frame: CGRect) -> CGRect {
+        guard let screen = NSScreen.main else { return frame }
+
+        let screenFrame = screen.visibleFrame
+        var validFrame = frame
+
+        // 画面外にはみ出している場合は調整
+        if validFrame.maxX > screenFrame.maxX {
+            validFrame.origin.x = screenFrame.maxX - validFrame.width
+        }
+        if validFrame.minX < screenFrame.minX {
+            validFrame.origin.x = screenFrame.minX
+        }
+        if validFrame.maxY > screenFrame.maxY {
+            validFrame.origin.y = screenFrame.maxY - validFrame.height
+        }
+        if validFrame.minY < screenFrame.minY {
+            validFrame.origin.y = screenFrame.minY
+        }
+
+        // サイズが画面より大きい場合は縮小
+        if validFrame.width > screenFrame.width {
+            validFrame.size.width = screenFrame.width
+        }
+        if validFrame.height > screenFrame.height {
+            validFrame.size.height = screenFrame.height
+        }
+
+        return validFrame
+    }
+
+    /// ファイルが見つからない場合の通知
+    private func showFileNotFoundNotification(filePath: String) {
+        let fileName = URL(fileURLWithPath: filePath).lastPathComponent
+
+        let alert = NSAlert()
+        alert.messageText = L("session_restore_error_title")
+        alert.informativeText = String(format: L("session_restore_file_not_found"), fileName)
+        alert.alertStyle = .warning
+        alert.runModal()
     }
 
     private func setupEventMonitor() {
@@ -460,6 +718,9 @@ struct ContentView: View {
             NSEvent.removeMonitor(monitor)
             eventMonitor = nil
         }
+
+        // セッションマネージャーからウィンドウを削除
+        sessionManager.removeWindow(id: windowID)
     }
 
     private func handleFileImport(_ result: Result<[URL], Error>) {
@@ -840,15 +1101,16 @@ struct WindowNumberGetter: NSViewRepresentable {
         // ウィンドウが利用可能になるまで待つ
         DispatchQueue.main.async {
             if let window = nsView.window {
+                let oldValue = self.windowNumber
                 self.windowNumber = window.windowNumber
 
                 // タイトルバーの文字色を白に設定
                 window.titlebarAppearsTransparent = true
                 window.appearance = NSAppearance(named: .darkAqua)
 
-                DebugLogger.log("🪟 Window number captured: \(window.windowNumber)", level: .verbose)
-            } else {
-                DebugLogger.log("⚠️ Window not yet available", level: .verbose)
+                if oldValue != window.windowNumber {
+                    DebugLogger.log("🪟 WindowNumberGetter: captured \(window.windowNumber) (was: \(String(describing: oldValue)))", level: .normal)
+                }
             }
         }
     }

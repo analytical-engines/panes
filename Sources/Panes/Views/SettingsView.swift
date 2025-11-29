@@ -17,8 +17,13 @@ struct SettingsView: View {
                 .tabItem {
                     Label(L("tab_history"), systemImage: "clock")
                 }
+
+            SessionSettingsTab()
+                .tabItem {
+                    Label(L("tab_session"), systemImage: "arrow.clockwise")
+                }
         }
-        .frame(width: 450, height: 300)
+        .frame(width: 450, height: 350)
     }
 }
 
@@ -97,6 +102,55 @@ struct HistorySettingsTab: View {
                         historyManager.clearAllHistory()
                     }
                     .foregroundColor(.red)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+    }
+}
+
+/// セッション設定タブ
+struct SessionSettingsTab: View {
+    @Environment(AppSettings.self) private var settings
+    @Environment(SessionManager.self) private var sessionManager
+
+    var body: some View {
+        @Bindable var settings = settings
+
+        Form {
+            Section(L("section_session")) {
+                Toggle(L("enable_session_restore"), isOn: $settings.sessionRestoreEnabled)
+
+                Text(L("session_restore_description"))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Section(L("section_session_advanced")) {
+                HStack {
+                    Text(L("concurrent_loading_limit"))
+                    Spacer()
+                    TextField("", value: $settings.sessionConcurrentLoadingLimit, format: .number)
+                        .frame(width: 60)
+                        .textFieldStyle(.roundedBorder)
+                }
+                Text(L("concurrent_loading_description"))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .disabled(!settings.sessionRestoreEnabled)
+            .opacity(settings.sessionRestoreEnabled ? 1.0 : 0.5)
+
+            Section(L("section_session_management")) {
+                HStack {
+                    Text(L("saved_windows_count_format", sessionManager.savedSession.count))
+                    Spacer()
+                    Button(L("clear_session")) {
+                        sessionManager.clearSession()
+                    }
+                    .foregroundColor(.red)
+                    .disabled(sessionManager.savedSession.isEmpty)
                 }
             }
         }

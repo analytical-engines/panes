@@ -15,6 +15,7 @@
 
 "tab_general" = "一般";
 "tab_history" = "履歴";
+"tab_session" = "セッション";
 
 // MARK: - SettingsView - Display Settings
 
@@ -108,3 +109,20 @@
 "import_history_success_format" = "%d件の履歴を読み込みました（%@）";
 "import_history_merged" = "既存の履歴とマージ";
 "import_history_replaced" = "既存の履歴を置換";
+
+// MARK: - Session Settings
+
+"section_session" = "セッション復元";
+"enable_session_restore" = "起動時にウィンドウを復元";
+"session_restore_description" = "アプリ終了時に開いていたファイルを自動的に再度開きます。";
+"section_session_advanced" = "詳細設定";
+"concurrent_loading_limit" = "同時読み込み数";
+"concurrent_loading_description" = "セッション復元時に同時に読み込むファイル数。小さい値ほどメモリ使用量が少なくなります。";
+"section_session_management" = "セッションの管理";
+"saved_windows_count_format" = "保存されたウィンドウ: %d件";
+"clear_session" = "セッションをクリア";
+
+// MARK: - Session Restore Errors
+
+"session_restore_error_title" = "セッション復元";
+"session_restore_file_not_found" = "ファイルが見つかりません: %@";

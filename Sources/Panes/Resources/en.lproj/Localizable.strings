@@ -15,6 +15,7 @@
 
 "tab_general" = "General";
 "tab_history" = "History";
+"tab_session" = "Session";
 
 // MARK: - SettingsView - Display Settings
 
@@ -108,3 +109,20 @@
 "import_history_success_format" = "Loaded %d history entries (%@)";
 "import_history_merged" = "merged with existing";
 "import_history_replaced" = "replaced existing";
+
+// MARK: - Session Settings
+
+"section_session" = "Session Restore";
+"enable_session_restore" = "Restore windows on launch";
+"session_restore_description" = "Automatically reopen files that were open when the app was last closed.";
+"section_session_advanced" = "Advanced Settings";
+"concurrent_loading_limit" = "Concurrent loading limit";
+"concurrent_loading_description" = "Number of files to load simultaneously when restoring session. Lower values use less memory.";
+"section_session_management" = "Session Management";
+"saved_windows_count_format" = "Saved windows: %d";
+"clear_session" = "Clear Session";
+
+// MARK: - Session Restore Errors
+
+"session_restore_error_title" = "Session Restore";
+"session_restore_file_not_found" = "File not found: %@";
