@@ -10,6 +10,8 @@
 "loading" = "読み込み中...";
 "drop_files_hint" = "zipファイルまたは画像ファイルをドロップ";
 "access_count_format" = "(%d回)";
+"history_filter_placeholder" = "ファイル名で絞り込み";
+"history_filter_result_format" = "%d件 / %d件";
 
 // MARK: - SettingsView - Tabs
 

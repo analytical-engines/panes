@@ -920,11 +920,15 @@ struct InitialScreenView: View {
 struct HistoryListView: View {
     @Environment(FileHistoryManager.self) private var historyManager
     @Environment(AppSettings.self) private var appSettings
+    @State private var filterText: String = ""
 
     let onOpenHistoryFile: (String) -> Void
 
     var body: some View {
         let recentHistory = historyManager.getRecentHistory(limit: appSettings.maxHistoryCount)
+        let filteredHistory = filterText.isEmpty
+            ? recentHistory
+            : recentHistory.filter { $0.fileName.localizedCaseInsensitiveContains(filterText) }
 
         if !recentHistory.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
@@ -933,14 +937,40 @@ struct HistoryListView: View {
                     .font(.headline)
                     .padding(.top, 20)
 
+                // フィルタ入力フィールド
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.gray)
+                    TextField(L("history_filter_placeholder"), text: $filterText)
+                        .textFieldStyle(.plain)
+                        .foregroundColor(.white)
+                    if !filterText.isEmpty {
+                        Button(action: { filterText = "" }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.gray)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(8)
+                .background(Color.white.opacity(0.1))
+                .cornerRadius(6)
+
                 ScrollView {
                     VStack(spacing: 8) {
-                        ForEach(recentHistory) { entry in
+                        ForEach(filteredHistory) { entry in
                             HistoryEntryRow(entry: entry, onOpenHistoryFile: onOpenHistoryFile)
                         }
                     }
                 }
                 .frame(maxHeight: 300)
+
+                // フィルタ結果の件数表示
+                if !filterText.isEmpty {
+                    Text(L("history_filter_result_format", filteredHistory.count, recentHistory.count))
+                        .foregroundColor(.gray)
+                        .font(.caption)
+                }
             }
             .frame(maxWidth: 500)
             .padding(.horizontal, 20)

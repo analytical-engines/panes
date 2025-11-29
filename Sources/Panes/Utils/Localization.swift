@@ -42,6 +42,12 @@ func L(_ key: String, _ arg1: any CVarArg) -> String {
     return String(format: format, arg1)
 }
 
+/// フォーマット付きローカライズ文字列を取得するヘルパー関数（2引数）
+func L(_ key: String, _ arg1: any CVarArg, _ arg2: any CVarArg) -> String {
+    let format = localizedBundle.localizedString(forKey: key, value: key, table: "Localizable")
+    return String(format: format, arg1, arg2)
+}
+
 /// フォーマット付きローカライズ文字列を取得するヘルパー関数（3引数）
 func L(_ key: String, _ arg1: any CVarArg, _ arg2: any CVarArg, _ arg3: any CVarArg) -> String {
     let format = localizedBundle.localizedString(forKey: key, value: key, table: "Localizable")
