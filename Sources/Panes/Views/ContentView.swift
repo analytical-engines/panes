@@ -54,6 +54,16 @@ struct ContentView: View {
                 pageInfo: viewModel.pageInfo,
                 contextMenuBuilder: { pageIndex in imageContextMenu(for: pageIndex) }
             )
+            .pageIndicatorOverlay(
+                archiveName: viewModel.archiveFileName,
+                currentPage: viewModel.currentPage,
+                totalPages: viewModel.totalPages,
+                isSpreadView: false,
+                hasSecondPage: false,
+                currentFileName: viewModel.currentFileName,
+                readingDirection: viewModel.readingDirection,
+                onJumpToPage: { viewModel.goToPage($0) }
+            )
             .onAppear { applyPendingRestorationFrame() }
         } else if viewModel.viewMode == .spread, let firstPageImage = viewModel.firstPageImage {
             SpreadPageView(
@@ -69,6 +79,16 @@ struct ContentView: View {
                 singlePageIndicator: viewModel.singlePageIndicator,
                 pageInfo: viewModel.pageInfo,
                 contextMenuBuilder: { pageIndex in imageContextMenu(for: pageIndex) }
+            )
+            .pageIndicatorOverlay(
+                archiveName: viewModel.archiveFileName,
+                currentPage: viewModel.currentPage,
+                totalPages: viewModel.totalPages,
+                isSpreadView: true,
+                hasSecondPage: viewModel.secondPageImage != nil,
+                currentFileName: viewModel.currentFileName,
+                readingDirection: viewModel.readingDirection,
+                onJumpToPage: { viewModel.goToPage($0) }
             )
             .onAppear { applyPendingRestorationFrame() }
         } else if isWaitingForFile {
@@ -133,33 +153,44 @@ struct ContentView: View {
             )
         }
 
-        Menu(L("menu_single_page_alignment")) {
+        Menu {
             Button(action: {
                 viewModel.setAlignment(.right, at: pageIndex)
             }) {
-                Label(
-                    L("menu_align_right"),
-                    systemImage: viewModel.getAlignment(at: pageIndex) == .right ? "checkmark" : ""
-                )
+                HStack {
+                    Text(L("menu_align_right"))
+                    Spacer()
+                    if viewModel.getAlignment(at: pageIndex) == .right {
+                        Image(systemName: "checkmark")
+                    }
+                }
             }
 
             Button(action: {
                 viewModel.setAlignment(.left, at: pageIndex)
             }) {
-                Label(
-                    L("menu_align_left"),
-                    systemImage: viewModel.getAlignment(at: pageIndex) == .left ? "checkmark" : ""
-                )
+                HStack {
+                    Text(L("menu_align_left"))
+                    Spacer()
+                    if viewModel.getAlignment(at: pageIndex) == .left {
+                        Image(systemName: "checkmark")
+                    }
+                }
             }
 
             Button(action: {
                 viewModel.setAlignment(.center, at: pageIndex)
             }) {
-                Label(
-                    L("menu_align_center"),
-                    systemImage: viewModel.getAlignment(at: pageIndex) == .center ? "checkmark" : ""
-                )
+                HStack {
+                    Text(L("menu_align_center"))
+                    Spacer()
+                    if viewModel.getAlignment(at: pageIndex) == .center {
+                        Image(systemName: "checkmark")
+                    }
+                }
             }
+        } label: {
+            Label(L("menu_single_page_alignment"), systemImage: "arrow.left.and.right")
         }
 
         Divider()
@@ -210,7 +241,7 @@ struct ContentView: View {
         Divider()
 
         // ページ設定サブメニュー
-        Menu(L("menu_page_settings")) {
+        Menu {
             Button(action: {
                 exportPageSettings()
             }) {
@@ -230,6 +261,8 @@ struct ContentView: View {
             }) {
                 Label(L("menu_reset_page_settings"), systemImage: "arrow.counterclockwise")
             }
+        } label: {
+            Label(L("menu_page_settings"), systemImage: "gearshape")
         }
 
         Divider()
@@ -298,7 +331,7 @@ struct ContentView: View {
         Divider()
 
         // ページ設定サブメニュー
-        Menu(L("menu_page_settings")) {
+        Menu {
             Button(action: {
                 exportPageSettings()
             }) {
@@ -318,6 +351,8 @@ struct ContentView: View {
             }) {
                 Label(L("menu_reset_page_settings"), systemImage: "arrow.counterclockwise")
             }
+        } label: {
+            Label(L("menu_page_settings"), systemImage: "gearshape")
         }
 
         Divider()
@@ -426,8 +461,8 @@ struct ContentView: View {
             // ページが変わったらセッションマネージャーを更新
             sessionManager.updateWindowState(id: windowID, currentPage: newPage)
         }
-        .onKeyPress(.leftArrow) { viewModel.nextPage(); return .handled }
-        .onKeyPress(.rightArrow) { viewModel.previousPage(); return .handled }
+        .onKeyPress(keys: [.leftArrow]) { handleLeftArrow($0) }
+        .onKeyPress(keys: [.rightArrow]) { handleRightArrow($0) }
         .onKeyPress(keys: [.space]) { press in
             if press.modifiers.contains(.shift) { viewModel.previousPage() }
             else { viewModel.nextPage() }
@@ -734,6 +769,28 @@ struct ContentView: View {
 
     private func toggleFullScreen() {
         NSApp.keyWindow?.toggleFullScreen(nil)
+    }
+
+    // MARK: - Key Handlers
+
+    private func handleLeftArrow(_ press: KeyPress) -> KeyPress.Result {
+        if press.modifiers.contains(.shift) {
+            // Shift+←: 右→左なら正方向シフト、左→右なら逆方向シフト
+            viewModel.shiftPage(forward: viewModel.readingDirection == .rightToLeft)
+        } else {
+            viewModel.nextPage()
+        }
+        return .handled
+    }
+
+    private func handleRightArrow(_ press: KeyPress) -> KeyPress.Result {
+        if press.modifiers.contains(.shift) {
+            // Shift+→: 右→左なら逆方向シフト、左→右なら正方向シフト
+            viewModel.shiftPage(forward: viewModel.readingDirection == .leftToRight)
+        } else {
+            viewModel.previousPage()
+        }
+        return .handled
     }
 
     private func openFilePicker() {

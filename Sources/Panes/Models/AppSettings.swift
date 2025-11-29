@@ -78,7 +78,7 @@ class AppSettings {
         if defaults.object(forKey: Keys.defaultShowStatusBar) != nil {
             defaultShowStatusBar = defaults.bool(forKey: Keys.defaultShowStatusBar)
         } else {
-            defaultShowStatusBar = true  // デフォルト: 表示
+            defaultShowStatusBar = false  // デフォルト: 非表示（オーバーレイで表示）
         }
 
         // 横長判定閾値の読み込み

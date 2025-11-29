@@ -386,6 +386,28 @@ class BookViewModel {
         saveViewState()
     }
 
+    /// 指定ページへ移動
+    func goToPage(_ page: Int) {
+        guard let source = imageSource else { return }
+        let targetPage = max(0, min(page, source.imageCount - 1))
+        if targetPage != currentPage {
+            currentPage = targetPage
+            loadCurrentPage()
+            saveViewState()
+        }
+    }
+
+    /// 1ページシフト（見開きのズレ調整用）
+    func shiftPage(forward: Bool) {
+        guard let source = imageSource else { return }
+        let newPage = forward ? currentPage + 1 : currentPage - 1
+        if newPage >= 0 && newPage < source.imageCount {
+            currentPage = newPage
+            loadCurrentPage()
+            saveViewState()
+        }
+    }
+
     /// 最終ページへ移動
     func goToLastPage() {
         guard let source = imageSource else { return }
