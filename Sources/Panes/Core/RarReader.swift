@@ -1,9 +1,9 @@
 import Foundation
-import ZIPFoundation
+import Unrar
 import AppKit
 
-/// zipアーカイブから画像を読み込むクラス
-class ArchiveReader {
+/// RARアーカイブから画像を読み込むクラス
+class RarReader {
     private let archiveURL: URL
     private let archive: Archive
     private(set) var imageEntries: [Entry] = []
@@ -12,61 +12,67 @@ class ArchiveReader {
         let startTime = CFAbsoluteTimeGetCurrent()
         self.archiveURL = url
 
-        // zipアーカイブを開く
+        // RARアーカイブを開く
         let openStart = CFAbsoluteTimeGetCurrent()
         do {
-            self.archive = try Archive(url: url, accessMode: .read)
+            self.archive = try Archive(path: url.path)
         } catch {
+            print("ERROR: Failed to open RAR archive: \(error)")
             return nil
         }
         let openTime = CFAbsoluteTimeGetCurrent() - openStart
-        print("⏱️ Archive open time: \(String(format: "%.3f", openTime))s")
+        print("⏱️ RAR Archive open time: \(String(format: "%.3f", openTime))s")
 
         // 画像ファイルのみを抽出してソート
         let extractStart = CFAbsoluteTimeGetCurrent()
-        self.imageEntries = extractImageEntries()
+        do {
+            self.imageEntries = try extractImageEntries()
+        } catch {
+            print("ERROR: Failed to extract entries: \(error)")
+            return nil
+        }
         let extractTime = CFAbsoluteTimeGetCurrent() - extractStart
-        print("⏱️ Extract & sort time: \(String(format: "%.3f", extractTime))s")
+        print("⏱️ RAR Extract & sort time: \(String(format: "%.3f", extractTime))s")
 
         let totalTime = CFAbsoluteTimeGetCurrent() - startTime
-        print("⏱️ Total init time: \(String(format: "%.3f", totalTime))s")
+        print("⏱️ RAR Total init time: \(String(format: "%.3f", totalTime))s")
     }
 
     /// アーカイブ内の画像ファイルエントリを抽出してファイル名でソート
-    private func extractImageEntries() -> [Entry] {
+    private func extractImageEntries() throws -> [Entry] {
         let imageExtensions = Set(["jpg", "jpeg", "png", "gif", "webp", "jp2", "j2k",
                                    "JPG", "JPEG", "PNG", "GIF", "WEBP", "JP2", "J2K"])
 
-        print("=== Extracting image entries from archive ===")
+        print("=== Extracting image entries from RAR archive ===")
 
-        // 直接フィルタリング（配列コピー不要）
-        let entries = archive.filter { entry in
-            // 早期リターンで不要なチェックをスキップ
-            guard entry.type == .file else { return false }
+        let allEntries = try archive.entries()
 
-            let path = entry.path
-            // __MACOSXフォルダや隠しファイルを除外
+        // 画像ファイルのみフィルタリング
+        let entries = allEntries.filter { entry in
+            let path = entry.fileName
+            // 隠しファイルを除外
             guard !path.contains("__MACOSX"),
                   !path.contains("/._"),
-                  !(path as NSString).lastPathComponent.hasPrefix("._") else {
+                  !(path as NSString).lastPathComponent.hasPrefix("._"),
+                  !(path as NSString).lastPathComponent.hasPrefix(".") else {
                 return false
             }
 
-            // 拡張子チェック（Setで高速化）
+            // 拡張子チェック
             let ext = (path as NSString).pathExtension
             return imageExtensions.contains(ext)
         }
 
-        print("Filtered image entries: \(entries.count)")
+        print("Filtered RAR image entries: \(entries.count)")
 
         // ファイル名でソート（自然順ソート）
         let sorted = entries.sorted { entry1, entry2 in
-            entry1.path.localizedStandardCompare(entry2.path) == .orderedAscending
+            entry1.fileName.localizedStandardCompare(entry2.fileName) == .orderedAscending
         }
 
-        print("=== First 5 entries after sorting ===")
+        print("=== First 5 RAR entries after sorting ===")
         for (index, entry) in sorted.prefix(5).enumerated() {
-            print("[\(index)] \(entry.path)")
+            print("[\(index)] \(entry.fileName)")
         }
 
         return sorted
@@ -80,26 +86,23 @@ class ArchiveReader {
         }
 
         let entry = imageEntries[index]
-        var imageData = Data()
 
-        print("Loading image: \(entry.path) (size: \(entry.uncompressedSize) bytes)")
+        print("Loading RAR image: \(entry.fileName) (size: \(entry.uncompressedSize) bytes)")
 
         do {
-            _ = try archive.extract(entry) { data in
-                imageData.append(data)
-            }
+            let imageData = try archive.extract(entry)
 
-            print("Extracted \(imageData.count) bytes")
+            print("Extracted \(imageData.count) bytes from RAR")
 
             guard let image = NSImage(data: imageData) else {
-                print("ERROR: Failed to create NSImage from data. File: \(entry.path), Data size: \(imageData.count)")
+                print("ERROR: Failed to create NSImage from RAR data. File: \(entry.fileName), Data size: \(imageData.count)")
                 return nil
             }
 
-            print("Successfully loaded image: \(entry.path)")
+            print("Successfully loaded RAR image: \(entry.fileName)")
             return image
         } catch {
-            print("ERROR: Failed to extract image at index \(index), file: \(entry.path), error: \(error)")
+            print("ERROR: Failed to extract RAR image at index \(index), file: \(entry.fileName), error: \(error)")
             return nil
         }
     }
@@ -114,44 +117,19 @@ class ArchiveReader {
         guard index >= 0 && index < imageEntries.count else {
             return nil
         }
-        return (imageEntries[index].path as NSString).lastPathComponent
+        return (imageEntries[index].fileName as NSString).lastPathComponent
     }
 
-    /// 指定されたインデックスの画像サイズを取得（画像全体を読み込まずに）
+    /// 指定されたインデックスの画像サイズを取得
     func imageSize(at index: Int) -> CGSize? {
         guard index >= 0 && index < imageEntries.count else {
             return nil
         }
 
         let entry = imageEntries[index]
-        var imageData = Data()
 
         do {
-            // まず画像ヘッダーだけ読み込んでみる
-            let headerSize = min(entry.uncompressedSize, 8192) // 8KB
-            var readBytes = 0
-
-            _ = try archive.extract(entry) { data in
-                if readBytes < headerSize {
-                    imageData.append(data)
-                    readBytes += data.count
-                }
-            }
-
-            // NSImageRepを使ってサイズ情報のみ取得
-            if let imageRep = NSBitmapImageRep(data: imageData) {
-                let width = imageRep.pixelsWide
-                let height = imageRep.pixelsHigh
-                if width > 0 && height > 0 {
-                    return CGSize(width: width, height: height)
-                }
-            }
-
-            // ヘッダーだけでは取得できなかった場合、画像全体をロード
-            imageData.removeAll()
-            _ = try archive.extract(entry) { data in
-                imageData.append(data)
-            }
+            let imageData = try archive.extract(entry)
 
             // まずNSBitmapImageRepを試す
             if let imageRep = NSBitmapImageRep(data: imageData) {

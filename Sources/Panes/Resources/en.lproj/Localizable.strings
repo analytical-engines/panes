@@ -53,12 +53,14 @@
 
 // MARK: - Menu Items
 
+"menu_close_file" = "Close File";
 "menu_single_view" = "Single View";
 "menu_spread_view" = "Spread View";
 "menu_reading_direction_rtl" = "Reading Direction: Right to Left";
 "menu_reading_direction_ltr" = "Reading Direction: Left to Right";
 "menu_hide_status_bar" = "Hide Status Bar";
 "menu_show_status_bar" = "Show Status Bar";
+"menu_page_settings" = "Page Settings";
 "menu_remove_single_page_attribute" = "Remove Single Page Attribute";
 "menu_force_single_page" = "Force Single Page Display";
 "menu_single_page_alignment" = "Single Page Alignment";
@@ -74,3 +76,35 @@
 "error_no_file_selected" = "No file selected";
 "error_cannot_open_file" = "Could not open file";
 "error_image_load_failed_format" = "Failed to load image\nFile: %@\nPage: %d/%d";
+
+// MARK: - Page Settings Export/Import
+
+"menu_export_page_settings" = "Export Page Settings...";
+"menu_import_page_settings" = "Import Page Settings...";
+"export_panel_title" = "Export Page Settings";
+"export_panel_prompt" = "Save";
+"export_error_title" = "Export Error";
+"import_panel_title" = "Import Page Settings";
+"import_panel_prompt" = "Open";
+"import_success_title" = "Import Complete";
+"import_success_format" = "Loaded settings from %@\nSingle page attributes: %d";
+"import_error_title" = "Import Error";
+"import_error_no_file" = "No file is open";
+"import_error_invalid_format" = "Invalid file format";
+"menu_reset_page_settings" = "Reset Page Settings";
+"reset_confirm_title" = "Reset Page Settings";
+"reset_confirm_message" = "This will reset all page display settings (single page attributes, alignment settings, etc.) for this file. This action cannot be undone.";
+"reset_confirm_ok" = "Reset";
+"reset_confirm_cancel" = "Cancel";
+
+// MARK: - History Export/Import
+
+"menu_history" = "History";
+"menu_export_history" = "Export History...";
+"menu_import_history_merge" = "Import History (Merge)...";
+"menu_import_history_replace" = "Import History (Replace)...";
+"export_history_panel_title" = "Export History";
+"import_history_panel_title" = "Import History";
+"import_history_success_format" = "Loaded %d history entries (%@)";
+"import_history_merged" = "merged with existing";
+"import_history_replaced" = "replaced existing";

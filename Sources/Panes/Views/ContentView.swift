@@ -1,5 +1,12 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
+
+extension UTType {
+    static let rar = UTType(filenameExtension: "rar")!
+    static let cbr = UTType(filenameExtension: "cbr")!
+    static let cbz = UTType(filenameExtension: "cbz")!
+}
 
 struct ContentView: View {
     @State private var viewModel = BookViewModel()
@@ -29,23 +36,28 @@ struct ContentView: View {
         if viewModel.viewMode == .single, let image = viewModel.currentImage {
             SinglePageView(
                 image: image,
+                pageIndex: viewModel.currentPage,
                 showStatusBar: viewModel.showStatusBar,
                 archiveFileName: viewModel.archiveFileName,
                 currentFileName: viewModel.currentFileName,
                 singlePageIndicator: viewModel.singlePageIndicator,
-                pageInfo: viewModel.pageInfo
+                pageInfo: viewModel.pageInfo,
+                contextMenuBuilder: { pageIndex in imageContextMenu(for: pageIndex) }
             )
         } else if viewModel.viewMode == .spread, let firstPageImage = viewModel.firstPageImage {
             SpreadPageView(
                 readingDirection: viewModel.readingDirection,
                 firstPageImage: firstPageImage,
+                firstPageIndex: viewModel.currentPage,
                 secondPageImage: viewModel.secondPageImage,
+                secondPageIndex: viewModel.currentPage + 1,
                 singlePageAlignment: viewModel.currentPageAlignment,
                 showStatusBar: viewModel.showStatusBar,
                 archiveFileName: viewModel.archiveFileName,
                 currentFileName: viewModel.currentFileName,
                 singlePageIndicator: viewModel.singlePageIndicator,
-                pageInfo: viewModel.pageInfo
+                pageInfo: viewModel.pageInfo,
+                contextMenuBuilder: { pageIndex in imageContextMenu(for: pageIndex) }
             )
         } else if isWaitingForFile {
             LoadingView()
@@ -55,6 +67,223 @@ struct ContentView: View {
                 onOpenFile: openFilePicker,
                 onOpenHistoryFile: openHistoryFile
             )
+            .contextMenu { initialScreenContextMenu }
+        }
+    }
+
+    /// 画像表示部分のコンテキストメニュー（ページ操作 + アーカイブ属性）
+    @ViewBuilder
+    private func imageContextMenu(for pageIndex: Int) -> some View {
+        // === ページ操作 ===
+        let _ = DebugLogger.log("🎯 Context menu built for page index: \(pageIndex) (display: \(pageIndex + 1))", level: .verbose)
+
+        Button(action: {
+            viewModel.toggleSingleDisplay(at: pageIndex)
+        }) {
+            Label(
+                viewModel.isForcedSingle(at: pageIndex)
+                    ? L("menu_remove_single_page_attribute")
+                    : L("menu_force_single_page"),
+                systemImage: viewModel.isForcedSingle(at: pageIndex)
+                    ? "checkmark.square"
+                    : "square"
+            )
+        }
+
+        Menu(L("menu_single_page_alignment")) {
+            Button(action: {
+                viewModel.setAlignment(.right, at: pageIndex)
+            }) {
+                Label(
+                    L("menu_align_right"),
+                    systemImage: viewModel.getAlignment(at: pageIndex) == .right ? "checkmark" : ""
+                )
+            }
+
+            Button(action: {
+                viewModel.setAlignment(.left, at: pageIndex)
+            }) {
+                Label(
+                    L("menu_align_left"),
+                    systemImage: viewModel.getAlignment(at: pageIndex) == .left ? "checkmark" : ""
+                )
+            }
+
+            Button(action: {
+                viewModel.setAlignment(.center, at: pageIndex)
+            }) {
+                Label(
+                    L("menu_align_center"),
+                    systemImage: viewModel.getAlignment(at: pageIndex) == .center ? "checkmark" : ""
+                )
+            }
+        }
+
+        Divider()
+
+        // === アーカイブ属性 ===
+        // 表示モード切替
+        Button(action: {
+            viewModel.toggleViewMode()
+        }) {
+            Label(
+                viewModel.viewMode == .spread
+                    ? L("menu_single_view")
+                    : L("menu_spread_view"),
+                systemImage: viewModel.viewMode == .spread
+                    ? "rectangle"
+                    : "rectangle.split.2x1"
+            )
+        }
+
+        // 読み進め方向切替
+        Button(action: {
+            viewModel.toggleReadingDirection()
+        }) {
+            Label(
+                viewModel.readingDirection == .rightToLeft
+                    ? L("menu_reading_direction_rtl")
+                    : L("menu_reading_direction_ltr"),
+                systemImage: viewModel.readingDirection == .rightToLeft
+                    ? "arrow.left"
+                    : "arrow.right"
+            )
+        }
+
+        // ステータスバー表示切替
+        Button(action: {
+            viewModel.toggleStatusBar()
+        }) {
+            Label(
+                viewModel.showStatusBar
+                    ? L("menu_hide_status_bar")
+                    : L("menu_show_status_bar"),
+                systemImage: viewModel.showStatusBar
+                    ? "eye.slash"
+                    : "eye"
+            )
+        }
+
+        Divider()
+
+        // ページ設定サブメニュー
+        Menu(L("menu_page_settings")) {
+            Button(action: {
+                exportPageSettings()
+            }) {
+                Label(L("menu_export_page_settings"), systemImage: "square.and.arrow.up")
+            }
+
+            Button(action: {
+                importPageSettings()
+            }) {
+                Label(L("menu_import_page_settings"), systemImage: "square.and.arrow.down")
+            }
+
+            Divider()
+
+            Button(action: {
+                resetPageSettings()
+            }) {
+                Label(L("menu_reset_page_settings"), systemImage: "arrow.counterclockwise")
+            }
+        }
+
+        Divider()
+
+        // ファイルを閉じる
+        Button(action: {
+            viewModel.closeFile()
+        }) {
+            Label(L("menu_close_file"), systemImage: "xmark")
+        }
+    }
+
+    /// 初期画面のコンテキストメニュー
+    @ViewBuilder
+    private var initialScreenContextMenu: some View {
+        Button(action: openFilePicker) {
+            Label(L("open_file"), systemImage: "folder")
+        }
+    }
+
+    /// 背景部分のコンテキストメニュー（書庫ファイル属性のみ）
+    @ViewBuilder
+    private var backgroundContextMenu: some View {
+        // 表示モード切替
+        Button(action: {
+            viewModel.toggleViewMode()
+        }) {
+            Label(
+                viewModel.viewMode == .spread
+                    ? L("menu_single_view")
+                    : L("menu_spread_view"),
+                systemImage: viewModel.viewMode == .spread
+                    ? "rectangle"
+                    : "rectangle.split.2x1"
+            )
+        }
+
+        // 読み進め方向切替
+        Button(action: {
+            viewModel.toggleReadingDirection()
+        }) {
+            Label(
+                viewModel.readingDirection == .rightToLeft
+                    ? L("menu_reading_direction_rtl")
+                    : L("menu_reading_direction_ltr"),
+                systemImage: viewModel.readingDirection == .rightToLeft
+                    ? "arrow.left"
+                    : "arrow.right"
+            )
+        }
+
+        // ステータスバー表示切替
+        Button(action: {
+            viewModel.toggleStatusBar()
+        }) {
+            Label(
+                viewModel.showStatusBar
+                    ? L("menu_hide_status_bar")
+                    : L("menu_show_status_bar"),
+                systemImage: viewModel.showStatusBar
+                    ? "eye.slash"
+                    : "eye"
+            )
+        }
+
+        Divider()
+
+        // ページ設定サブメニュー
+        Menu(L("menu_page_settings")) {
+            Button(action: {
+                exportPageSettings()
+            }) {
+                Label(L("menu_export_page_settings"), systemImage: "square.and.arrow.up")
+            }
+
+            Button(action: {
+                importPageSettings()
+            }) {
+                Label(L("menu_import_page_settings"), systemImage: "square.and.arrow.down")
+            }
+
+            Divider()
+
+            Button(action: {
+                resetPageSettings()
+            }) {
+                Label(L("menu_reset_page_settings"), systemImage: "arrow.counterclockwise")
+            }
+        }
+
+        Divider()
+
+        // ファイルを閉じる
+        Button(action: {
+            viewModel.closeFile()
+        }) {
+            Label(L("menu_close_file"), systemImage: "xmark")
         }
     }
 
@@ -64,6 +293,13 @@ struct ContentView: View {
                 .ignoresSafeArea()
                 .contentShape(Rectangle())
                 .onTapGesture { }
+                .contextMenu {
+                    if viewModel.hasOpenFile {
+                        backgroundContextMenu
+                    } else {
+                        initialScreenContextMenu
+                    }
+                }
 
             mainContent
         }
@@ -78,7 +314,7 @@ struct ContentView: View {
         .onDrop(of: [.fileURL], isTargeted: nil, perform: handleDrop)
         .fileImporter(
             isPresented: $isFilePickerPresented,
-            allowedContentTypes: [.zip, .jpeg, .png],
+            allowedContentTypes: [.zip, .cbz, .rar, .cbr, .jpeg, .png, .gif, .webP],
             allowsMultipleSelection: true,
             onCompletion: handleFileImport
         )
@@ -92,6 +328,12 @@ struct ContentView: View {
                 let urls = pendingURLs
                 pendingURLs = []
                 DispatchQueue.main.async { viewModel.openFiles(urls: urls) }
+            }
+        }
+        .onChange(of: viewModel.hasOpenFile) { _, hasFile in
+            // ファイルが閉じられたらローディング状態をリセット
+            if !hasFile {
+                isWaitingForFile = false
             }
         }
         .onKeyPress(.leftArrow) { viewModel.nextPage(); return .handled }
@@ -281,6 +523,77 @@ struct ContentView: View {
         }
         return true
     }
+
+    // MARK: - Page Settings Helpers
+
+    /// ページ表示設定をExport
+    private func exportPageSettings() {
+        guard let data = viewModel.exportPageSettings() else { return }
+
+        let savePanel = NSSavePanel()
+        savePanel.allowedContentTypes = [.json]
+        savePanel.nameFieldStringValue = viewModel.exportFileName
+        savePanel.title = L("export_panel_title")
+        savePanel.prompt = L("export_panel_prompt")
+
+        savePanel.begin { response in
+            if response == .OK, let url = savePanel.url {
+                do {
+                    try data.write(to: url)
+                } catch {
+                    let alert = NSAlert()
+                    alert.messageText = L("export_error_title")
+                    alert.informativeText = error.localizedDescription
+                    alert.alertStyle = .critical
+                    alert.runModal()
+                }
+            }
+        }
+    }
+
+    /// ページ表示設定をImport
+    private func importPageSettings() {
+        let openPanel = NSOpenPanel()
+        openPanel.allowedContentTypes = [.json]
+        openPanel.allowsMultipleSelection = false
+        openPanel.title = L("import_panel_title")
+        openPanel.prompt = L("import_panel_prompt")
+
+        openPanel.begin { response in
+            if response == .OK, let url = openPanel.url {
+                do {
+                    let data = try Data(contentsOf: url)
+                    let result = viewModel.importPageSettings(from: data)
+
+                    let alert = NSAlert()
+                    alert.messageText = result.success ? L("import_success_title") : L("import_error_title")
+                    alert.informativeText = result.message
+                    alert.alertStyle = result.success ? .informational : .critical
+                    alert.runModal()
+                } catch {
+                    let alert = NSAlert()
+                    alert.messageText = L("import_error_title")
+                    alert.informativeText = error.localizedDescription
+                    alert.alertStyle = .critical
+                    alert.runModal()
+                }
+            }
+        }
+    }
+
+    /// ページ表示設定を初期化
+    private func resetPageSettings() {
+        let alert = NSAlert()
+        alert.messageText = L("reset_confirm_title")
+        alert.informativeText = L("reset_confirm_message")
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: L("reset_confirm_ok"))
+        alert.addButton(withTitle: L("reset_confirm_cancel"))
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            viewModel.resetPageSettings()
+        }
+    }
 }
 
 /// ローディング画面（独自アニメーション）
@@ -448,19 +761,20 @@ struct StatusBarView: View {
 }
 
 /// 単ページ表示ビュー
-struct SinglePageView: View {
+struct SinglePageView<ContextMenu: View>: View {
     let image: NSImage
+    let pageIndex: Int
     let showStatusBar: Bool
     let archiveFileName: String
     let currentFileName: String
     let singlePageIndicator: String
     let pageInfo: String
+    let contextMenuBuilder: (Int) -> ContextMenu
 
     var body: some View {
         VStack(spacing: 0) {
             ImageDisplayView(image: image)
-                .contentShape(Rectangle())
-                .onTapGesture { }
+                .contextMenu { contextMenuBuilder(pageIndex) }
 
             if showStatusBar {
                 StatusBarView(
@@ -475,27 +789,31 @@ struct SinglePageView: View {
 }
 
 /// 見開き表示ビュー
-struct SpreadPageView: View {
+struct SpreadPageView<ContextMenu: View>: View {
     let readingDirection: ReadingDirection
     let firstPageImage: NSImage
+    let firstPageIndex: Int
     let secondPageImage: NSImage?
+    let secondPageIndex: Int
     let singlePageAlignment: SinglePageAlignment
     let showStatusBar: Bool
     let archiveFileName: String
     let currentFileName: String
     let singlePageIndicator: String
     let pageInfo: String
+    let contextMenuBuilder: (Int) -> ContextMenu
 
     var body: some View {
         VStack(spacing: 0) {
             SpreadView(
                 readingDirection: readingDirection,
                 firstPageImage: firstPageImage,
+                firstPageIndex: firstPageIndex,
                 secondPageImage: secondPageImage,
-                singlePageAlignment: singlePageAlignment
+                secondPageIndex: secondPageIndex,
+                singlePageAlignment: singlePageAlignment,
+                contextMenuBuilder: contextMenuBuilder
             )
-            .contentShape(Rectangle())
-            .onTapGesture { }
 
             if showStatusBar {
                 StatusBarView(

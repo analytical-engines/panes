@@ -53,12 +53,14 @@
 
 // MARK: - Menu Items
 
+"menu_close_file" = "ファイルを閉じる";
 "menu_single_view" = "単ページ表示";
 "menu_spread_view" = "見開き表示";
 "menu_reading_direction_rtl" = "読み方向: 右から左";
 "menu_reading_direction_ltr" = "読み方向: 左から右";
 "menu_hide_status_bar" = "ステータスバーを隠す";
 "menu_show_status_bar" = "ステータスバーを表示";
+"menu_page_settings" = "ページ設定";
 "menu_remove_single_page_attribute" = "単ページ属性を解除";
 "menu_force_single_page" = "単ページ表示を強制";
 "menu_single_page_alignment" = "単ページの配置";
@@ -74,3 +76,35 @@
 "error_no_file_selected" = "ファイルが選択されていません";
 "error_cannot_open_file" = "ファイルを開けませんでした";
 "error_image_load_failed_format" = "画像の読み込みに失敗しました\nファイル: %@\nページ: %d/%d";
+
+// MARK: - Page Settings Export/Import
+
+"menu_export_page_settings" = "ページ設定をExport...";
+"menu_import_page_settings" = "ページ設定をImport...";
+"export_panel_title" = "ページ設定をExport";
+"export_panel_prompt" = "保存";
+"export_error_title" = "Exportエラー";
+"import_panel_title" = "ページ設定をImport";
+"import_panel_prompt" = "読み込み";
+"import_success_title" = "Import完了";
+"import_success_format" = "%@の設定を読み込みました\n単ページ属性: %d件";
+"import_error_title" = "Importエラー";
+"import_error_no_file" = "ファイルが開かれていません";
+"import_error_invalid_format" = "無効なファイル形式です";
+"menu_reset_page_settings" = "ページ設定を初期化";
+"reset_confirm_title" = "ページ設定の初期化";
+"reset_confirm_message" = "このファイルの全てのページ表示設定（単ページ属性、配置設定など）を初期化します。この操作は取り消せません。";
+"reset_confirm_ok" = "初期化";
+"reset_confirm_cancel" = "キャンセル";
+
+// MARK: - History Export/Import
+
+"menu_history" = "履歴";
+"menu_export_history" = "履歴をExport...";
+"menu_import_history_merge" = "履歴をImport（マージ）...";
+"menu_import_history_replace" = "履歴をImport（置換）...";
+"export_history_panel_title" = "履歴をExport";
+"import_history_panel_title" = "履歴をImport";
+"import_history_success_format" = "%d件の履歴を読み込みました（%@）";
+"import_history_merged" = "既存の履歴とマージ";
+"import_history_replaced" = "既存の履歴を置換";

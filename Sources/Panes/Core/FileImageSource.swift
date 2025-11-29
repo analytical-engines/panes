@@ -9,7 +9,8 @@ class FileImageSource: ImageSource {
     init?(urls: [URL]) {
         // URLリストから画像ファイルを収集（フォルダの場合は中身を探索）
         var collectedURLs: [URL] = []
-        let imageExtensions = ["jpg", "jpeg", "png", "JPG", "JPEG", "PNG"]
+        let imageExtensions = ["jpg", "jpeg", "png", "gif", "webp", "jp2", "j2k",
+                                "JPG", "JPEG", "PNG", "GIF", "WEBP", "JP2", "J2K"]
         let fileManager = FileManager.default
 
         for url in urls {

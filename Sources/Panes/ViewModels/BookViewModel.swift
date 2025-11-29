@@ -109,6 +109,28 @@ class BookViewModel {
         return pageDisplaySettings.isForcedSinglePage(index)
     }
 
+    /// ファイルを閉じて初期画面に戻る
+    func closeFile() {
+        // 現在の表示状態を保存
+        saveViewState()
+
+        // 状態をリセット
+        imageSource = nil
+        sourceName = ""
+        totalPages = 0
+        currentPage = 0
+        currentImage = nil
+        firstPageImage = nil
+        secondPageImage = nil
+        errorMessage = nil
+        pageDisplaySettings = PageDisplaySettings()
+    }
+
+    /// ファイルが開いているかどうか
+    var hasOpenFile: Bool {
+        return imageSource != nil
+    }
+
     /// 画像ソースを開く（zipまたは画像ファイル）
     func openSource(_ source: ImageSource) {
         guard source.imageCount > 0 else {
@@ -168,11 +190,19 @@ class BookViewModel {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let source: ImageSource?
 
-            // zipファイルの場合
-            if urls.count == 1 && urls[0].pathExtension.lowercased() == "zip" {
-                source = ArchiveImageSource(url: urls[0])
+            // アーカイブファイルの場合
+            if urls.count == 1 {
+                let ext = urls[0].pathExtension.lowercased()
+                if ext == "zip" || ext == "cbz" {
+                    source = ArchiveImageSource(url: urls[0])
+                } else if ext == "rar" || ext == "cbr" {
+                    source = RarImageSource(url: urls[0])
+                } else {
+                    // 画像ファイルの場合
+                    source = FileImageSource(urls: urls)
+                }
             } else {
-                // 画像ファイルの場合
+                // 複数ファイルの場合
                 source = FileImageSource(urls: urls)
             }
 
@@ -459,8 +489,14 @@ class BookViewModel {
             // 1ページ戻った位置をチェック
             if currentPage > 0 {
                 let prevPage = currentPage - 1
-                // 前のページも単ページ表示属性なら1ページ戻る
-                if checkAndSetLandscapeAttribute(for: prevPage) {
+                // 前のページが単ページ表示されるかどうかをチェック
+                if checkAndSetLandscapeAttribute(for: prevPage) ||
+                   pageDisplaySettings.isForcedSinglePage(prevPage) {
+                    return 1
+                }
+                // 前のページが最初のページ(0)で、現在のページが横長なら
+                // 最初のページはペアがないため単独で表示されていた
+                if prevPage == 0 && checkAndSetLandscapeAttribute(for: currentPage) {
                     return 1
                 }
                 // 前のページが単ページ表示属性でなければ、その前のページとペアになる
@@ -542,7 +578,12 @@ class BookViewModel {
 
     /// 現在のページの単ページ表示属性を切り替え
     func toggleCurrentPageSingleDisplay() {
-        pageDisplaySettings.toggleForceSinglePage(at: currentPage)
+        toggleSingleDisplay(at: currentPage)
+    }
+
+    /// 指定ページの単ページ表示属性を切り替え
+    func toggleSingleDisplay(at pageIndex: Int) {
+        pageDisplaySettings.toggleForceSinglePage(at: pageIndex)
         // 設定を保存
         saveViewState()
         // 画像を再読み込み（表示を更新）
@@ -551,13 +592,23 @@ class BookViewModel {
 
     /// 現在のページが単ページ表示属性を持つか
     var isCurrentPageForcedSingle: Bool {
-        return pageDisplaySettings.isForcedSinglePage(currentPage)
+        return isForcedSingle(at: currentPage)
+    }
+
+    /// 指定ページが単ページ表示属性を持つか
+    func isForcedSingle(at pageIndex: Int) -> Bool {
+        return pageDisplaySettings.isForcedSinglePage(pageIndex)
     }
 
     /// 現在のページの配置を取得（デフォルトロジックを含む）
     func getCurrentPageAlignment() -> SinglePageAlignment {
+        return getAlignment(at: currentPage)
+    }
+
+    /// 指定ページの配置を取得（デフォルトロジックを含む）
+    func getAlignment(at pageIndex: Int) -> SinglePageAlignment {
         // 既に設定されている場合はそれを返す
-        if let savedAlignment = pageDisplaySettings.alignment(for: currentPage) {
+        if let savedAlignment = pageDisplaySettings.alignment(for: pageIndex) {
             return savedAlignment
         }
 
@@ -567,7 +618,7 @@ class BookViewModel {
         //   - 右→左表示: 右側
         //   - 左→右表示: 左側
         guard let source = imageSource,
-              let size = source.imageSize(at: currentPage) else {
+              let size = source.imageSize(at: pageIndex) else {
             return .center
         }
 
@@ -588,7 +639,12 @@ class BookViewModel {
 
     /// 現在のページの配置を設定
     func setCurrentPageAlignment(_ alignment: SinglePageAlignment) {
-        pageDisplaySettings.setAlignment(alignment, for: currentPage)
+        setAlignment(alignment, at: currentPage)
+    }
+
+    /// 指定ページの配置を設定
+    func setAlignment(_ alignment: SinglePageAlignment, at pageIndex: Int) {
+        pageDisplaySettings.setAlignment(alignment, for: pageIndex)
         saveViewState()
         loadCurrentPage()
     }
@@ -662,8 +718,12 @@ class BookViewModel {
 
     /// 単ページ表示属性インジケーター（表示用）
     var singlePageIndicator: String {
-        guard viewMode == .spread else { return "" }
-        if isCurrentPageForcedSingle {
+        return singlePageIndicator(at: currentPage)
+    }
+
+    /// 指定ページの単ページ表示属性インジケーター
+    func singlePageIndicator(at pageIndex: Int) -> String {
+        if isForcedSingle(at: pageIndex) {
             return L("single_page_indicator")
         }
         return ""
@@ -800,5 +860,95 @@ class BookViewModel {
 
         // 横長判定閾値は常に最新の設定値を使用
         landscapeAspectRatioThreshold = settings.defaultLandscapeThreshold
+    }
+
+    // MARK: - ページ表示設定のExport/Import
+
+    /// Export用のデータ構造
+    struct PageSettingsExport: Codable {
+        let archiveName: String
+        let totalPages: Int
+        let exportDate: Date
+        let settings: PageDisplaySettings
+    }
+
+    /// ページ表示設定をExport可能か
+    var canExportPageSettings: Bool {
+        return imageSource != nil
+    }
+
+    /// ページ表示設定をJSONデータとしてExport
+    func exportPageSettings() -> Data? {
+        guard let source = imageSource else { return nil }
+
+        let exportData = PageSettingsExport(
+            archiveName: source.sourceName,
+            totalPages: source.imageCount,
+            exportDate: Date(),
+            settings: pageDisplaySettings
+        )
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+
+        do {
+            return try encoder.encode(exportData)
+        } catch {
+            debugLog("Failed to encode page settings: \(error)", level: .minimal)
+            return nil
+        }
+    }
+
+    /// Export用のデフォルトファイル名
+    var exportFileName: String {
+        guard let source = imageSource else { return "page_settings.json" }
+        let baseName = (source.sourceName as NSString).deletingPathExtension
+        return "\(baseName)_page_settings.json"
+    }
+
+    /// JSONデータからページ表示設定をImport
+    func importPageSettings(from data: Data) -> (success: Bool, message: String) {
+        guard imageSource != nil else {
+            return (false, L("import_error_no_file"))
+        }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        do {
+            let importData = try decoder.decode(PageSettingsExport.self, from: data)
+
+            // 設定を適用
+            pageDisplaySettings = importData.settings
+
+            // UserDefaultsにも保存
+            saveViewState()
+
+            // 表示を更新
+            loadCurrentPage()
+
+            let message = String(format: L("import_success_format"),
+                                 importData.archiveName,
+                                 importData.settings.forceSinglePageIndices.count)
+            return (true, message)
+        } catch {
+            debugLog("Failed to decode page settings: \(error)", level: .minimal)
+            return (false, L("import_error_invalid_format"))
+        }
+    }
+
+    /// ページ表示設定を初期化
+    func resetPageSettings() {
+        guard imageSource != nil else { return }
+
+        // 設定を初期化
+        pageDisplaySettings = PageDisplaySettings()
+
+        // UserDefaultsにも保存
+        saveViewState()
+
+        // 表示を更新
+        loadCurrentPage()
     }
 }
