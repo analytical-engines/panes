@@ -383,9 +383,15 @@ class BookViewModel {
     func previousPage() {
         // ページめくりのステップ数を計算
         let step = calculatePreviousPageStep()
-        let newPage = currentPage - step
+        var newPage = currentPage - step
 
-        if newPage >= 0 {
+        // 負になる場合は0にクランプ
+        if newPage < 0 {
+            newPage = 0
+        }
+
+        // 現在のページと異なる場合のみ移動
+        if newPage != currentPage {
             currentPage = newPage
             loadCurrentPage()
             saveViewState()
