@@ -47,6 +47,8 @@ struct ContentView: View {
             SinglePageView(
                 image: image,
                 pageIndex: viewModel.currentPage,
+                rotation: viewModel.getRotation(at: viewModel.currentPage),
+                flip: viewModel.getFlip(at: viewModel.currentPage),
                 showStatusBar: viewModel.showStatusBar,
                 archiveFileName: viewModel.archiveFileName,
                 currentFileName: viewModel.currentFileName,
@@ -73,6 +75,10 @@ struct ContentView: View {
                 secondPageImage: viewModel.secondPageImage,
                 secondPageIndex: viewModel.currentPage + 1,
                 singlePageAlignment: viewModel.currentPageAlignment,
+                firstPageRotation: viewModel.getRotation(at: viewModel.currentPage),
+                firstPageFlip: viewModel.getFlip(at: viewModel.currentPage),
+                secondPageRotation: viewModel.getRotation(at: viewModel.currentPage + 1),
+                secondPageFlip: viewModel.getFlip(at: viewModel.currentPage + 1),
                 showStatusBar: viewModel.showStatusBar,
                 archiveFileName: viewModel.archiveFileName,
                 currentFileName: viewModel.currentFileName,
@@ -191,6 +197,68 @@ struct ContentView: View {
             }
         } label: {
             Label(L("menu_single_page_alignment"), systemImage: "arrow.left.and.right")
+        }
+
+        // 回転メニュー
+        Menu {
+            Button(action: {
+                viewModel.rotateClockwise(at: pageIndex)
+            }) {
+                Label(L("menu_rotate_clockwise"), systemImage: "rotate.right")
+            }
+
+            Button(action: {
+                viewModel.rotateCounterClockwise(at: pageIndex)
+            }) {
+                Label(L("menu_rotate_counterclockwise"), systemImage: "rotate.left")
+            }
+
+            Divider()
+
+            Button(action: {
+                viewModel.rotate180(at: pageIndex)
+            }) {
+                Label(L("menu_rotate_180"), systemImage: "arrow.up.arrow.down")
+            }
+        } label: {
+            let rotation = viewModel.getRotation(at: pageIndex)
+            Label(
+                L("menu_rotation"),
+                systemImage: rotation == .none ? "arrow.clockwise" : "arrow.clockwise.circle.fill"
+            )
+        }
+
+        // 反転メニュー
+        Menu {
+            Button(action: {
+                viewModel.toggleHorizontalFlip(at: pageIndex)
+            }) {
+                HStack {
+                    Text(L("menu_flip_horizontal"))
+                    Spacer()
+                    if viewModel.getFlip(at: pageIndex).horizontal {
+                        Image(systemName: "checkmark")
+                    }
+                }
+            }
+
+            Button(action: {
+                viewModel.toggleVerticalFlip(at: pageIndex)
+            }) {
+                HStack {
+                    Text(L("menu_flip_vertical"))
+                    Spacer()
+                    if viewModel.getFlip(at: pageIndex).vertical {
+                        Image(systemName: "checkmark")
+                    }
+                }
+            }
+        } label: {
+            let flip = viewModel.getFlip(at: pageIndex)
+            Label(
+                L("menu_flip"),
+                systemImage: (flip.horizontal || flip.vertical) ? "arrow.left.and.right.righttriangle.left.righttriangle.right.fill" : "arrow.left.and.right.righttriangle.left.righttriangle.right"
+            )
         }
 
         Divider()
@@ -1112,6 +1180,8 @@ struct StatusBarView: View {
 struct SinglePageView<ContextMenu: View>: View {
     let image: NSImage
     let pageIndex: Int
+    let rotation: ImageRotation
+    let flip: ImageFlip
     let showStatusBar: Bool
     let archiveFileName: String
     let currentFileName: String
@@ -1121,7 +1191,7 @@ struct SinglePageView<ContextMenu: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ImageDisplayView(image: image)
+            ImageDisplayView(image: image, rotation: rotation, flip: flip)
                 .contextMenu { contextMenuBuilder(pageIndex) }
 
             if showStatusBar {
@@ -1144,6 +1214,10 @@ struct SpreadPageView<ContextMenu: View>: View {
     let secondPageImage: NSImage?
     let secondPageIndex: Int
     let singlePageAlignment: SinglePageAlignment
+    let firstPageRotation: ImageRotation
+    let firstPageFlip: ImageFlip
+    let secondPageRotation: ImageRotation
+    let secondPageFlip: ImageFlip
     let showStatusBar: Bool
     let archiveFileName: String
     let currentFileName: String
@@ -1160,6 +1234,10 @@ struct SpreadPageView<ContextMenu: View>: View {
                 secondPageImage: secondPageImage,
                 secondPageIndex: secondPageIndex,
                 singlePageAlignment: singlePageAlignment,
+                firstPageRotation: firstPageRotation,
+                firstPageFlip: firstPageFlip,
+                secondPageRotation: secondPageRotation,
+                secondPageFlip: secondPageFlip,
                 contextMenuBuilder: contextMenuBuilder
             )
 

@@ -7,20 +7,121 @@ enum SinglePageAlignment: String, Codable {
     case center     // センタリング（ウィンドウフィッティング）
 }
 
+/// 画像の回転角度（90度単位）
+enum ImageRotation: Int, Codable {
+    case none = 0       // 回転なし
+    case cw90 = 90      // 時計回り90度
+    case cw180 = 180    // 180度
+    case cw270 = 270    // 時計回り270度（反時計回り90度）
+
+    /// 時計回りに90度回転
+    func rotatedClockwise() -> ImageRotation {
+        switch self {
+        case .none: return .cw90
+        case .cw90: return .cw180
+        case .cw180: return .cw270
+        case .cw270: return .none
+        }
+    }
+
+    /// 反時計回りに90度回転
+    func rotatedCounterClockwise() -> ImageRotation {
+        switch self {
+        case .none: return .cw270
+        case .cw90: return .none
+        case .cw180: return .cw90
+        case .cw270: return .cw180
+        }
+    }
+
+    /// 90度または270度回転の場合、アスペクト比が入れ替わる
+    var swapsAspectRatio: Bool {
+        return self == .cw90 || self == .cw270
+    }
+}
+
+/// 画像の反転設定
+struct ImageFlip: Codable, Equatable {
+    var horizontal: Bool = false  // 水平反転（左右反転）
+    var vertical: Bool = false    // 垂直反転（上下反転）
+
+    static let none = ImageFlip()
+}
+
 /// ページごとの表示設定
 struct PageDisplaySettings: Codable {
-    /// 強制的に単ページ表示するページのインデックス集合
-    var forceSinglePageIndices: Set<Int> = []
+    /// ユーザーが手動で単ページ表示を設定したページのインデックス集合
+    var userForcedSinglePageIndices: Set<Int> = []
 
-    /// アスペクト比判定が完了したページのインデックス集合
+    /// 自動検出により横長と判定されたページのインデックス集合
+    var autoDetectedLandscapeIndices: Set<Int> = []
+
+    /// アスペクト比判定が完了したページのインデックス集合（回転考慮後）
     var checkedPageIndices: Set<Int> = []
 
     /// ページごとの単ページ表示時の配置設定
     var pageAlignments: [Int: SinglePageAlignment] = [:]
 
-    /// 指定したページが単ページ表示かどうか
+    /// ページごとの回転設定
+    var pageRotations: [Int: ImageRotation] = [:]
+
+    /// ページごとの反転設定
+    var pageFlips: [Int: ImageFlip] = [:]
+
+    // MARK: - 後方互換性のためのCodable対応
+
+    enum CodingKeys: String, CodingKey {
+        case userForcedSinglePageIndices
+        case autoDetectedLandscapeIndices
+        case checkedPageIndices
+        case pageAlignments
+        case pageRotations
+        case pageFlips
+        // 旧キー
+        case forceSinglePageIndices
+    }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        // 新フォーマットを試す
+        if let userForced = try? container.decode(Set<Int>.self, forKey: .userForcedSinglePageIndices) {
+            userForcedSinglePageIndices = userForced
+            autoDetectedLandscapeIndices = (try? container.decode(Set<Int>.self, forKey: .autoDetectedLandscapeIndices)) ?? []
+        } else if let oldForced = try? container.decode(Set<Int>.self, forKey: .forceSinglePageIndices) {
+            // 旧フォーマットからの移行：全てユーザー設定として扱う
+            userForcedSinglePageIndices = oldForced
+            autoDetectedLandscapeIndices = []
+        }
+
+        checkedPageIndices = (try? container.decode(Set<Int>.self, forKey: .checkedPageIndices)) ?? []
+        pageAlignments = (try? container.decode([Int: SinglePageAlignment].self, forKey: .pageAlignments)) ?? [:]
+        pageRotations = (try? container.decode([Int: ImageRotation].self, forKey: .pageRotations)) ?? [:]
+        pageFlips = (try? container.decode([Int: ImageFlip].self, forKey: .pageFlips)) ?? [:]
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(userForcedSinglePageIndices, forKey: .userForcedSinglePageIndices)
+        try container.encode(autoDetectedLandscapeIndices, forKey: .autoDetectedLandscapeIndices)
+        try container.encode(checkedPageIndices, forKey: .checkedPageIndices)
+        try container.encode(pageAlignments, forKey: .pageAlignments)
+        try container.encode(pageRotations, forKey: .pageRotations)
+        try container.encode(pageFlips, forKey: .pageFlips)
+    }
+
+    // MARK: - 単ページ判定
+
+    /// 指定したページが単ページ表示かどうか（ユーザー設定または自動検出）
     func isForcedSinglePage(_ index: Int) -> Bool {
-        return forceSinglePageIndices.contains(index)
+        return userForcedSinglePageIndices.contains(index) || autoDetectedLandscapeIndices.contains(index)
+    }
+
+    /// 指定したページがユーザーによって手動設定されているかどうか
+    func isUserForcedSinglePage(_ index: Int) -> Bool {
+        return userForcedSinglePageIndices.contains(index)
     }
 
     /// 指定したページがアスペクト比判定済みかどうか
@@ -33,22 +134,34 @@ struct PageDisplaySettings: Codable {
         checkedPageIndices.insert(index)
     }
 
-    /// 単ページ表示を切り替え
+    /// 自動検出された横長属性を設定
+    mutating func setAutoDetectedLandscape(_ index: Int) {
+        autoDetectedLandscapeIndices.insert(index)
+    }
+
+    /// 指定ページの自動検出フラグをクリア（回転変更時に呼ぶ）
+    mutating func clearAutoDetection(at index: Int) {
+        autoDetectedLandscapeIndices.remove(index)
+        checkedPageIndices.remove(index)
+    }
+
+    /// 単ページ表示を切り替え（ユーザー手動設定）
     mutating func toggleForceSinglePage(at index: Int) {
-        if forceSinglePageIndices.contains(index) {
-            forceSinglePageIndices.remove(index)
+        if userForcedSinglePageIndices.contains(index) {
+            userForcedSinglePageIndices.remove(index)
         } else {
-            forceSinglePageIndices.insert(index)
+            userForcedSinglePageIndices.insert(index)
+            // ユーザーが手動設定した場合、自動検出からは除外
+            autoDetectedLandscapeIndices.remove(index)
         }
-        // 手動で設定した場合も判定済みとしてマーク
-        checkedPageIndices.insert(index)
     }
 
     /// 指定したインデックスまでの単ページ属性の累積が奇数かどうか
     /// （見開きのシフト判定に使用）
     func hasOddSinglePagesUpTo(_ index: Int) -> Bool {
-        let count = forceSinglePageIndices.filter { $0 < index }.count
-        return count % 2 == 1
+        let userCount = userForcedSinglePageIndices.filter { $0 < index }.count
+        let autoCount = autoDetectedLandscapeIndices.filter { $0 < index }.count
+        return (userCount + autoCount) % 2 == 1
     }
 
     /// 指定したページの配置設定を取得
@@ -59,5 +172,86 @@ struct PageDisplaySettings: Codable {
     /// 指定したページの配置設定を変更
     mutating func setAlignment(_ alignment: SinglePageAlignment, for index: Int) {
         pageAlignments[index] = alignment
+    }
+
+    // MARK: - 回転設定
+
+    /// 指定したページの回転設定を取得
+    func rotation(for index: Int) -> ImageRotation {
+        return pageRotations[index] ?? .none
+    }
+
+    /// 指定したページを時計回りに90度回転
+    mutating func rotateClockwise(at index: Int) {
+        let current = rotation(for: index)
+        let newRotation = current.rotatedClockwise()
+        if newRotation == .none {
+            pageRotations.removeValue(forKey: index)
+        } else {
+            pageRotations[index] = newRotation
+        }
+        // 回転変更により実効アスペクト比が変わるため、自動検出をクリア
+        clearAutoDetection(at: index)
+    }
+
+    /// 指定したページを反時計回りに90度回転
+    mutating func rotateCounterClockwise(at index: Int) {
+        let current = rotation(for: index)
+        let newRotation = current.rotatedCounterClockwise()
+        if newRotation == .none {
+            pageRotations.removeValue(forKey: index)
+        } else {
+            pageRotations[index] = newRotation
+        }
+        // 回転変更により実効アスペクト比が変わるため、自動検出をクリア
+        clearAutoDetection(at: index)
+    }
+
+    /// 指定したページを180度回転
+    mutating func rotate180(at index: Int) {
+        let current = rotation(for: index)
+        let newRotation: ImageRotation
+        switch current {
+        case .none: newRotation = .cw180
+        case .cw90: newRotation = .cw270
+        case .cw180: newRotation = .none
+        case .cw270: newRotation = .cw90
+        }
+        if newRotation == .none {
+            pageRotations.removeValue(forKey: index)
+        } else {
+            pageRotations[index] = newRotation
+        }
+        // 180度回転はアスペクト比を変えないが、一貫性のためクリア
+        // （実際には再判定しても同じ結果になる）
+    }
+
+    // MARK: - 反転設定
+
+    /// 指定したページの反転設定を取得
+    func flip(for index: Int) -> ImageFlip {
+        return pageFlips[index] ?? .none
+    }
+
+    /// 指定したページの水平反転を切り替え
+    mutating func toggleHorizontalFlip(at index: Int) {
+        var current = flip(for: index)
+        current.horizontal.toggle()
+        if current == .none {
+            pageFlips.removeValue(forKey: index)
+        } else {
+            pageFlips[index] = current
+        }
+    }
+
+    /// 指定したページの垂直反転を切り替え
+    mutating func toggleVerticalFlip(at index: Int) {
+        var current = flip(for: index)
+        current.vertical.toggle()
+        if current == .none {
+            pageFlips.removeValue(forKey: index)
+        } else {
+            pageFlips[index] = current
+        }
     }
 }

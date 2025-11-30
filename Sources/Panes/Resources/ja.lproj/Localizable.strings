@@ -70,6 +70,13 @@
 "menu_align_right" = "右側";
 "menu_align_left" = "左側";
 "menu_align_center" = "中央（ウィンドウフィット）";
+"menu_rotation" = "回転";
+"menu_rotate_clockwise" = "右に90°回転";
+"menu_rotate_counterclockwise" = "左に90°回転";
+"menu_rotate_180" = "180°回転";
+"menu_flip" = "反転";
+"menu_flip_horizontal" = "左右反転";
+"menu_flip_vertical" = "上下反転";
 
 // MARK: - Error Messages
 

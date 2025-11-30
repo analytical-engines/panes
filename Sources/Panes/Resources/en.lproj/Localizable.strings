@@ -70,6 +70,13 @@
 "menu_align_right" = "Right Side";
 "menu_align_left" = "Left Side";
 "menu_align_center" = "Center (Window Fitting)";
+"menu_rotation" = "Rotation";
+"menu_rotate_clockwise" = "Rotate 90° Right";
+"menu_rotate_counterclockwise" = "Rotate 90° Left";
+"menu_rotate_180" = "Rotate 180°";
+"menu_flip" = "Flip";
+"menu_flip_horizontal" = "Flip Horizontal";
+"menu_flip_vertical" = "Flip Vertical";
 
 // MARK: - Error Messages
 

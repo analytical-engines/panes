@@ -9,6 +9,10 @@ struct SpreadView<ContextMenu: View>: View {
     let secondPageImage: NSImage? // currentPage + 1
     let secondPageIndex: Int
     let singlePageAlignment: SinglePageAlignment // 単ページ表示時の配置
+    let firstPageRotation: ImageRotation
+    let firstPageFlip: ImageFlip
+    let secondPageRotation: ImageRotation
+    let secondPageFlip: ImageFlip
     let contextMenuBuilder: (Int) -> ContextMenu
 
     var body: some View {
@@ -24,6 +28,7 @@ struct SpreadView<ContextMenu: View>: View {
                         Image(nsImage: secondPageImage)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
+                            .imageTransform(rotation: secondPageRotation, flip: secondPageFlip)
                             .frame(height: geometry.size.height)
                             .contextMenu {
                                 let _ = DebugLogger.log("🖼️ LEFT image context menu: secondPageIndex=\(secondPageIndex)", level: .verbose)
@@ -32,6 +37,7 @@ struct SpreadView<ContextMenu: View>: View {
                         Image(nsImage: firstPageImage)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
+                            .imageTransform(rotation: firstPageRotation, flip: firstPageFlip)
                             .frame(height: geometry.size.height)
                             .contextMenu {
                                 let _ = DebugLogger.log("🖼️ RIGHT image context menu: firstPageIndex=\(firstPageIndex)", level: .verbose)
@@ -44,6 +50,7 @@ struct SpreadView<ContextMenu: View>: View {
                         Image(nsImage: firstPageImage)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
+                            .imageTransform(rotation: firstPageRotation, flip: firstPageFlip)
                             .frame(height: geometry.size.height)
                             .contextMenu {
                                 let _ = DebugLogger.log("🖼️ LEFT image context menu: firstPageIndex=\(firstPageIndex)", level: .verbose)
@@ -52,6 +59,7 @@ struct SpreadView<ContextMenu: View>: View {
                         Image(nsImage: secondPageImage)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
+                            .imageTransform(rotation: secondPageRotation, flip: secondPageFlip)
                             .frame(height: geometry.size.height)
                             .contextMenu {
                                 let _ = DebugLogger.log("🖼️ RIGHT image context menu: secondPageIndex=\(secondPageIndex)", level: .verbose)
@@ -66,38 +74,49 @@ struct SpreadView<ContextMenu: View>: View {
 
                 switch singlePageAlignment {
                 case .right:
-                    // 右側表示（中央線の右側に配置）
+                    // 右側表示（中央線の右側に配置）- 回転対応
                     HStack(spacing: 0) {
                         Spacer()
                             .frame(width: halfWidth)
-                        Image(nsImage: firstPageImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(maxWidth: halfWidth, maxHeight: geometry.size.height, alignment: .leading)
-                            .contextMenu { contextMenuBuilder(firstPageIndex) }
+                        RotationAwareImageView(
+                            image: firstPageImage,
+                            rotation: firstPageRotation,
+                            flip: firstPageFlip,
+                            containerWidth: halfWidth,
+                            containerHeight: geometry.size.height
+                        )
+                        .frame(maxWidth: halfWidth, alignment: .leading)
+                        .contextMenu { contextMenuBuilder(firstPageIndex) }
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height, alignment: .leading)
 
                 case .left:
-                    // 左側表示（中央線の左側に配置）
+                    // 左側表示（中央線の左側に配置）- 回転対応
                     HStack(spacing: 0) {
-                        Image(nsImage: firstPageImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(maxWidth: halfWidth, maxHeight: geometry.size.height, alignment: .trailing)
-                            .contextMenu { contextMenuBuilder(firstPageIndex) }
+                        RotationAwareImageView(
+                            image: firstPageImage,
+                            rotation: firstPageRotation,
+                            flip: firstPageFlip,
+                            containerWidth: halfWidth,
+                            containerHeight: geometry.size.height
+                        )
+                        .frame(maxWidth: halfWidth, alignment: .trailing)
+                        .contextMenu { contextMenuBuilder(firstPageIndex) }
                         Spacer()
                             .frame(width: halfWidth)
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height, alignment: .leading)
 
                 case .center:
-                    // センタリング（ウィンドウフィッティング）
-                    Image(nsImage: firstPageImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: geometry.size.width, height: geometry.size.height)
-                        .contextMenu { contextMenuBuilder(firstPageIndex) }
+                    // センタリング（ウィンドウフィッティング）- 回転対応
+                    RotationAwareImageView(
+                        image: firstPageImage,
+                        rotation: firstPageRotation,
+                        flip: firstPageFlip,
+                        containerWidth: geometry.size.width,
+                        containerHeight: geometry.size.height
+                    )
+                    .contextMenu { contextMenuBuilder(firstPageIndex) }
                 }
             }
         }

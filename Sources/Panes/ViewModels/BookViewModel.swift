@@ -91,20 +91,34 @@ class BookViewModel {
     private func checkAndSetLandscapeAttribute(for index: Int) -> Bool {
         guard let source = imageSource else { return false }
 
-        // 既に手動で設定されている場合はそのまま
-        if pageDisplaySettings.isForcedSinglePage(index) {
+        // ユーザーが手動で設定している場合はそれを優先
+        if pageDisplaySettings.isUserForcedSinglePage(index) {
             return true
         }
 
-        // まだ判定していないページなら判定する
+        // まだ判定していないページなら判定する（回転を考慮）
         if !pageDisplaySettings.isPageChecked(index) {
             debugLog("Checking page \(index) for landscape aspect ratio", level: .verbose)
             if let size = source.imageSize(at: index) {
-                let aspectRatio = size.width / size.height
-                debugLog("Page \(index) size: \(size.width)x\(size.height), aspect ratio: \(String(format: "%.2f", aspectRatio))", level: .verbose)
+                // 回転を考慮した実効アスペクト比を計算
+                let rotation = pageDisplaySettings.rotation(for: index)
+                let effectiveWidth: CGFloat
+                let effectiveHeight: CGFloat
+
+                if rotation.swapsAspectRatio {
+                    // 90度または270度回転の場合、幅と高さを入れ替え
+                    effectiveWidth = size.height
+                    effectiveHeight = size.width
+                } else {
+                    effectiveWidth = size.width
+                    effectiveHeight = size.height
+                }
+
+                let aspectRatio = effectiveWidth / effectiveHeight
+                debugLog("Page \(index) size: \(size.width)x\(size.height), rotation: \(rotation.rawValue)°, effective aspect ratio: \(String(format: "%.2f", aspectRatio))", level: .verbose)
 
                 if aspectRatio >= landscapeAspectRatioThreshold {
-                    pageDisplaySettings.forceSinglePageIndices.insert(index)
+                    pageDisplaySettings.setAutoDetectedLandscape(index)
                     debugLog("Page \(index) auto-detected as landscape", level: .verbose)
                 }
             } else {
@@ -645,7 +659,7 @@ class BookViewModel {
         }
 
         // デフォルトロジック:
-        // - 横向き画像（アスペクト比 >= 1.2）: センタリング
+        // - 横向き画像（実効アスペクト比 >= 1.2）: センタリング
         // - それ以外:
         //   - 右→左表示: 右側
         //   - 左→右表示: 左側
@@ -654,9 +668,23 @@ class BookViewModel {
             return .center
         }
 
-        let aspectRatio = size.width / size.height
+        // 回転を考慮した実効アスペクト比を計算
+        let rotation = pageDisplaySettings.rotation(for: pageIndex)
+        let effectiveWidth: CGFloat
+        let effectiveHeight: CGFloat
+
+        if rotation.swapsAspectRatio {
+            // 90度または270度回転の場合、幅と高さを入れ替え
+            effectiveWidth = size.height
+            effectiveHeight = size.width
+        } else {
+            effectiveWidth = size.width
+            effectiveHeight = size.height
+        }
+
+        let aspectRatio = effectiveWidth / effectiveHeight
         if aspectRatio >= landscapeAspectRatioThreshold {
-            // 横向き画像はセンタリング
+            // 横向き画像（回転後）はセンタリング
             return .center
         } else {
             // 縦向き/正方形画像は読み方向に応じて配置
@@ -684,6 +712,55 @@ class BookViewModel {
     /// 現在のページの配置（メニュー表示用）
     var currentPageAlignment: SinglePageAlignment {
         return getCurrentPageAlignment()
+    }
+
+    // MARK: - 回転設定
+
+    /// 指定ページの回転設定を取得
+    func getRotation(at pageIndex: Int) -> ImageRotation {
+        return pageDisplaySettings.rotation(for: pageIndex)
+    }
+
+    /// 指定ページを時計回りに90度回転
+    func rotateClockwise(at pageIndex: Int) {
+        pageDisplaySettings.rotateClockwise(at: pageIndex)
+        saveViewState()
+        loadCurrentPage()
+    }
+
+    /// 指定ページを反時計回りに90度回転
+    func rotateCounterClockwise(at pageIndex: Int) {
+        pageDisplaySettings.rotateCounterClockwise(at: pageIndex)
+        saveViewState()
+        loadCurrentPage()
+    }
+
+    /// 指定ページを180度回転
+    func rotate180(at pageIndex: Int) {
+        pageDisplaySettings.rotate180(at: pageIndex)
+        saveViewState()
+        loadCurrentPage()
+    }
+
+    // MARK: - 反転設定
+
+    /// 指定ページの反転設定を取得
+    func getFlip(at pageIndex: Int) -> ImageFlip {
+        return pageDisplaySettings.flip(for: pageIndex)
+    }
+
+    /// 指定ページの水平反転を切り替え
+    func toggleHorizontalFlip(at pageIndex: Int) {
+        pageDisplaySettings.toggleHorizontalFlip(at: pageIndex)
+        saveViewState()
+        loadCurrentPage()
+    }
+
+    /// 指定ページの垂直反転を切り替え
+    func toggleVerticalFlip(at pageIndex: Int) {
+        pageDisplaySettings.toggleVerticalFlip(at: pageIndex)
+        saveViewState()
+        loadCurrentPage()
     }
 
     /// 表示状態を保存（モード、ページ番号、読み方向、ページ表示設定）
@@ -962,7 +1039,7 @@ class BookViewModel {
 
             let message = String(format: L("import_success_format"),
                                  importData.archiveName,
-                                 importData.settings.forceSinglePageIndices.count)
+                                 importData.settings.userForcedSinglePageIndices.count)
             return (true, message)
         } catch {
             debugLog("Failed to decode page settings: \(error)", level: .minimal)
