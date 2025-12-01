@@ -9,6 +9,8 @@ struct PageIndicatorModifier: ViewModifier {
     let hasSecondPage: Bool
     let currentFileName: String
     let secondFileName: String?
+    let isCurrentPageUserForcedSingle: Bool
+    let isSecondPageUserForcedSingle: Bool
     let readingDirection: ReadingDirection
     let onJumpToPage: (Int) -> Void
 
@@ -29,6 +31,8 @@ struct PageIndicatorModifier: ViewModifier {
                         hasSecondPage: hasSecondPage,
                         currentFileName: currentFileName,
                         secondFileName: secondFileName,
+                        isCurrentPageUserForcedSingle: isCurrentPageUserForcedSingle,
+                        isSecondPageUserForcedSingle: isSecondPageUserForcedSingle,
                         readingDirection: readingDirection,
                         isVisible: $showOverlay,
                         onJumpToPage: onJumpToPage,
@@ -70,6 +74,8 @@ struct PageIndicatorOverlayContent: View {
     let hasSecondPage: Bool
     let currentFileName: String
     let secondFileName: String?
+    let isCurrentPageUserForcedSingle: Bool
+    let isSecondPageUserForcedSingle: Bool
     let readingDirection: ReadingDirection
     @Binding var isVisible: Bool
     let onJumpToPage: (Int) -> Void
@@ -94,9 +100,8 @@ struct PageIndicatorOverlayContent: View {
                 .fixedSize(horizontal: true, vertical: false)
 
             // ページ情報テキスト（内容に応じて伸びる）
-            Text(pageInfoText)
+            pageInfoView
                 .font(.system(size: 13, weight: .medium))
-                .foregroundColor(.white)
                 .fixedSize(horizontal: true, vertical: false)
 
             // プログレスバー（固定幅）
@@ -153,21 +158,66 @@ struct PageIndicatorOverlayContent: View {
         }
     }
 
-    /// ページ情報テキスト（CooViewer風）
-    private var pageInfoText: String {
+    /// 見開き表示時のファイル名（画面左側）
+    private var leftFileName: String {
+        let fileNames = currentFileName.components(separatedBy: "  ")
+        return fileNames.first ?? ""
+    }
+
+    /// 見開き表示時のファイル名（画面右側）
+    private var rightFileName: String {
+        let fileNames = currentFileName.components(separatedBy: "  ")
+        return fileNames.count > 1 ? fileNames[1] : ""
+    }
+
+    /// 画面左側のファイルが単ページ属性か
+    private var isLeftFileForcedSingle: Bool {
+        // RTL時: 左=currentPage+1, 右=currentPage
+        // LTR時: 左=currentPage, 右=currentPage+1
+        // BookViewModelではRTL時に [second, first] の順で結合している
+        if isRightToLeft {
+            return isSecondPageUserForcedSingle
+        } else {
+            return isCurrentPageUserForcedSingle
+        }
+    }
+
+    /// 画面右側のファイルが単ページ属性か
+    private var isRightFileForcedSingle: Bool {
+        if isRightToLeft {
+            return isCurrentPageUserForcedSingle
+        } else {
+            return isSecondPageUserForcedSingle
+        }
+    }
+
+    /// ページ情報表示（単ページ属性付きファイルは色を変える）
+    @ViewBuilder
+    private var pageInfoView: some View {
         if isSpreadView && hasSecondPage {
             // 見開き表示
-            let page1 = currentPage + 1
-            let page2 = currentPage + 2
-
-            // currentFileNameは既にBookViewModelで画面表示順（左→右）になっている
-            // "leftFile  rightFile" 形式なので、区切り文字を " | " に変換するだけ
-            let displayFileName = currentFileName.replacingOccurrences(of: "  ", with: " | ")
-
-            return "#\(page1)-\(page2)/\(totalPages) (\(displayFileName))"
+            HStack(spacing: 0) {
+                Text("#\(currentPage + 1)-\(currentPage + 2)/\(totalPages) (")
+                    .foregroundColor(.white)
+                Text(leftFileName)
+                    .foregroundColor(isLeftFileForcedSingle ? .orange : .white)
+                Text(" | ")
+                    .foregroundColor(.white)
+                Text(rightFileName)
+                    .foregroundColor(isRightFileForcedSingle ? .orange : .white)
+                Text(")")
+                    .foregroundColor(.white)
+            }
         } else {
             // 単ページ表示
-            return "#\(currentPage + 1)/\(totalPages) (\(currentFileName))"
+            HStack(spacing: 0) {
+                Text("#\(currentPage + 1)/\(totalPages) (")
+                    .foregroundColor(.white)
+                Text(currentFileName)
+                    .foregroundColor(isCurrentPageUserForcedSingle ? .orange : .white)
+                Text(")")
+                    .foregroundColor(.white)
+            }
         }
     }
 
@@ -205,6 +255,8 @@ extension View {
         hasSecondPage: Bool,
         currentFileName: String,
         secondFileName: String? = nil,
+        isCurrentPageUserForcedSingle: Bool = false,
+        isSecondPageUserForcedSingle: Bool = false,
         readingDirection: ReadingDirection,
         onJumpToPage: @escaping (Int) -> Void
     ) -> some View {
@@ -216,6 +268,8 @@ extension View {
             hasSecondPage: hasSecondPage,
             currentFileName: currentFileName,
             secondFileName: secondFileName,
+            isCurrentPageUserForcedSingle: isCurrentPageUserForcedSingle,
+            isSecondPageUserForcedSingle: isSecondPageUserForcedSingle,
             readingDirection: readingDirection,
             onJumpToPage: onJumpToPage
         ))

@@ -547,49 +547,19 @@ class BookViewModel {
         }
 
         // 見開きモードの場合
-        // 現在のページが単ページ表示なら、次に表示すべきページを計算
-        if shouldShowCurrentPageAsSingle() {
-            // 1ページ戻った位置をチェック
-            if currentPage > 0 {
-                let prevPage = currentPage - 1
-                // 前のページが単ページ表示されるかどうかをチェック
-                if checkAndSetLandscapeAttribute(for: prevPage) ||
-                   pageDisplaySettings.isForcedSinglePage(prevPage) {
-                    return 1
-                }
-                // 前のページが最初のページ(0)で、現在のページが横長なら
-                // 最初のページはペアがないため単独で表示されていた
-                if prevPage == 0 && checkAndSetLandscapeAttribute(for: currentPage) {
-                    return 1
-                }
-                // 前のページが単ページ表示属性でなければ、その前のページとペアになる
-                // したがって2ページ戻る
+        // currentPage-1 と currentPage-2 が両方とも単ページでなければ
+        // 見開き [n-1|n-2] に戻れるので2ページ戻る
+        // そうでなければ1ページ戻る
+        if currentPage >= 2 {
+            let prevSingle = checkAndSetLandscapeAttribute(for: currentPage - 1) ||
+                             pageDisplaySettings.isForcedSinglePage(currentPage - 1)
+            let prevPrevSingle = checkAndSetLandscapeAttribute(for: currentPage - 2) ||
+                                 pageDisplaySettings.isForcedSinglePage(currentPage - 2)
+            if !prevSingle && !prevPrevSingle {
                 return 2
             }
-            return 1
         }
-
-        // 1ページ戻った位置が単ページ表示なら1ページ戻る
-        if currentPage > 0 {
-            let prevPage = currentPage - 1
-            if checkAndSetLandscapeAttribute(for: prevPage) ||
-               pageDisplaySettings.isForcedSinglePage(prevPage) {
-                return 1
-            }
-        }
-
-        // 2ページ戻った位置（ランディングページ）が単ページ表示なら1ページ戻る
-        // これにより見開きをスキップしないようにする
-        if currentPage >= 2 {
-            let landingPage = currentPage - 2
-            if checkAndSetLandscapeAttribute(for: landingPage) ||
-               pageDisplaySettings.isForcedSinglePage(landingPage) {
-                return 1
-            }
-        }
-
-        // 見開き表示なら2ページ戻る
-        return 2
+        return 1
     }
 
     /// 表示モードを切り替え
@@ -664,12 +634,17 @@ class BookViewModel {
         loadCurrentPage()
     }
 
-    /// 現在のページが単ページ表示属性を持つか
+    /// 現在のページが単ページ表示属性を持つか（ユーザー設定または自動検出）
     var isCurrentPageForcedSingle: Bool {
         return isForcedSingle(at: currentPage)
     }
 
-    /// 指定ページが単ページ表示属性を持つか
+    /// 現在のページがユーザーによって単ページ表示に設定されているか（自動検出は含まない）
+    var isCurrentPageUserForcedSingle: Bool {
+        return pageDisplaySettings.isUserForcedSinglePage(currentPage)
+    }
+
+    /// 指定ページが単ページ表示属性を持つか（ユーザー設定または自動検出）
     func isForcedSingle(at pageIndex: Int) -> Bool {
         return pageDisplaySettings.isForcedSinglePage(pageIndex)
     }
@@ -933,6 +908,14 @@ class BookViewModel {
                 return firstFileName
             }
         }
+    }
+
+    /// 2ページ目がユーザー設定の単ページ属性かどうか（見開き表示時のみ有効、自動検出は含まない）
+    var isSecondPageUserForcedSingle: Bool {
+        guard let source = imageSource else { return false }
+        let secondPage = currentPage + 1
+        guard secondPage < source.imageCount else { return false }
+        return pageDisplaySettings.isUserForcedSinglePage(secondPage)
     }
 
     // 下位互換のためにarchiveFileNameをsourceNameのエイリアスとして定義

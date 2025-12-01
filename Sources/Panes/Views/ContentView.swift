@@ -63,6 +63,8 @@ struct ContentView: View {
                 isSpreadView: false,
                 hasSecondPage: false,
                 currentFileName: viewModel.currentFileName,
+                isCurrentPageUserForcedSingle: viewModel.isCurrentPageUserForcedSingle,
+                isSecondPageUserForcedSingle: false,
                 readingDirection: viewModel.readingDirection,
                 onJumpToPage: { viewModel.goToPage($0) }
             )
@@ -93,6 +95,8 @@ struct ContentView: View {
                 isSpreadView: true,
                 hasSecondPage: viewModel.secondPageImage != nil,
                 currentFileName: viewModel.currentFileName,
+                isCurrentPageUserForcedSingle: viewModel.isCurrentPageUserForcedSingle,
+                isSecondPageUserForcedSingle: viewModel.isSecondPageUserForcedSingle,
                 readingDirection: viewModel.readingDirection,
                 onJumpToPage: { viewModel.goToPage($0) }
             )
