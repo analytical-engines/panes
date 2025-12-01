@@ -277,11 +277,22 @@ class BookViewModel {
             return true
         }
 
-        // 2. 次のページ（右側に表示されるページ）が単ページ表示属性の場合
+        // 2. 次のページ（左側に表示されるページ）が単ページ表示属性の場合
         //    currentPageも単ページ表示（次のページと見開きにできないため）
         if currentPage + 1 < source.imageCount {
             let nextIsSingle = checkAndSetLandscapeAttribute(for: currentPage + 1)
             if nextIsSingle {
+                return true
+            }
+        }
+
+        // 3. 前のページが単ページ表示属性の場合
+        //    ただし、前のページが奇数位置（左側表示だった）または位置0の場合のみ適用
+        //    偶数位置の単ページ後は、次の奇数位置から新しい見開きが始まるため影響しない
+        if currentPage > 0 {
+            let prevPage = currentPage - 1
+            let prevIsSingle = checkAndSetLandscapeAttribute(for: prevPage)
+            if prevIsSingle && (prevPage % 2 == 1 || prevPage == 0) {
                 return true
             }
         }
@@ -561,7 +572,18 @@ class BookViewModel {
         // 1ページ戻った位置が単ページ表示なら1ページ戻る
         if currentPage > 0 {
             let prevPage = currentPage - 1
-            if pageDisplaySettings.isForcedSinglePage(prevPage) {
+            if checkAndSetLandscapeAttribute(for: prevPage) ||
+               pageDisplaySettings.isForcedSinglePage(prevPage) {
+                return 1
+            }
+        }
+
+        // 2ページ戻った位置（ランディングページ）が単ページ表示なら1ページ戻る
+        // これにより見開きをスキップしないようにする
+        if currentPage >= 2 {
+            let landingPage = currentPage - 2
+            if checkAndSetLandscapeAttribute(for: landingPage) ||
+               pageDisplaySettings.isForcedSinglePage(landingPage) {
                 return 1
             }
         }
