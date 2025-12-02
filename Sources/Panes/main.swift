@@ -14,6 +14,28 @@ extension FocusedValues {
     }
 }
 
+/// ウィンドウのデフォルトサイズを取得（UserDefaultsから読み込み）
+private func getDefaultWindowSize() -> CGSize {
+    let defaults = UserDefaults.standard
+    let mode = defaults.string(forKey: "windowSizeMode") ?? "lastUsed"
+
+    if mode == "fixed" {
+        // 固定サイズモード
+        let width = defaults.object(forKey: "fixedWindowWidth") != nil
+            ? defaults.double(forKey: "fixedWindowWidth") : 1200
+        let height = defaults.object(forKey: "fixedWindowHeight") != nil
+            ? defaults.double(forKey: "fixedWindowHeight") : 800
+        return CGSize(width: width, height: height)
+    } else {
+        // 最後のサイズモード
+        let width = defaults.object(forKey: "lastWindowWidth") != nil
+            ? defaults.double(forKey: "lastWindowWidth") : 1200
+        let height = defaults.object(forKey: "lastWindowHeight") != nil
+            ? defaults.double(forKey: "lastWindowHeight") : 800
+        return CGSize(width: width, height: height)
+    }
+}
+
 @main
 struct ImageViewerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
@@ -39,7 +61,7 @@ struct ImageViewerApp: App {
                 }
         }
         .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 1200, height: 800)
+        .defaultSize(getDefaultWindowSize())
         .commands {
             // ファイルメニューにClose/履歴Export/Importを追加
             CommandGroup(after: .newItem) {
@@ -220,7 +242,7 @@ struct ImageViewerApp: App {
                 .environment(sessionManager)
         }
         .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 1200, height: 800)
+        .defaultSize(getDefaultWindowSize())
     }
 
     /// ページ表示設定をExport

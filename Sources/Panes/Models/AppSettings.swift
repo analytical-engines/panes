@@ -1,5 +1,11 @@
 import Foundation
 
+/// ウィンドウサイズモード
+enum WindowSizeMode: String, CaseIterable {
+    case fixed = "fixed"           // 固定サイズ
+    case lastUsed = "lastUsed"     // 最後のサイズに追従
+}
+
 /// アプリ全体の設定を管理
 @Observable
 class AppSettings {
@@ -14,6 +20,11 @@ class AppSettings {
         static let maxHistoryCount = "maxHistoryCount"
         static let sessionRestoreEnabled = "sessionRestoreEnabled"
         static let sessionConcurrentLoadingLimit = "sessionConcurrentLoadingLimit"
+        static let windowSizeMode = "windowSizeMode"
+        static let fixedWindowWidth = "fixedWindowWidth"
+        static let fixedWindowHeight = "fixedWindowHeight"
+        static let lastWindowWidth = "lastWindowWidth"
+        static let lastWindowHeight = "lastWindowHeight"
     }
 
     // MARK: - 表示設定
@@ -55,6 +66,49 @@ class AppSettings {
     /// セッション復元時の同時読み込み数
     var sessionConcurrentLoadingLimit: Int {
         didSet { defaults.set(sessionConcurrentLoadingLimit, forKey: Keys.sessionConcurrentLoadingLimit) }
+    }
+
+    // MARK: - ウィンドウ設定
+
+    /// ウィンドウサイズモード
+    var windowSizeMode: WindowSizeMode {
+        didSet { saveWindowSizeMode() }
+    }
+
+    /// 固定ウィンドウ幅
+    var fixedWindowWidth: Double {
+        didSet { defaults.set(fixedWindowWidth, forKey: Keys.fixedWindowWidth) }
+    }
+
+    /// 固定ウィンドウ高さ
+    var fixedWindowHeight: Double {
+        didSet { defaults.set(fixedWindowHeight, forKey: Keys.fixedWindowHeight) }
+    }
+
+    /// 最後に使用したウィンドウ幅
+    var lastWindowWidth: Double {
+        didSet { defaults.set(lastWindowWidth, forKey: Keys.lastWindowWidth) }
+    }
+
+    /// 最後に使用したウィンドウ高さ
+    var lastWindowHeight: Double {
+        didSet { defaults.set(lastWindowHeight, forKey: Keys.lastWindowHeight) }
+    }
+
+    /// 新規ウィンドウ用のサイズを取得
+    var newWindowSize: CGSize {
+        switch windowSizeMode {
+        case .fixed:
+            return CGSize(width: fixedWindowWidth, height: fixedWindowHeight)
+        case .lastUsed:
+            return CGSize(width: lastWindowWidth, height: lastWindowHeight)
+        }
+    }
+
+    /// ウィンドウサイズを更新（リサイズ時に呼び出し）
+    func updateLastWindowSize(_ size: CGSize) {
+        lastWindowWidth = size.width
+        lastWindowHeight = size.height
     }
 
     // MARK: - 初期化
@@ -108,6 +162,38 @@ class AppSettings {
         } else {
             sessionConcurrentLoadingLimit = 1  // デフォルト: 1
         }
+
+        // ウィンドウサイズモードの読み込み
+        if let modeString = defaults.string(forKey: Keys.windowSizeMode),
+           let mode = WindowSizeMode(rawValue: modeString) {
+            windowSizeMode = mode
+        } else {
+            windowSizeMode = .lastUsed  // デフォルト: 最後のサイズに追従
+        }
+
+        // 固定ウィンドウサイズの読み込み
+        if defaults.object(forKey: Keys.fixedWindowWidth) != nil {
+            fixedWindowWidth = defaults.double(forKey: Keys.fixedWindowWidth)
+        } else {
+            fixedWindowWidth = 1200  // デフォルト: 1200
+        }
+        if defaults.object(forKey: Keys.fixedWindowHeight) != nil {
+            fixedWindowHeight = defaults.double(forKey: Keys.fixedWindowHeight)
+        } else {
+            fixedWindowHeight = 800  // デフォルト: 800
+        }
+
+        // 最後のウィンドウサイズの読み込み
+        if defaults.object(forKey: Keys.lastWindowWidth) != nil {
+            lastWindowWidth = defaults.double(forKey: Keys.lastWindowWidth)
+        } else {
+            lastWindowWidth = 1200  // デフォルト: 1200
+        }
+        if defaults.object(forKey: Keys.lastWindowHeight) != nil {
+            lastWindowHeight = defaults.double(forKey: Keys.lastWindowHeight)
+        } else {
+            lastWindowHeight = 800  // デフォルト: 800
+        }
     }
 
     // MARK: - 保存メソッド
@@ -120,5 +206,9 @@ class AppSettings {
     private func saveReadingDirection() {
         let directionString = defaultReadingDirection == .leftToRight ? "leftToRight" : "rightToLeft"
         defaults.set(directionString, forKey: Keys.defaultReadingDirection)
+    }
+
+    private func saveWindowSizeMode() {
+        defaults.set(windowSizeMode.rawValue, forKey: Keys.windowSizeMode)
     }
 }

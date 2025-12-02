@@ -26,8 +26,8 @@
 "view_mode_single" = "Single Page";
 "view_mode_spread" = "Spread";
 "default_reading_direction" = "Default Reading Direction";
-"reading_direction_rtl" = "Right to Left (Manga)";
-"reading_direction_ltr" = "Left to Right (Western)";
+"reading_direction_rtl" = "Right to Left";
+"reading_direction_ltr" = "Left to Right";
 "show_status_bar" = "Show Status Bar";
 
 // MARK: - SettingsView - Image Detection
@@ -135,3 +135,17 @@
 
 "session_restore_error_title" = "Session Restore";
 "session_restore_file_not_found" = "File not found: %@";
+
+// MARK: - Window Settings
+
+"tab_window" = "Window";
+"section_window_size" = "Window Size";
+"window_size_mode" = "Size Mode";
+"window_size_mode_last_used" = "Last Used";
+"window_size_mode_fixed" = "Fixed Size";
+"window_size_mode_description" = "Sets the size when opening new windows";
+"section_fixed_window_size" = "Fixed Size Settings";
+"window_width" = "Width";
+"window_height" = "Height";
+"section_last_window_size" = "Last Used Size";
+"current_last_window_size" = "Recorded Size";

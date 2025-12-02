@@ -26,8 +26,8 @@
 "view_mode_single" = "単ページ";
 "view_mode_spread" = "見開き";
 "default_reading_direction" = "デフォルト読み方向";
-"reading_direction_rtl" = "右→左（漫画）";
-"reading_direction_ltr" = "左→右（洋書）";
+"reading_direction_rtl" = "右→左";
+"reading_direction_ltr" = "左→右";
 "show_status_bar" = "ステータスバーを表示";
 
 // MARK: - SettingsView - Image Detection
@@ -135,3 +135,17 @@
 
 "session_restore_error_title" = "セッション復元";
 "session_restore_file_not_found" = "ファイルが見つかりません: %@";
+
+// MARK: - Window Settings
+
+"tab_window" = "ウィンドウ";
+"section_window_size" = "ウィンドウサイズ";
+"window_size_mode" = "サイズモード";
+"window_size_mode_last_used" = "最後のサイズ";
+"window_size_mode_fixed" = "固定サイズ";
+"window_size_mode_description" = "新しいウィンドウを開く時のサイズを設定します";
+"section_fixed_window_size" = "固定サイズの設定";
+"window_width" = "幅";
+"window_height" = "高さ";
+"section_last_window_size" = "最後に使用したサイズ";
+"current_last_window_size" = "記録されているサイズ";

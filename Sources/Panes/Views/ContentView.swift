@@ -613,6 +613,8 @@ struct ContentView: View {
             if let frame = window?.frame {
                 self.currentWindowFrame = frame
                 self.sessionManager.updateWindowFrame(id: self.windowID, frame: frame)
+                // 最後のウィンドウサイズを保存
+                self.appSettings.updateLastWindowSize(frame.size)
             }
         }
     }

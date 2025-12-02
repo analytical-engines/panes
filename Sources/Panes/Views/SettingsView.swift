@@ -13,6 +13,11 @@ struct SettingsView: View {
                     Label(L("tab_general"), systemImage: "gear")
                 }
 
+            WindowSettingsTab()
+                .tabItem {
+                    Label(L("tab_window"), systemImage: "macwindow")
+                }
+
             HistorySettingsTab()
                 .tabItem {
                     Label(L("tab_history"), systemImage: "clock")
@@ -23,7 +28,7 @@ struct SettingsView: View {
                     Label(L("tab_session"), systemImage: "arrow.clockwise")
                 }
         }
-        .frame(width: 450, height: 350)
+        .frame(width: 450, height: 380)
     }
 }
 
@@ -65,6 +70,65 @@ struct GeneralSettingsTab: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+        }
+        .formStyle(.grouped)
+        .padding()
+    }
+}
+
+/// ウィンドウ設定タブ
+struct WindowSettingsTab: View {
+    @Environment(AppSettings.self) private var settings
+
+    var body: some View {
+        @Bindable var settings = settings
+
+        Form {
+            Section(L("section_window_size")) {
+                Picker(L("window_size_mode"), selection: $settings.windowSizeMode) {
+                    Text(L("window_size_mode_last_used")).tag(WindowSizeMode.lastUsed)
+                    Text(L("window_size_mode_fixed")).tag(WindowSizeMode.fixed)
+                }
+                .pickerStyle(.segmented)
+
+                Text(L("window_size_mode_description"))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Section(L("section_fixed_window_size")) {
+                HStack {
+                    Text(L("window_width"))
+                    Spacer()
+                    TextField("", value: $settings.fixedWindowWidth, format: .number)
+                        .frame(width: 80)
+                        .textFieldStyle(.roundedBorder)
+                    Text("px")
+                        .foregroundColor(.secondary)
+                }
+                HStack {
+                    Text(L("window_height"))
+                    Spacer()
+                    TextField("", value: $settings.fixedWindowHeight, format: .number)
+                        .frame(width: 80)
+                        .textFieldStyle(.roundedBorder)
+                    Text("px")
+                        .foregroundColor(.secondary)
+                }
+            }
+            .disabled(settings.windowSizeMode != .fixed)
+            .opacity(settings.windowSizeMode == .fixed ? 1.0 : 0.5)
+
+            Section(L("section_last_window_size")) {
+                HStack {
+                    Text(L("current_last_window_size"))
+                    Spacer()
+                    Text("\(Int(settings.lastWindowWidth)) × \(Int(settings.lastWindowHeight)) px")
+                        .foregroundColor(.secondary)
+                }
+            }
+            .disabled(settings.windowSizeMode != .lastUsed)
+            .opacity(settings.windowSizeMode == .lastUsed ? 1.0 : 0.5)
         }
         .formStyle(.grouped)
         .padding()
