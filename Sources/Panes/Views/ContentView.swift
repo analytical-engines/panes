@@ -1061,7 +1061,7 @@ struct HistoryListView: View {
 
         if !recentHistory.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
-                Text(L("recent_files"))
+                Text("\(L("recent_files").dropLast()) [\(recentHistory.count)/\(appSettings.maxHistoryCount)]:")
                     .foregroundColor(.gray)
                     .font(.headline)
                     .padding(.top, 20)
