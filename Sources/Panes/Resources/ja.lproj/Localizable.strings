@@ -8,6 +8,7 @@
 "open_file" = "ファイルを開く";
 "recent_files" = "最近開いたファイル:";
 "loading" = "読み込み中...";
+"restoring_session" = "セッションを復元中...";
 "drop_files_hint" = "zipファイルまたは画像ファイルをドロップ";
 "access_count_format" = "(%d回)";
 "history_filter_placeholder" = "ファイル名で絞り込み";

@@ -1,7 +1,9 @@
 import Foundation
 import AppKit
+import SwiftUI
 
 /// セッション（ウィンドウ状態）の管理クラス
+@MainActor
 @Observable
 class SessionManager {
     private let sessionKey = "windowSession"
@@ -30,6 +32,15 @@ class SessionManager {
 
     /// 最初のウィンドウの復元が完了したかどうか
     private var isFirstWindowRestored: Bool = false
+
+    /// 復元完了したウィンドウ数
+    private var restoredWindowCount: Int = 0
+
+    /// 復元対象のウィンドウ総数
+    private var totalWindowsToRestore: Int = 0
+
+    /// ローディングパネル
+    private var loadingPanel: NSPanel?
 
     init() {
         loadSession()
@@ -80,7 +91,12 @@ class SessionManager {
 
         isRestoring = true
         pendingRestorations = savedSession
+        totalWindowsToRestore = savedSession.count
+        restoredWindowCount = 0
         DebugLogger.log("🔄 Starting session restoration: \(pendingRestorations.count) windows", level: .normal)
+
+        // ローディングパネルを表示
+        showLoadingPanel()
 
         // 復元キューを処理開始
         processNextPendingWindow()
@@ -94,10 +110,8 @@ class SessionManager {
             return
         }
         guard !pendingRestorations.isEmpty else {
-            // すべて完了
-            isRestoring = false
-            isFirstWindowRestored = false  // リセット
-            DebugLogger.log("✅ Session restoration complete", level: .normal)
+            // すべてのウィンドウの読み込み開始が完了（読み込み自体はまだ進行中かもしれない）
+            DebugLogger.log("📋 All windows queued for restoration", level: .verbose)
             return
         }
 
@@ -128,10 +142,33 @@ class SessionManager {
     /// ウィンドウの読み込み完了を通知する
     func windowDidFinishLoading(id: UUID) {
         currentLoadingCount = max(0, currentLoadingCount - 1)
-        DebugLogger.log("✅ Window finished loading: \(id) (remaining: \(currentLoadingCount))", level: .verbose)
+        restoredWindowCount += 1
+        DebugLogger.log("✅ Window finished loading: \(id) (\(restoredWindowCount)/\(totalWindowsToRestore))", level: .normal)
 
-        // 次のウィンドウを処理
-        processNextPendingWindow()
+        // 全ウィンドウの復元が完了したかチェック
+        if restoredWindowCount >= totalWindowsToRestore && pendingRestorations.isEmpty {
+            DebugLogger.log("🎉 All windows restored! Revealing windows...", level: .normal)
+            finishRestoration()
+        } else {
+            // 次のウィンドウを処理
+            processNextPendingWindow()
+        }
+    }
+
+    /// 復元完了処理
+    private func finishRestoration() {
+        isRestoring = false
+        isFirstWindowRestored = false
+        restoredWindowCount = 0
+        totalWindowsToRestore = 0
+
+        // ローディングパネルを閉じる
+        hideLoadingPanel()
+
+        // 全ウィンドウを一斉に表示する通知
+        NotificationCenter.default.post(name: .revealAllWindows, object: nil)
+
+        DebugLogger.log("✅ Session restoration complete", level: .normal)
     }
 
     /// 復元エントリを取得する（ContentViewから呼ばれる）
@@ -194,6 +231,90 @@ class SessionManager {
     func collectCurrentWindowStates() -> [WindowSessionEntry] {
         return Array(activeWindows.values)
     }
+
+    // MARK: - Loading Panel
+
+    /// ローディングパネルを表示する
+    private func showLoadingPanel() {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 280, height: 120),
+            styleMask: [.titled, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        panel.title = ""
+        panel.titlebarAppearsTransparent = true
+        panel.isMovableByWindowBackground = true
+        panel.backgroundColor = NSColor.windowBackgroundColor
+        panel.level = .floating
+        panel.isReleasedWhenClosed = false
+
+        // SwiftUIビューをホスト
+        let hostingView = NSHostingView(rootView: LoadingPanelContent(
+            restoredCount: restoredWindowCount,
+            totalCount: totalWindowsToRestore
+        ))
+        panel.contentView = hostingView
+
+        panel.center()
+        panel.makeKeyAndOrderFront(nil)
+
+        loadingPanel = panel
+        DebugLogger.log("📋 Loading panel shown", level: .normal)
+    }
+
+    /// ローディングパネルを閉じる
+    private func hideLoadingPanel() {
+        loadingPanel?.close()
+        loadingPanel = nil
+        DebugLogger.log("📋 Loading panel hidden", level: .normal)
+    }
+
+    /// ローディングパネルの進捗を更新する
+    func updateLoadingProgress() {
+        if let panel = loadingPanel {
+            let hostingView = NSHostingView(rootView: LoadingPanelContent(
+                restoredCount: restoredWindowCount,
+                totalCount: totalWindowsToRestore
+            ))
+            panel.contentView = hostingView
+        }
+    }
+}
+
+// MARK: - Loading Panel Content
+
+/// ローディングパネルの内容
+private struct LoadingPanelContent: View {
+    let restoredCount: Int
+    let totalCount: Int
+
+    @State private var rotation: Double = 0
+
+    var body: some View {
+        VStack(spacing: 16) {
+            // スピナー
+            Circle()
+                .trim(from: 0, to: 0.7)
+                .stroke(Color.gray, lineWidth: 3)
+                .frame(width: 36, height: 36)
+                .rotationEffect(.degrees(rotation))
+                .onAppear {
+                    withAnimation(.linear(duration: 1).repeatForever(autoreverses: false)) {
+                        rotation = 360
+                    }
+                }
+
+            VStack(spacing: 4) {
+                Text(L("restoring_session"))
+                    .font(.headline)
+                Text("\(restoredCount) / \(totalCount)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .frame(width: 280, height: 120)
+    }
 }
 
 // MARK: - Notification Names
@@ -207,4 +328,7 @@ extension NSNotification.Name {
 
     /// ウィンドウ状態収集通知
     static let collectWindowState = NSNotification.Name("CollectWindowStateForSession")
+
+    /// 全ウィンドウ一斉表示通知
+    static let revealAllWindows = NSNotification.Name("RevealAllWindowsAfterRestoration")
 }

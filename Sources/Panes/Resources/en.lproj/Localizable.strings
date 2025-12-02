@@ -8,6 +8,7 @@
 "open_file" = "Open File";
 "recent_files" = "Recent Files:";
 "loading" = "Loading...";
+"restoring_session" = "Restoring Session...";
 "drop_files_hint" = "Drop zip or image files here";
 "access_count_format" = "(%d times)";
 "history_filter_placeholder" = "Filter by filename";

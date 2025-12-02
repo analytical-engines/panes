@@ -35,9 +35,6 @@ struct ContentView: View {
     // セッション復元用のエントリ
     @State private var restorationEntry: WindowSessionEntry?
 
-    // 画像表示後に適用するフレーム（復元用）
-    @State private var pendingRestorationFrame: CGRect?
-
     // ウィンドウフレーム追跡用
     @State private var currentWindowFrame: CGRect?
 
@@ -68,7 +65,6 @@ struct ContentView: View {
                 readingDirection: viewModel.readingDirection,
                 onJumpToPage: { viewModel.goToPage($0) }
             )
-            .onAppear { applyPendingRestorationFrame() }
         } else if viewModel.viewMode == .spread, let firstPageImage = viewModel.firstPageImage {
             SpreadPageView(
                 readingDirection: viewModel.readingDirection,
@@ -100,7 +96,6 @@ struct ContentView: View {
                 readingDirection: viewModel.readingDirection,
                 onJumpToPage: { viewModel.goToPage($0) }
             )
-            .onAppear { applyPendingRestorationFrame() }
         } else if isWaitingForFile {
             LoadingView()
         } else {
@@ -110,37 +105,6 @@ struct ContentView: View {
                 onOpenHistoryFile: openHistoryFile
             )
             .contextMenu { initialScreenContextMenu }
-        }
-    }
-
-    /// 画像表示後にフレームを適用する
-    private func applyPendingRestorationFrame() {
-        guard let targetFrame = pendingRestorationFrame else { return }
-        pendingRestorationFrame = nil
-
-        DebugLogger.log("📐 Starting frame application: \(targetFrame) for windowID: \(windowID)", level: .normal)
-
-        // フレーム適用を複数回行い、SwiftUIのレイアウト調整に対抗する
-        // より長い遅延も追加してSwiftUIのリサイズ後にも対応
-        for delay in [0.1, 0.3, 0.5, 1.0, 2.0, 3.0] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                guard let windowNumber = self.myWindowNumber else {
-                    DebugLogger.log("⚠️ Window number not yet available (delay \(delay)s)", level: .normal)
-                    return
-                }
-
-                if let window = NSApp.windows.first(where: { $0.windowNumber == windowNumber }) {
-                    let currentFrame = window.frame
-                    if currentFrame != targetFrame {
-                        DebugLogger.log("📐 Applying frame (delay \(delay)s): \(targetFrame) to window: \(windowNumber) (was: \(currentFrame))", level: .normal)
-                        window.setFrame(targetFrame, display: true, animate: false)
-                    } else {
-                        DebugLogger.log("📐 Frame already correct (delay \(delay)s): \(targetFrame) window: \(windowNumber)", level: .verbose)
-                    }
-                } else {
-                    DebugLogger.log("❌ Window not found: \(windowNumber) (delay \(delay)s)", level: .normal)
-                }
-            }
         }
     }
 
@@ -493,11 +457,6 @@ struct ContentView: View {
                         frame: entry.frame
                     )
 
-                    // 画像表示後にフレームを適用するために保存
-                    let targetFrame = self.validateWindowFrame(entry.frame)
-                    pendingRestorationFrame = targetFrame
-                    DebugLogger.log("📐 Pending frame for image display: \(targetFrame) windowID: \(windowID)", level: .normal)
-
                     // myWindowNumber がまだ設定されていない場合、ここで取得を試みる
                     if myWindowNumber == nil {
                         // WindowNumberGetter がまだ実行されていない場合、キーウィンドウから取得
@@ -507,11 +466,10 @@ struct ContentView: View {
                         }
                     }
 
-                    // onChange から直接フレームを適用（onAppearより先に実行される可能性があるため）
-                    applyPendingRestorationFrame()
-
+                    // フレーム適用は全復元完了後に一括で行う
+                    DebugLogger.log("📐 Window ready, waiting for batch frame application: \(windowID)", level: .normal)
                     sessionManager.windowDidFinishLoading(id: windowID)
-                    restorationEntry = nil
+                    // restorationEntryはフレーム適用時に使用するため保持
                 } else if let frame = currentWindowFrame {
                     // 通常モード：現在のフレームでウィンドウを登録
                     sessionManager.registerWindow(
@@ -685,6 +643,30 @@ struct ContentView: View {
                 }
             }
         }
+
+        // 全ウィンドウのフレーム一括適用通知を受け取る
+        NotificationCenter.default.addObserver(
+            forName: .revealAllWindows,
+            object: nil,
+            queue: .main
+        ) { _ in
+            // 保存されている復元エントリのフレームを適用
+            guard let entry = self.restorationEntry else {
+                DebugLogger.log("📐 No restoration entry for window: \(windowID)", level: .verbose)
+                return
+            }
+
+            let targetFrame = self.validateWindowFrame(entry.frame)
+            DebugLogger.log("📐 Applying frame for window: \(windowID) -> \(targetFrame)", level: .normal)
+
+            if let windowNumber = self.myWindowNumber,
+               let window = NSApp.windows.first(where: { $0.windowNumber == windowNumber }) {
+                window.setFrame(targetFrame, display: true, animate: false)
+                DebugLogger.log("📐 Frame applied to window: \(windowNumber)", level: .normal)
+            }
+
+            self.restorationEntry = nil
+        }
     }
 
     /// セッションからウィンドウを復元
@@ -698,7 +680,7 @@ struct ContentView: View {
             return
         }
 
-        // 復元エントリを保存（フレーム設定は onChange(of: viewModel.hasOpenFile) で行う）
+        // 復元エントリを保存（フレーム設定は全復元完了後に一括で行う）
         restorationEntry = entry
         DebugLogger.log("📐 Target frame saved: \(entry.frame) windowID: \(windowID)", level: .normal)
 
@@ -1278,6 +1260,12 @@ struct WindowNumberGetter: NSViewRepresentable {
                 // タイトルバーの文字色を白に設定
                 window.titlebarAppearsTransparent = true
                 window.appearance = NSAppearance(named: .darkAqua)
+
+                // macOSのState Restorationを無効化（独自のセッション復元を使用）
+                window.isRestorable = false
+
+                // SwiftUIのウィンドウフレーム自動保存を無効化
+                window.setFrameAutosaveName("")
 
                 if oldValue != window.windowNumber {
                     DebugLogger.log("🪟 WindowNumberGetter: captured \(window.windowNumber) (was: \(String(describing: oldValue)))", level: .normal)

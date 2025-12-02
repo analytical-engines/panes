@@ -383,6 +383,7 @@ struct ImageViewerApp: App {
 }
 
 // アプリケーションデリゲート
+@MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
     var sessionManager: SessionManager?
     var appSettings: AppSettings?
