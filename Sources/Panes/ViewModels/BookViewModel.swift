@@ -14,6 +14,42 @@ enum ReadingDirection {
     case leftToRight  // 左→右（洋書）
 }
 
+/// ページの表示状態
+enum PageDisplay: Equatable {
+    case single(Int)           // 単ページ表示: [n]
+    case spread(Int, Int)      // 見開き表示: [left, right] (RTL: left > right)
+
+    /// 表示されているページのインデックス配列
+    var indices: [Int] {
+        switch self {
+        case .single(let page): return [page]
+        case .spread(let left, let right): return [left, right]
+        }
+    }
+
+    /// 表示されている最大インデックス
+    var maxIndex: Int {
+        switch self {
+        case .single(let page): return page
+        case .spread(let left, _): return left  // RTL: leftが大きい
+        }
+    }
+
+    /// 表示されている最小インデックス
+    var minIndex: Int {
+        switch self {
+        case .single(let page): return page
+        case .spread(_, let right): return right  // RTL: rightが小さい
+        }
+    }
+
+    /// 見開き表示かどうか
+    var isSpread: Bool {
+        if case .spread = self { return true }
+        return false
+    }
+}
+
 /// 書籍（画像アーカイブ）の表示状態を管理するViewModel
 @Observable
 class BookViewModel {
@@ -54,6 +90,9 @@ class BookViewModel {
 
     // 現在のページ番号（0始まり）
     var currentPage: Int = 0
+
+    // 現在の表示状態
+    private(set) var currentDisplay: PageDisplay = .single(0)
 
     // 総ページ数
     var totalPages: Int = 0
@@ -242,7 +281,7 @@ class BookViewModel {
         }
     }
 
-    /// 現在のページの画像を読み込む
+    /// 現在のページの画像を読み込む（ジャンプ操作用、順方向ロジックを使用）
     private func loadCurrentPage() {
         guard imageSource != nil else {
             debugLog("loadCurrentPage - imageSource is nil", level: .minimal)
@@ -251,162 +290,75 @@ class BookViewModel {
 
         debugLog("loadCurrentPage - viewMode: \(viewMode), currentPage: \(currentPage)", level: .verbose)
 
-        switch viewMode {
-        case .single:
-            loadSinglePage()
-        case .spread:
-            // 見開きモードでも単ページ表示すべきか判定
-            let shouldShowSinglePage = shouldShowCurrentPageAsSingle()
-            debugLog("shouldShowCurrentPageAsSingle: \(shouldShowSinglePage)", level: .verbose)
+        // currentPageを起点に表示状態を計算（順方向ロジック）
+        let display = calculateDisplayForPage(currentPage)
+        currentDisplay = display
+        loadImages(for: display)
 
-            if shouldShowSinglePage {
-                loadSinglePage()
-            } else {
-                loadSpreadPages()
-            }
-        }
+        debugLog("loadCurrentPage result: \(display)", level: .verbose)
     }
 
-    /// 見開きモードで現在のページを単独表示すべきか判定
-    private func shouldShowCurrentPageAsSingle() -> Bool {
-        guard let source = imageSource else { return false }
-
-        // 1. currentPage 自身が単ページ表示属性なら単ページ表示
-        let currentIsSingle = checkAndSetLandscapeAttribute(for: currentPage)
-        if currentIsSingle {
-            return true
+    /// 指定ページを起点とした表示状態を計算（順方向ロジック：currentPageとcurrentPage+1をチェック）
+    private func calculateDisplayForPage(_ page: Int) -> PageDisplay {
+        // 単ページモードの場合
+        if viewMode == .single {
+            return .single(page)
         }
 
-        // 2. 次のページ（左側に表示されるページ）が単ページ表示属性の場合
-        //    currentPageも単ページ表示（次のページと見開きにできないため）
-        if currentPage + 1 < source.imageCount {
-            let nextIsSingle = checkAndSetLandscapeAttribute(for: currentPage + 1)
-            if nextIsSingle {
-                return true
-            }
+        // 見開きモードの場合
+        // pageが単ページ属性 → [page]
+        if isPageSingle(page) {
+            return .single(page)
         }
 
-        // 3. 前のページが単ページ表示属性の場合
-        //    ただし、前のページが奇数位置（左側表示だった）または位置0の場合のみ適用
-        //    偶数位置の単ページ後は、次の奇数位置から新しい見開きが始まるため影響しない
-        if currentPage > 0 {
-            let prevPage = currentPage - 1
-            let prevIsSingle = checkAndSetLandscapeAttribute(for: prevPage)
-            if prevIsSingle && (prevPage % 2 == 1 || prevPage == 0) {
-                return true
-            }
+        // page+1が存在しない → [page]
+        if page + 1 >= totalPages {
+            return .single(page)
         }
 
-        return false
-    }
-
-    /// 単ページモードの画像読み込み
-    private func loadSinglePage() {
-        guard let source = imageSource else { return }
-
-        if let image = source.loadImage(at: currentPage) {
-            if viewMode == .single {
-                // 単ページモードの場合
-                self.currentImage = image
-            } else {
-                // 見開きモード中の単ページ表示の場合
-                self.firstPageImage = image
-                self.secondPageImage = nil
-            }
-            self.errorMessage = nil
-        } else {
-            let fileName = source.fileName(at: currentPage) ?? "unknown"
-            self.errorMessage = L("error_image_load_failed_format", fileName, currentPage + 1, totalPages)
-            debugLog("Failed to load image at index \(currentPage), file: \(fileName)", level: .minimal)
-        }
-    }
-
-    /// 見開きモードの画像読み込み
-    private func loadSpreadPages() {
-        switch readingDirection {
-        case .rightToLeft:
-            loadSpreadPages_RightToLeft()
-        case .leftToRight:
-            loadSpreadPages_LeftToRight()
-        }
-    }
-
-    /// 見開きモードの画像読み込み（右→左読み：漫画）
-    private func loadSpreadPages_RightToLeft() {
-        guard let source = imageSource else { return }
-
-        // シフト判定: currentPageまでの単ページ属性の累積が奇数か
-        let isOddShift = pageDisplaySettings.hasOddSinglePagesUpTo(currentPage)
-
-        if isOddShift {
-            // シフトあり: currentPage が左側、currentPage+1 が右側
-            self.firstPageImage = source.loadImage(at: currentPage)
-            if currentPage + 1 < source.imageCount {
-                self.secondPageImage = source.loadImage(at: currentPage + 1)
-            } else {
-                self.secondPageImage = nil
-            }
-        } else {
-            // シフトなし: currentPage が左側、currentPage+1 が右側
-            self.firstPageImage = source.loadImage(at: currentPage)
-            if currentPage + 1 < source.imageCount {
-                self.secondPageImage = source.loadImage(at: currentPage + 1)
-            } else {
-                self.secondPageImage = nil
-            }
+        // page+1が単ページ属性 → [page]
+        if isPageSingle(page + 1) {
+            return .single(page)
         }
 
-        self.errorMessage = nil
-    }
-
-    /// 見開きモードの画像読み込み（左→右読み：洋書）
-    private func loadSpreadPages_LeftToRight() {
-        guard let source = imageSource else { return }
-
-        // 左→右モード: currentPage が常に左側、currentPage+1 が右側
-        // (単ページ属性があれば shouldShowCurrentPageAsSingle で判定済み)
-        self.firstPageImage = source.loadImage(at: currentPage)
-        if currentPage + 1 < source.imageCount {
-            self.secondPageImage = source.loadImage(at: currentPage + 1)
-        } else {
-            self.secondPageImage = nil
-        }
-
-        self.errorMessage = nil
+        // 両方とも見開き可能 → [page+1|page]
+        return .spread(page + 1, page)
     }
 
     /// 次のページへ
     func nextPage() {
-        guard let source = imageSource else { return }
+        guard imageSource != nil else { return }
 
-        // ページめくりのステップ数を計算
-        let step = calculateNextPageStep()
-        let newPage = currentPage + step
+        // 現在の表示状態から次の表示状態を計算
+        guard let nextDisplay = calculateNextDisplay(
+            from: currentDisplay,
+            isSinglePage: { self.isPageSingle($0) }
+        ) else { return }
 
-        if newPage < source.imageCount {
-            currentPage = newPage
-            loadCurrentPage()
-            saveViewState()
-        }
+        // 表示を更新
+        updateCurrentPage(for: nextDisplay)
+        loadImages(for: nextDisplay)
+        saveViewState()
+
+        debugLog("nextPage: \(currentDisplay) -> currentPage=\(currentPage)", level: .verbose)
     }
 
     /// 前のページへ
     func previousPage() {
-        // ページめくりのステップ数を計算
-        let step = calculatePreviousPageStep()
-        var newPage = currentPage - step
+        guard imageSource != nil else { return }
 
-        // 負になる場合は0にクランプ
-        if newPage < 0 {
-            newPage = 0
-        }
+        // 現在の表示状態から前の表示状態を計算
+        guard let prevDisplay = calculatePreviousDisplay(
+            from: currentDisplay,
+            isSinglePage: { self.isPageSingle($0) }
+        ) else { return }
 
-        // 現在のページと異なる場合のみ移動
-        if newPage != currentPage {
-            currentPage = newPage
-            loadCurrentPage()
-            saveViewState()
-        }
+        // 表示を更新
+        updateCurrentPage(for: prevDisplay)
+        loadImages(for: prevDisplay)
+        saveViewState()
+
+        debugLog("previousPage: \(currentDisplay) -> currentPage=\(currentPage)", level: .verbose)
     }
 
     /// 先頭ページへ移動
@@ -513,53 +465,124 @@ class BookViewModel {
         }
     }
 
-    /// 次のページへのステップ数を計算
-    private func calculateNextPageStep() -> Int {
-        guard let source = imageSource else { return 1 }
+    // MARK: - ナビゲーション計算関数
 
+    /// 順方向ナビゲーション: 次の表示状態を計算
+    /// - Parameters:
+    ///   - current: 現在の表示状態
+    ///   - isSinglePage: 指定ページが単ページ属性かを判定する関数
+    /// - Returns: 次の表示状態 (終端の場合はnil)
+    private func calculateNextDisplay(
+        from current: PageDisplay,
+        isSinglePage: (Int) -> Bool
+    ) -> PageDisplay? {
+        // m = 現在表示の最大Index + 1
+        let m = current.maxIndex + 1
+
+        // 終端チェック
+        if m >= totalPages {
+            return nil
+        }
+
+        // 単ページモードの場合
         if viewMode == .single {
-            return 1
+            return .single(m)
         }
 
         // 見開きモードの場合
-        // 現在のページが単ページ表示なら1ページ進む
-        if shouldShowCurrentPageAsSingle() {
-            return 1
+        // mが単ページ属性 → [m]
+        if isSinglePage(m) {
+            return .single(m)
         }
 
-        // 見開き表示の場合、次の2ページをチェック
-        // currentPage+1 が単ページ表示属性なら step=1
-        if currentPage + 1 < source.imageCount {
-            let nextIsSingle = checkAndSetLandscapeAttribute(for: currentPage + 1)
-            if nextIsSingle {
-                return 1
-            }
+        // m+1が存在しない → [m]
+        if m + 1 >= totalPages {
+            return .single(m)
         }
 
-        // 見開き表示なら2ページ進む
-        return 2
+        // m+1が単ページ属性 → [m]
+        if isSinglePage(m + 1) {
+            return .single(m)
+        }
+
+        // 両方とも見開き可能 → [m+1|m]
+        return .spread(m + 1, m)
     }
 
-    /// 前のページへのステップ数を計算
-    private func calculatePreviousPageStep() -> Int {
+    /// 逆方向ナビゲーション: 前の表示状態を計算
+    /// - Parameters:
+    ///   - current: 現在の表示状態
+    ///   - isSinglePage: 指定ページが単ページ属性かを判定する関数
+    /// - Returns: 前の表示状態 (先端の場合はnil)
+    private func calculatePreviousDisplay(
+        from current: PageDisplay,
+        isSinglePage: (Int) -> Bool
+    ) -> PageDisplay? {
+        // m = 現在表示の最小Index - 1
+        let m = current.minIndex - 1
+
+        // 先端チェック
+        if m < 0 {
+            return nil
+        }
+
+        // 単ページモードの場合
         if viewMode == .single {
-            return 1
+            return .single(m)
         }
 
         // 見開きモードの場合
-        // currentPage-1 と currentPage-2 が両方とも単ページでなければ
-        // 見開き [n-1|n-2] に戻れるので2ページ戻る
-        // そうでなければ1ページ戻る
-        if currentPage >= 2 {
-            let prevSingle = checkAndSetLandscapeAttribute(for: currentPage - 1) ||
-                             pageDisplaySettings.isForcedSinglePage(currentPage - 1)
-            let prevPrevSingle = checkAndSetLandscapeAttribute(for: currentPage - 2) ||
-                                 pageDisplaySettings.isForcedSinglePage(currentPage - 2)
-            if !prevSingle && !prevPrevSingle {
-                return 2
-            }
+        // mが単ページ属性 → [m]
+        if isSinglePage(m) {
+            return .single(m)
         }
-        return 1
+
+        // m-1が存在しない → [m]
+        if m - 1 < 0 {
+            return .single(m)
+        }
+
+        // m-1が単ページ属性 → [m]
+        if isSinglePage(m - 1) {
+            return .single(m)
+        }
+
+        // 両方とも見開き可能 → [m|m-1]
+        return .spread(m, m - 1)
+    }
+
+    /// 表示状態に基づいて画像をロード
+    private func loadImages(for display: PageDisplay) {
+        guard let source = imageSource else { return }
+
+        switch display {
+        case .single(let page):
+            if viewMode == .single {
+                self.currentImage = source.loadImage(at: page)
+            } else {
+                self.firstPageImage = source.loadImage(at: page)
+                self.secondPageImage = nil
+            }
+
+        case .spread(let left, let right):
+            // RTL: first=right側（小さいindex）, second=left側（大きいindex）
+            self.firstPageImage = source.loadImage(at: right)
+            self.secondPageImage = source.loadImage(at: left)
+        }
+
+        self.errorMessage = nil
+    }
+
+    /// 表示状態からcurrentPageを更新
+    private func updateCurrentPage(for display: PageDisplay) {
+        currentPage = display.minIndex
+        currentDisplay = display
+    }
+
+    /// ページが単ページ属性かをチェック（統合版）
+    private func isPageSingle(_ page: Int) -> Bool {
+        return checkAndSetLandscapeAttribute(for: page) ||
+               pageDisplaySettings.isForcedSinglePage(page)
     }
 
     /// 表示モードを切り替え
@@ -845,31 +868,17 @@ class BookViewModel {
     var pageInfo: String {
         guard totalPages > 0 else { return "" }
 
-        switch viewMode {
-        case .single:
-            return "\(currentPage + 1) / \(totalPages)"
-        case .spread:
-            // 単ページ表示属性がある場合は1つだけ表示
-            if shouldShowCurrentPageAsSingle() {
-                return "\(currentPage + 1) / \(totalPages)"
-            }
+        switch currentDisplay {
+        case .single(let page):
+            return "\(page + 1) / \(totalPages)"
 
-            let firstPage = currentPage + 1
-            let secondPage = currentPage + 2
-
-            // 2ページ目が存在する場合
-            if secondPage <= totalPages {
-                switch readingDirection {
-                case .rightToLeft:
-                    // 右→左: first secondの順（右側が先）
-                    return "\(firstPage) \(secondPage) / \(totalPages)"
-                case .leftToRight:
-                    // 左→右: first secondの順（左側が先）
-                    return "\(firstPage) \(secondPage) / \(totalPages)"
-                }
-            } else {
-                // 最後のページが1ページだけの場合
-                return "\(firstPage) / \(totalPages)"
+        case .spread(let left, let right):
+            // 見開き表示: right+1, left+1 の順（右→左読みなら右側が先）
+            switch readingDirection {
+            case .rightToLeft:
+                return "\(right + 1) \(left + 1) / \(totalPages)"
+            case .leftToRight:
+                return "\(left + 1) \(right + 1) / \(totalPages)"
             }
         }
     }
@@ -878,35 +887,16 @@ class BookViewModel {
     var currentFileName: String {
         guard let source = imageSource else { return "" }
 
-        switch viewMode {
-        case .single:
-            return source.fileName(at: currentPage) ?? ""
-        case .spread:
-            // 単ページ表示の場合
-            if shouldShowCurrentPageAsSingle() {
-                return source.fileName(at: currentPage) ?? ""
-            }
+        switch currentDisplay {
+        case .single(let page):
+            return source.fileName(at: page) ?? ""
 
-            // 見開き表示の場合
-            let firstFileName = source.fileName(at: currentPage) ?? ""
+        case .spread(let left, let right):
+            let leftFileName = source.fileName(at: left) ?? ""
+            let rightFileName = source.fileName(at: right) ?? ""
 
-            // 2ページ目が存在する場合
-            if currentPage + 1 < source.imageCount {
-                let secondFileName = source.fileName(at: currentPage + 1) ?? ""
-
-                // 読み方向に応じて、画面表示順（左→右）でファイル名を表示
-                switch readingDirection {
-                case .rightToLeft:
-                    // 右→左: 画面上は [second(左) | first(右)]
-                    return "\(secondFileName)  \(firstFileName)"
-                case .leftToRight:
-                    // 左→右: 画面上は [first(左) | second(右)]
-                    return "\(firstFileName)  \(secondFileName)"
-                }
-            } else {
-                // 1ページのみの場合
-                return firstFileName
-            }
+            // 画面表示順（左→右）でファイル名を表示
+            return "\(leftFileName)  \(rightFileName)"
         }
     }
 
@@ -943,27 +933,22 @@ class BookViewModel {
             }
         }
 
-        switch viewMode {
-        case .single:
-            // 単ページ表示: ファイル名のみ
-            return source.fileName(at: currentPage) ?? "Panes"
-
-        case .spread:
-            // 見開き表示
-            if shouldShowCurrentPageAsSingle() {
-                // 単ページ（見開きモード中）: アーカイブ名 / ファイル名
-                let fileName = source.fileName(at: currentPage) ?? ""
-                return "\(archiveName) / \(fileName)"
+        switch currentDisplay {
+        case .single(let page):
+            if viewMode == .single {
+                // 単ページモード: ファイル名のみ
+                return source.fileName(at: page) ?? "Panes"
             } else {
-                // 見開き: アーカイブ名 / ファイル1 - ファイル2
-                let firstFileName = source.fileName(at: currentPage) ?? ""
-                if currentPage + 1 < source.imageCount {
-                    let secondFileName = source.fileName(at: currentPage + 1) ?? ""
-                    return "\(archiveName) / \(firstFileName) - \(secondFileName)"
-                } else {
-                    return "\(archiveName) / \(firstFileName)"
-                }
+                // 見開きモード中の単ページ: アーカイブ名 / ファイル名
+                let fileName = source.fileName(at: page) ?? ""
+                return "\(archiveName) / \(fileName)"
             }
+
+        case .spread(let left, let right):
+            // 見開き: アーカイブ名 / ファイル1 - ファイル2
+            let leftFileName = source.fileName(at: left) ?? ""
+            let rightFileName = source.fileName(at: right) ?? ""
+            return "\(archiveName) / \(rightFileName) - \(leftFileName)"
         }
     }
 
