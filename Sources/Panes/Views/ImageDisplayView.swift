@@ -78,6 +78,7 @@ struct RotationAwareImageView: View {
     let flip: ImageFlip
     let containerWidth: CGFloat
     let containerHeight: CGFloat
+    var alignment: Alignment = .center
 
     var body: some View {
         // 回転後の実効コンテナサイズを計算
@@ -105,6 +106,6 @@ struct RotationAwareImageView: View {
                 y: flip.vertical ? -1 : 1
             )
             .rotationEffect(.degrees(Double(rotation.rawValue)))
-            .frame(width: containerWidth, height: containerHeight)
+            .frame(width: containerWidth, height: containerHeight, alignment: alignment)
     }
 }

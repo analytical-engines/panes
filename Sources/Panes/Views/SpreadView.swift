@@ -20,51 +20,65 @@ struct SpreadView<ContextMenu: View>: View {
         GeometryReader { geometry in
             if let secondPageImage = secondPageImage {
                 // 見開き表示（2ページ）
-                HStack(alignment: .center, spacing: 0) {
+                // 各ページを halfWidth のコンテナ内に配置し、中央線に寄せる
+                let halfWidth = geometry.size.width / 2
+                HStack(spacing: 0) {
                     switch readingDirection {
                     case .rightToLeft:
                         // 右→左読み: 先に読むページ(first)が右側
-                        // LEFT side = secondPage, RIGHT side = firstPage
-                        Image(nsImage: secondPageImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .imageTransform(rotation: secondPageRotation, flip: secondPageFlip)
-                            .frame(height: geometry.size.height)
-                            .contextMenu {
-                                let _ = DebugLogger.log("🖼️ LEFT image context menu: secondPageIndex=\(secondPageIndex)", level: .verbose)
-                                contextMenuBuilder(secondPageIndex)
-                            }
-                        Image(nsImage: firstPageImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .imageTransform(rotation: firstPageRotation, flip: firstPageFlip)
-                            .frame(height: geometry.size.height)
-                            .contextMenu {
-                                let _ = DebugLogger.log("🖼️ RIGHT image context menu: firstPageIndex=\(firstPageIndex)", level: .verbose)
-                                contextMenuBuilder(firstPageIndex)
-                            }
+                        // LEFT side = secondPage (trailing alignment), RIGHT side = firstPage (leading alignment)
+                        RotationAwareImageView(
+                            image: secondPageImage,
+                            rotation: secondPageRotation,
+                            flip: secondPageFlip,
+                            containerWidth: halfWidth,
+                            containerHeight: geometry.size.height,
+                            alignment: .trailing
+                        )
+                        .contextMenu {
+                            let _ = DebugLogger.log("🖼️ LEFT image context menu: secondPageIndex=\(secondPageIndex)", level: .verbose)
+                            contextMenuBuilder(secondPageIndex)
+                        }
+                        RotationAwareImageView(
+                            image: firstPageImage,
+                            rotation: firstPageRotation,
+                            flip: firstPageFlip,
+                            containerWidth: halfWidth,
+                            containerHeight: geometry.size.height,
+                            alignment: .leading
+                        )
+                        .contextMenu {
+                            let _ = DebugLogger.log("🖼️ RIGHT image context menu: firstPageIndex=\(firstPageIndex)", level: .verbose)
+                            contextMenuBuilder(firstPageIndex)
+                        }
 
                     case .leftToRight:
                         // 左→右読み: 先に読むページ(first)が左側
-                        // LEFT side = firstPage, RIGHT side = secondPage
-                        Image(nsImage: firstPageImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .imageTransform(rotation: firstPageRotation, flip: firstPageFlip)
-                            .frame(height: geometry.size.height)
-                            .contextMenu {
-                                let _ = DebugLogger.log("🖼️ LEFT image context menu: firstPageIndex=\(firstPageIndex)", level: .verbose)
-                                contextMenuBuilder(firstPageIndex)
-                            }
-                        Image(nsImage: secondPageImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .imageTransform(rotation: secondPageRotation, flip: secondPageFlip)
-                            .frame(height: geometry.size.height)
-                            .contextMenu {
-                                let _ = DebugLogger.log("🖼️ RIGHT image context menu: secondPageIndex=\(secondPageIndex)", level: .verbose)
-                                contextMenuBuilder(secondPageIndex)
-                            }
+                        // LEFT side = firstPage (trailing alignment), RIGHT side = secondPage (leading alignment)
+                        RotationAwareImageView(
+                            image: firstPageImage,
+                            rotation: firstPageRotation,
+                            flip: firstPageFlip,
+                            containerWidth: halfWidth,
+                            containerHeight: geometry.size.height,
+                            alignment: .trailing
+                        )
+                        .contextMenu {
+                            let _ = DebugLogger.log("🖼️ LEFT image context menu: firstPageIndex=\(firstPageIndex)", level: .verbose)
+                            contextMenuBuilder(firstPageIndex)
+                        }
+                        RotationAwareImageView(
+                            image: secondPageImage,
+                            rotation: secondPageRotation,
+                            flip: secondPageFlip,
+                            containerWidth: halfWidth,
+                            containerHeight: geometry.size.height,
+                            alignment: .leading
+                        )
+                        .contextMenu {
+                            let _ = DebugLogger.log("🖼️ RIGHT image context menu: secondPageIndex=\(secondPageIndex)", level: .verbose)
+                            contextMenuBuilder(secondPageIndex)
+                        }
                     }
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
@@ -83,9 +97,9 @@ struct SpreadView<ContextMenu: View>: View {
                             rotation: firstPageRotation,
                             flip: firstPageFlip,
                             containerWidth: halfWidth,
-                            containerHeight: geometry.size.height
+                            containerHeight: geometry.size.height,
+                            alignment: .leading
                         )
-                        .frame(maxWidth: halfWidth, alignment: .leading)
                         .contextMenu { contextMenuBuilder(firstPageIndex) }
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height, alignment: .leading)
@@ -98,9 +112,9 @@ struct SpreadView<ContextMenu: View>: View {
                             rotation: firstPageRotation,
                             flip: firstPageFlip,
                             containerWidth: halfWidth,
-                            containerHeight: geometry.size.height
+                            containerHeight: geometry.size.height,
+                            alignment: .trailing
                         )
-                        .frame(maxWidth: halfWidth, alignment: .trailing)
                         .contextMenu { contextMenuBuilder(firstPageIndex) }
                         Spacer()
                             .frame(width: halfWidth)
