@@ -164,3 +164,15 @@
 "window_height" = "Height";
 "section_last_window_size" = "Last Used Size";
 "current_last_window_size" = "Recorded Size";
+
+// MARK: - Image Info
+
+"image_info_title" = "Image Info";
+"image_info_right_page" = "Right Page";
+"image_info_left_page" = "Left Page";
+"image_info_filename" = "File";
+"image_info_page" = "Page";
+"image_info_resolution" = "Size";
+"image_info_aspect_ratio" = "Ratio";
+"image_info_file_size" = "Size";
+"image_info_format" = "Format";

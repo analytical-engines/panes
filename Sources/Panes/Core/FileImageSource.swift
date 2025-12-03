@@ -98,4 +98,42 @@ class FileImageSource: ImageSource {
 
         return CGSize(width: imageRep.pixelsWide, height: imageRep.pixelsHigh)
     }
+
+    func fileSize(at index: Int) -> Int64? {
+        guard index >= 0 && index < imageURLs.count else {
+            return nil
+        }
+        let url = imageURLs[index]
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let size = attrs[.size] as? Int64 else {
+            return nil
+        }
+        return size
+    }
+
+    func imageFormat(at index: Int) -> String? {
+        guard index >= 0 && index < imageURLs.count else {
+            return nil
+        }
+        let ext = imageURLs[index].pathExtension.lowercased()
+
+        switch ext {
+        case "jpg", "jpeg":
+            return "JPEG"
+        case "png":
+            return "PNG"
+        case "gif":
+            return "GIF"
+        case "webp":
+            return "WebP"
+        case "bmp":
+            return "BMP"
+        case "tiff", "tif":
+            return "TIFF"
+        case "heic", "heif":
+            return "HEIC"
+        default:
+            return ext.uppercased()
+        }
+    }
 }

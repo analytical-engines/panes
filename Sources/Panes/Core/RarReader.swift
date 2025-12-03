@@ -161,4 +161,40 @@ class RarReader {
             return nil
         }
     }
+
+    /// 指定されたインデックスの画像ファイルサイズを取得
+    func fileSize(at index: Int) -> Int64? {
+        guard index >= 0 && index < imageEntries.count else {
+            return nil
+        }
+        return Int64(imageEntries[index].uncompressedSize)
+    }
+
+    /// 指定されたインデックスの画像フォーマットを取得
+    func imageFormat(at index: Int) -> String? {
+        guard index >= 0 && index < imageEntries.count else {
+            return nil
+        }
+        let fileName = imageEntries[index].fileName
+        let ext = (fileName as NSString).pathExtension.lowercased()
+
+        switch ext {
+        case "jpg", "jpeg":
+            return "JPEG"
+        case "png":
+            return "PNG"
+        case "gif":
+            return "GIF"
+        case "webp":
+            return "WebP"
+        case "bmp":
+            return "BMP"
+        case "tiff", "tif":
+            return "TIFF"
+        case "heic", "heif":
+            return "HEIC"
+        default:
+            return ext.uppercased()
+        }
+    }
 }

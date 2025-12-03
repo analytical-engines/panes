@@ -37,4 +37,12 @@ class ArchiveImageSource: ImageSource {
     func imageSize(at index: Int) -> CGSize? {
         return archiveReader.imageSize(at: index)
     }
+
+    func fileSize(at index: Int) -> Int64? {
+        return archiveReader.fileSize(at: index)
+    }
+
+    func imageFormat(at index: Int) -> String? {
+        return archiveReader.imageFormat(at: index)
+    }
 }

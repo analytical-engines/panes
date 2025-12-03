@@ -41,6 +41,9 @@ struct ContentView: View {
     // 通知オブザーバが登録済みかどうか
     @State private var notificationObserversRegistered = false
 
+    // 画像情報モーダル表示用
+    @State private var showImageInfo = false
+
     @ViewBuilder
     private var mainContent: some View {
         // isWaitingForFileを最優先でチェック（D&D時にローディング画面を表示するため）
@@ -532,6 +535,27 @@ struct ContentView: View {
         .onKeyPress(.home) { viewModel.goToFirstPage(); return .handled }
         .onKeyPress(.end) { viewModel.goToLastPage(); return .handled }
         .onKeyPress(keys: [.tab]) { _ in viewModel.skipForward(pages: appSettings.pageJumpCount); return .handled }
+        .onKeyPress(characters: CharacterSet(charactersIn: "iI")) { press in
+            // ⌘I で画像情報表示
+            if press.modifiers.contains(.command) && viewModel.hasOpenFile {
+                showImageInfo.toggle()
+                return .handled
+            }
+            return .ignored
+        }
+        .overlay {
+            // 画像情報モーダル
+            if showImageInfo {
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
+                    .onTapGesture { showImageInfo = false }
+
+                ImageInfoView(
+                    infos: viewModel.getCurrentImageInfos(),
+                    onDismiss: { showImageInfo = false }
+                )
+            }
+        }
     }
 
     private func handleOnAppear() {

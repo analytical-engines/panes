@@ -164,3 +164,15 @@
 "window_height" = "高さ";
 "section_last_window_size" = "最後に使用したサイズ";
 "current_last_window_size" = "記録されているサイズ";
+
+// MARK: - Image Info
+
+"image_info_title" = "画像情報";
+"image_info_right_page" = "右ページ";
+"image_info_left_page" = "左ページ";
+"image_info_filename" = "ファイル";
+"image_info_page" = "ページ";
+"image_info_resolution" = "解像度";
+"image_info_aspect_ratio" = "縦横比";
+"image_info_file_size" = "サイズ";
+"image_info_format" = "形式";

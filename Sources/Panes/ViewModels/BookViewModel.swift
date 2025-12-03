@@ -1216,6 +1216,52 @@ class BookViewModel {
         }
     }
 
+    // MARK: - 画像情報取得
+
+    /// 指定ページの画像情報を取得
+    func getImageInfo(at index: Int) -> ImageInfo? {
+        guard let source = imageSource,
+              index >= 0 && index < source.imageCount else {
+            return nil
+        }
+
+        let fileName = source.fileName(at: index) ?? "Unknown"
+        let size = source.imageSize(at: index) ?? CGSize.zero
+        let fileSize = source.fileSize(at: index) ?? 0
+        let format = source.imageFormat(at: index) ?? "Unknown"
+
+        return ImageInfo(
+            fileName: fileName,
+            width: Int(size.width),
+            height: Int(size.height),
+            fileSize: fileSize,
+            format: format,
+            pageIndex: index
+        )
+    }
+
+    /// 現在表示中のページの画像情報を取得
+    func getCurrentImageInfos() -> [ImageInfo] {
+        var infos: [ImageInfo] = []
+
+        switch currentDisplay {
+        case .single(let index):
+            if let info = getImageInfo(at: index) {
+                infos.append(info)
+            }
+        case .spread(let left, let right):
+            // 右→左表示の場合、右ページ（右側表示）が先、左ページ（左側表示）が後
+            if let rightInfo = getImageInfo(at: right) {
+                infos.append(rightInfo)
+            }
+            if let leftInfo = getImageInfo(at: left) {
+                infos.append(leftInfo)
+            }
+        }
+
+        return infos
+    }
+
     // MARK: - ページ表示設定のExport/Import
 
     /// Export用のデータ構造

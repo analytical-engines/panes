@@ -37,4 +37,12 @@ class RarImageSource: ImageSource {
     func imageSize(at index: Int) -> CGSize? {
         return rarReader.imageSize(at: index)
     }
+
+    func fileSize(at index: Int) -> Int64? {
+        return rarReader.fileSize(at: index)
+    }
+
+    func imageFormat(at index: Int) -> String? {
+        return rarReader.imageFormat(at: index)
+    }
 }
