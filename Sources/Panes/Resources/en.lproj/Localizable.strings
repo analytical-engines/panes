@@ -92,6 +92,7 @@
 "menu_flip_vertical" = "Flip Vertical";
 "menu_hide_page" = "Hide This Page";
 "menu_show_page" = "Show This Page";
+"menu_copy_image" = "Copy Image";
 
 // MARK: - Error Messages
 

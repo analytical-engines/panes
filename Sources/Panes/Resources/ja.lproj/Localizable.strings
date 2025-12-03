@@ -92,6 +92,7 @@
 "menu_flip_vertical" = "上下反転";
 "menu_hide_page" = "このページを非表示";
 "menu_show_page" = "このページを表示";
+"menu_copy_image" = "画像をコピー";
 
 // MARK: - Error Messages
 

@@ -254,6 +254,15 @@ struct ContentView: View {
 
         Divider()
 
+        // 画像をクリップボードにコピー
+        Button(action: {
+            viewModel.copyImageToClipboard(at: pageIndex)
+        }) {
+            Label(L("menu_copy_image"), systemImage: "doc.on.doc")
+        }
+
+        Divider()
+
         // === アーカイブ属性 ===
         // 表示モード切替
         Button(action: {

@@ -1240,6 +1240,19 @@ class BookViewModel {
         )
     }
 
+    /// 指定ページの画像を取得
+    func getImage(at index: Int) -> NSImage? {
+        return imageSource?.loadImage(at: index)
+    }
+
+    /// 指定ページの画像をクリップボードにコピー
+    func copyImageToClipboard(at index: Int) {
+        guard let image = getImage(at: index) else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.writeObjects([image])
+    }
+
     /// 現在表示中のページの画像情報を取得
     func getCurrentImageInfos() -> [ImageInfo] {
         var infos: [ImageInfo] = []
