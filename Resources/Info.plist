@@ -40,6 +40,20 @@
                 <string>com.pkware.zip-archive</string>
             </array>
         </dict>
+        <!-- RAR archives -->
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>RAR Archive</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.rarlab.rar-archive</string>
+                <string>public.rar-archive</string>
+            </array>
+        </dict>
         <!-- JPEG images -->
         <dict>
             <key>CFBundleTypeName</key>
