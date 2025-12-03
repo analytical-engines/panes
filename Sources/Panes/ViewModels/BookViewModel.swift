@@ -48,6 +48,11 @@ enum PageDisplay: Equatable {
         if case .spread = self { return true }
         return false
     }
+
+    /// 指定ページが表示に含まれているか
+    func contains(_ page: Int) -> Bool {
+        return indices.contains(page)
+    }
 }
 
 /// 書籍（画像アーカイブ）の表示状態を管理するViewModel
@@ -369,13 +374,44 @@ class BookViewModel {
         saveViewState()
     }
 
-    /// 指定ページへ移動
+    /// 指定ページへ移動（単ページ属性を考慮して正しい表示状態に到達）
     func goToPage(_ page: Int) {
         guard let source = imageSource else { return }
         let targetPage = max(0, min(page, source.imageCount - 1))
-        if targetPage != currentPage {
-            currentPage = targetPage
-            loadCurrentPage()
+
+        // 現在の表示に目標ページが含まれている場合は何もしない
+        if currentDisplay.contains(targetPage) {
+            return
+        }
+
+        let isSinglePage: (Int) -> Bool = { [weak self] p in
+            self?.isPageSingle(p) ?? false
+        }
+
+        var display = currentDisplay
+
+        if targetPage > currentDisplay.maxIndex {
+            // 順方向に進む
+            while display.maxIndex < targetPage {
+                guard let next = calculateNextDisplay(from: display, isSinglePage: isSinglePage) else {
+                    break
+                }
+                display = next
+            }
+        } else {
+            // 逆方向に戻る
+            while display.minIndex > targetPage {
+                guard let prev = calculatePreviousDisplay(from: display, isSinglePage: isSinglePage) else {
+                    break
+                }
+                display = prev
+            }
+        }
+
+        // 表示を更新
+        if display != currentDisplay {
+            updateCurrentPage(for: display)
+            loadImages(for: display)
             saveViewState()
         }
     }
