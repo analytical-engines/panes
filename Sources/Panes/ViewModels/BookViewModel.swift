@@ -62,6 +62,9 @@ class BookViewModel {
     // 横長画像判定のアスペクト比閾値（幅/高さ）
     private var landscapeAspectRatioThreshold: CGFloat = 1.2
 
+    // 閾値変更通知のオブザーバー
+    private var thresholdChangeObserver: NSObjectProtocol?
+
     // アプリ全体設定への参照
     var appSettings: AppSettings? {
         didSet {
@@ -1176,6 +1179,41 @@ class BookViewModel {
 
         // 横長判定閾値は常に最新の設定値を使用
         landscapeAspectRatioThreshold = settings.defaultLandscapeThreshold
+
+        // 閾値変更通知のオブザーバーを設定
+        setupThresholdChangeObserver()
+    }
+
+    /// 閾値変更通知のオブザーバーを設定
+    private func setupThresholdChangeObserver() {
+        // 既存のオブザーバーを削除
+        if let observer = thresholdChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+
+        // 新しいオブザーバーを設定
+        thresholdChangeObserver = NotificationCenter.default.addObserver(
+            forName: .landscapeThresholdDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleThresholdChange()
+        }
+    }
+
+    /// 閾値変更時の処理
+    private func handleThresholdChange() {
+        guard let settings = appSettings else { return }
+
+        // 新しい閾値を適用
+        landscapeAspectRatioThreshold = settings.defaultLandscapeThreshold
+
+        // ファイルが開かれている場合のみ自動判定をクリアして再読み込み
+        if imageSource != nil {
+            debugLog("Threshold changed to \(landscapeAspectRatioThreshold), clearing auto-detection", level: .normal)
+            pageDisplaySettings.clearAllAutoDetection()
+            loadCurrentPage()
+        }
     }
 
     // MARK: - ページ表示設定のExport/Import

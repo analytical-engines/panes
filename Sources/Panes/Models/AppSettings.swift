@@ -49,7 +49,11 @@ class AppSettings {
 
     /// 横長判定のデフォルト閾値
     var defaultLandscapeThreshold: Double {
-        didSet { defaults.set(defaultLandscapeThreshold, forKey: Keys.defaultLandscapeThreshold) }
+        didSet {
+            defaults.set(defaultLandscapeThreshold, forKey: Keys.defaultLandscapeThreshold)
+            // 閾値が変更されたら通知を発行（自動判定結果をクリアするため）
+            NotificationCenter.default.post(name: .landscapeThresholdDidChange, object: nil)
+        }
     }
 
     /// ページジャンプ回数
@@ -252,4 +256,11 @@ class AppSettings {
     private func saveWindowSizeMode() {
         defaults.set(windowSizeMode.rawValue, forKey: Keys.windowSizeMode)
     }
+}
+
+// MARK: - Notification Names
+
+extension Notification.Name {
+    /// 横長判定の閾値が変更された
+    static let landscapeThresholdDidChange = Notification.Name("landscapeThresholdDidChange")
 }

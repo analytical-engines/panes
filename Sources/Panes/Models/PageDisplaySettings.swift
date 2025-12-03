@@ -151,6 +151,13 @@ struct PageDisplaySettings: Codable {
         checkedPageIndices.remove(index)
     }
 
+    /// 全ページの自動検出をクリア（閾値変更時に呼ぶ）
+    /// ユーザーが手動設定した属性は保持する
+    mutating func clearAllAutoDetection() {
+        autoDetectedLandscapeIndices.removeAll()
+        checkedPageIndices.removeAll()
+    }
+
     /// 単ページ表示を切り替え（ユーザー手動設定）
     mutating func toggleForceSinglePage(at index: Int) {
         if userForcedSinglePageIndices.contains(index) {
