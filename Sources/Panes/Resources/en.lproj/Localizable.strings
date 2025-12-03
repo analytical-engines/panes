@@ -47,6 +47,7 @@
 // MARK: - SettingsView - History Settings
 
 "section_history_settings" = "History Settings";
+"show_history_on_launch" = "Show history on launch";
 "max_history_count" = "Maximum History Count";
 "history_count_unit" = "items";
 "max_history_description" = "Maximum number of files to save in history";
@@ -56,6 +57,8 @@
 "section_history_management" = "History Management";
 "current_history_count_format" = "Current history count: %d items";
 "clear_all" = "Clear All";
+"reset_access_counts_label" = "Access counts";
+"reset_access_counts" = "Reset";
 
 // MARK: - Status Bar
 
@@ -64,6 +67,7 @@
 // MARK: - Menu Items
 
 "menu_close_file" = "Close File";
+"menu_show_history" = "Show History";
 "menu_single_view" = "Single View";
 "menu_spread_view" = "Spread View";
 "menu_reading_direction_rtl" = "Reading Direction: Right to Left";

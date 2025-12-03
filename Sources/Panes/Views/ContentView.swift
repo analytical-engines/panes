@@ -38,6 +38,9 @@ struct ContentView: View {
     // ウィンドウフレーム追跡用
     @State private var currentWindowFrame: CGRect?
 
+    // 通知オブザーバが登録済みかどうか
+    @State private var notificationObserversRegistered = false
+
     @ViewBuilder
     private var mainContent: some View {
         if viewModel.viewMode == .single, let image = viewModel.currentImage {
@@ -441,6 +444,7 @@ struct ContentView: View {
             if newValue && !pendingURLs.isEmpty {
                 let urls = pendingURLs
                 pendingURLs = []
+                DebugLogger.log("📬 Opening file via onChange(isWaitingForFile): \(urls.first?.lastPathComponent ?? "unknown")", level: .normal)
                 DispatchQueue.main.async { viewModel.openFiles(urls: urls) }
             }
         }
@@ -546,8 +550,11 @@ struct ContentView: View {
         ContentView.lastCreatedWindowIDLock.unlock()
 
         setupEventMonitor()
-        setupNotificationObservers()
-        setupSessionObservers()
+        if !notificationObserversRegistered {
+            notificationObserversRegistered = true
+            setupNotificationObservers()
+            setupSessionObservers()
+        }
     }
 
     /// ウィンドウフレーム変更の監視を設定
@@ -767,12 +774,19 @@ struct ContentView: View {
             forName: NSNotification.Name("OpenFilesInNewWindow"),
             object: nil,
             queue: .main
-        ) { [openWindow] notification in
-            if let urls = notification.userInfo?["urls"] as? [URL] {
-                ContentView.lastCreatedWindowIDLock.lock()
-                ContentView.nextWindowShouldWaitForFile = true
-                ContentView.lastCreatedWindowIDLock.unlock()
+        ) { [openWindow, windowID] notification in
+            // 最後に作成されたウィンドウのみが処理
+            ContentView.lastCreatedWindowIDLock.lock()
+            let isLastCreated = ContentView.lastCreatedWindowID == windowID
+            ContentView.lastCreatedWindowIDLock.unlock()
 
+            guard isLastCreated else { return }
+
+            ContentView.lastCreatedWindowIDLock.lock()
+            ContentView.nextWindowShouldWaitForFile = true
+            ContentView.lastCreatedWindowIDLock.unlock()
+
+            if let urls = notification.userInfo?["urls"] as? [URL] {
                 Task { @MainActor in
                     openWindow(id: "new")
                     try? await Task.sleep(nanoseconds: 200_000_000)
@@ -794,9 +808,12 @@ struct ContentView: View {
             let isLastCreated = ContentView.lastCreatedWindowID == windowID
             ContentView.lastCreatedWindowIDLock.unlock()
 
+            DebugLogger.log("📬 OpenFilesInNewlyCreatedWindow - windowID: \(windowID), isLastCreated: \(isLastCreated)", level: .normal)
+
             guard isLastCreated else { return }
 
             if let urls = notification.userInfo?["urls"] as? [URL] {
+                DebugLogger.log("📬 Opening file via notification: \(urls.first?.lastPathComponent ?? "unknown")", level: .normal)
                 Task { @MainActor in
                     viewModel.openFiles(urls: urls)
                 }
@@ -1043,7 +1060,7 @@ struct HistoryListView: View {
             ? recentHistory
             : recentHistory.filter { $0.fileName.localizedCaseInsensitiveContains(filterText) }
 
-        if !recentHistory.isEmpty {
+        if appSettings.showHistoryOnLaunch && !recentHistory.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 Text("\(L("recent_files").dropLast()) [\(recentHistory.count)/\(appSettings.maxHistoryCount)]:")
                     .foregroundColor(.gray)

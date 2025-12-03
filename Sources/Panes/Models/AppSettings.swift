@@ -18,6 +18,7 @@ class AppSettings {
         static let defaultShowStatusBar = "defaultShowStatusBar"
         static let defaultLandscapeThreshold = "defaultLandscapeThreshold"
         static let maxHistoryCount = "maxHistoryCount"
+        static let showHistoryOnLaunch = "showHistoryOnLaunch"
         static let sessionRestoreEnabled = "sessionRestoreEnabled"
         static let sessionConcurrentLoadingLimit = "sessionConcurrentLoadingLimit"
         static let windowSizeMode = "windowSizeMode"
@@ -55,6 +56,11 @@ class AppSettings {
     /// 履歴の最大保存件数
     var maxHistoryCount: Int {
         didSet { defaults.set(maxHistoryCount, forKey: Keys.maxHistoryCount) }
+    }
+
+    /// 起動時に履歴を表示するか
+    var showHistoryOnLaunch: Bool {
+        didSet { defaults.set(showHistoryOnLaunch, forKey: Keys.showHistoryOnLaunch) }
     }
 
     // MARK: - セッション設定
@@ -155,6 +161,13 @@ class AppSettings {
             maxHistoryCount = defaults.integer(forKey: Keys.maxHistoryCount)
         } else {
             maxHistoryCount = 50  // デフォルト: 50件
+        }
+
+        // 起動時の履歴表示の読み込み
+        if defaults.object(forKey: Keys.showHistoryOnLaunch) != nil {
+            showHistoryOnLaunch = defaults.bool(forKey: Keys.showHistoryOnLaunch)
+        } else {
+            showHistoryOnLaunch = true  // デフォルト: 表示する
         }
 
         // セッション復元の読み込み

@@ -145,6 +145,9 @@ class SessionManager {
         restoredWindowCount += 1
         DebugLogger.log("✅ Window finished loading: \(id) (\(restoredWindowCount)/\(totalWindowsToRestore))", level: .normal)
 
+        // ローディングパネルの進捗を更新
+        updateLoadingProgress()
+
         // 全ウィンドウの復元が完了したかチェック
         if restoredWindowCount >= totalWindowsToRestore && pendingRestorations.isEmpty {
             DebugLogger.log("🎉 All windows restored! Revealing windows...", level: .normal)

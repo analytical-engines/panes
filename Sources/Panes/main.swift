@@ -98,6 +98,14 @@ struct ImageViewerApp: App {
             }
 
             CommandGroup(after: .sidebar) {
+                Toggle(L("menu_show_history"), isOn: Binding(
+                    get: { appSettings.showHistoryOnLaunch },
+                    set: { appSettings.showHistoryOnLaunch = $0 }
+                ))
+                .keyboardShortcut("h", modifiers: [.command, .shift])
+
+                Divider()
+
                 Button(action: {
                     focusedViewModel?.toggleViewMode()
                 }) {

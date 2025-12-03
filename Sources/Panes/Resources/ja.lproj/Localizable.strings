@@ -47,6 +47,7 @@
 // MARK: - SettingsView - History Settings
 
 "section_history_settings" = "履歴設定";
+"show_history_on_launch" = "起動時に履歴を表示";
 "max_history_count" = "最大保存件数";
 "history_count_unit" = "件";
 "max_history_description" = "履歴に保存するファイルの最大件数です";
@@ -56,6 +57,8 @@
 "section_history_management" = "履歴の管理";
 "current_history_count_format" = "現在の履歴件数: %d件";
 "clear_all" = "すべてクリア";
+"reset_access_counts_label" = "読み込み回数";
+"reset_access_counts" = "リセット";
 
 // MARK: - Status Bar
 
@@ -64,6 +67,7 @@
 // MARK: - Menu Items
 
 "menu_close_file" = "ファイルを閉じる";
+"menu_show_history" = "履歴を表示";
 "menu_single_view" = "単ページ表示";
 "menu_spread_view" = "見開き表示";
 "menu_reading_direction_rtl" = "読み方向: 右から左";

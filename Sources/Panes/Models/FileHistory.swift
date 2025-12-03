@@ -62,6 +62,8 @@ class FileHistoryManager {
 
     /// ファイルアクセスを記録
     func recordAccess(fileKey: String, filePath: String, fileName: String) {
+        DebugLogger.log("📊 recordAccess called: \(fileName)", level: .normal)
+
         // 既存のエントリを探す
         if let index = history.firstIndex(where: { $0.fileKey == fileKey }) {
             // 既存エントリを更新
@@ -106,6 +108,14 @@ class FileHistoryManager {
     /// 全ての履歴をクリア
     func clearAllHistory() {
         history.removeAll()
+        saveHistory()
+    }
+
+    /// 全てのアクセスカウントを1にリセット
+    func resetAllAccessCounts() {
+        for i in history.indices {
+            history[i].accessCount = 1
+        }
         saveHistory()
     }
 

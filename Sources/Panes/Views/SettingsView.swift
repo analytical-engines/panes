@@ -153,6 +153,8 @@ struct HistorySettingsTab: View {
 
         Form {
             Section(L("section_history_settings")) {
+                Toggle(L("show_history_on_launch"), isOn: $settings.showHistoryOnLaunch)
+
                 HStack {
                     Text(L("max_history_count"))
                     Spacer()
@@ -174,6 +176,15 @@ struct HistorySettingsTab: View {
                         historyManager.clearAllHistory()
                     }
                     .foregroundColor(.red)
+                }
+
+                HStack {
+                    Text(L("reset_access_counts_label"))
+                    Spacer()
+                    Button(L("reset_access_counts")) {
+                        historyManager.resetAllAccessCounts()
+                    }
+                    .disabled(historyManager.history.isEmpty)
                 }
             }
         }
