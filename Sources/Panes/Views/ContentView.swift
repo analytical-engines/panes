@@ -43,7 +43,10 @@ struct ContentView: View {
 
     @ViewBuilder
     private var mainContent: some View {
-        if viewModel.viewMode == .single, let image = viewModel.currentImage {
+        // isWaitingForFileを最優先でチェック（D&D時にローディング画面を表示するため）
+        if isWaitingForFile {
+            LoadingView()
+        } else if viewModel.viewMode == .single, let image = viewModel.currentImage {
             SinglePageView(
                 image: image,
                 pageIndex: viewModel.currentPage,
@@ -99,8 +102,6 @@ struct ContentView: View {
                 readingDirection: viewModel.readingDirection,
                 onJumpToPage: { viewModel.goToPage($0) }
             )
-        } else if isWaitingForFile {
-            LoadingView()
         } else {
             InitialScreenView(
                 errorMessage: viewModel.errorMessage,
@@ -466,6 +467,9 @@ struct ContentView: View {
         }
         .onChange(of: viewModel.hasOpenFile) { _, hasFile in
             if hasFile {
+                // ファイルが開かれたらローディング状態を解除
+                isWaitingForFile = false
+
                 // 復元モードの場合はフレームを設定して完了通知
                 if let entry = restorationEntry {
                     // 復元フレームでウィンドウを登録
@@ -501,10 +505,10 @@ struct ContentView: View {
                     )
                 }
             } else {
-                // ファイルが閉じられたらローディング状態をリセット
-                isWaitingForFile = false
                 // セッションマネージャーからも削除
                 sessionManager.removeWindow(id: windowID)
+                // D&D中でなければローディング状態をリセット（D&D中はisWaitingForFileを維持）
+                // Note: isWaitingForFileはファイル読み込み完了時にfalseになる
             }
         }
         .onChange(of: viewModel.currentPage) { _, newPage in
@@ -922,9 +926,14 @@ struct ContentView: View {
 
             await MainActor.run {
                 if !urls.isEmpty {
-                    withAnimation {
-                        self.pendingURLs = urls
+                    DebugLogger.log("📬 Opening file via D&D: \(urls.first?.lastPathComponent ?? "unknown")", level: .normal)
+                    // 先にローディング状態にしてから閉じる（初期画面が表示されないように）
+                    withAnimation { isWaitingForFile = true }
+                    // 既にファイルが開いている場合は一度閉じる（hasOpenFileのonChangeをトリガーするため）
+                    if viewModel.hasOpenFile {
+                        viewModel.closeFile()
                     }
+                    viewModel.openFiles(urls: urls)
                 }
             }
         }
