@@ -380,7 +380,19 @@ class BookViewModel {
     /// 先頭ページへ移動
     func goToFirstPage() {
         guard imageSource != nil else { return }
-        currentPage = 0
+
+        // 見開きモードの場合は最初の表示可能なページを探す
+        var firstVisiblePage = 0
+        if viewMode == .spread {
+            while firstVisiblePage < totalPages && pageDisplaySettings.isHidden(firstVisiblePage) {
+                firstVisiblePage += 1
+            }
+            if firstVisiblePage >= totalPages {
+                return // 全ページ非表示の場合は何もしない
+            }
+        }
+
+        currentPage = firstVisiblePage
         loadCurrentPage()
         saveViewState()
     }
@@ -388,7 +400,30 @@ class BookViewModel {
     /// 指定ページへ移動（単ページ属性を考慮して正しい表示状態に到達）
     func goToPage(_ page: Int) {
         guard let source = imageSource else { return }
-        let targetPage = max(0, min(page, source.imageCount - 1))
+        var targetPage = max(0, min(page, source.imageCount - 1))
+
+        // 見開きモードで非表示ページを指定した場合は次の表示可能なページを探す
+        if viewMode == .spread && pageDisplaySettings.isHidden(targetPage) {
+            // 前方に表示可能なページを探す
+            var nextVisible = targetPage + 1
+            while nextVisible < totalPages && pageDisplaySettings.isHidden(nextVisible) {
+                nextVisible += 1
+            }
+            if nextVisible < totalPages {
+                targetPage = nextVisible
+            } else {
+                // 前方にない場合は後方を探す
+                var prevVisible = targetPage - 1
+                while prevVisible >= 0 && pageDisplaySettings.isHidden(prevVisible) {
+                    prevVisible -= 1
+                }
+                if prevVisible >= 0 {
+                    targetPage = prevVisible
+                } else {
+                    return // 全ページ非表示の場合は何もしない
+                }
+            }
+        }
 
         // 現在の表示に目標ページが含まれている場合は何もしない
         if currentDisplay.contains(targetPage) {
@@ -451,37 +486,50 @@ class BookViewModel {
             return
         }
 
-        // 見開きモードの場合：
-        // 最後の画像の横長判定を先に行う
-        let lastIsSingle = checkAndSetLandscapeAttribute(for: lastIndex)
+        // 見開きモードの場合：最後の表示可能なページを探す
+        var lastVisibleIndex = lastIndex
+        while lastVisibleIndex >= 0 && pageDisplaySettings.isHidden(lastVisibleIndex) {
+            lastVisibleIndex -= 1
+        }
+        if lastVisibleIndex < 0 {
+            return // 全ページ非表示の場合は何もしない
+        }
 
-        // 最後の画像データが単ページ属性つきなら単ページで表示
+        // 最後の表示可能な画像の横長判定を先に行う
+        let lastIsSingle = checkAndSetLandscapeAttribute(for: lastVisibleIndex)
+
+        // 最後の表示可能な画像が単ページ属性つきなら単ページで表示
         if lastIsSingle {
-            currentPage = lastIndex
+            currentPage = lastVisibleIndex
             loadCurrentPage()
             saveViewState()
             return
         }
 
-        // 最後の画像データの１つ前が単ページ属性つきの場合、
-        // 最後の画像と見開きするペアがないので単ページで表示
-        if lastIndex > 0 {
-            let prevIsSingle = checkAndSetLandscapeAttribute(for: lastIndex - 1)
-            if prevIsSingle {
-                currentPage = lastIndex
-                loadCurrentPage()
-                saveViewState()
-                return
-            }
+        // ペア候補を探す（非表示ページはスキップ）
+        var prevVisibleIndex = lastVisibleIndex - 1
+        while prevVisibleIndex >= 0 && pageDisplaySettings.isHidden(prevVisibleIndex) {
+            prevVisibleIndex -= 1
         }
 
-        // それ以外の場合、最後の２つの画像データで見開き表示
-        // （見開き表示では左ページのインデックスを currentPage とする）
-        if lastIndex > 0 {
-            currentPage = lastIndex - 1
-        } else {
-            currentPage = lastIndex
+        // ペアが存在しない、またはペアが単ページ属性の場合は単ページ表示
+        if prevVisibleIndex < 0 {
+            currentPage = lastVisibleIndex
+            loadCurrentPage()
+            saveViewState()
+            return
         }
+
+        let prevIsSingle = checkAndSetLandscapeAttribute(for: prevVisibleIndex)
+        if prevIsSingle {
+            currentPage = lastVisibleIndex
+            loadCurrentPage()
+            saveViewState()
+            return
+        }
+
+        // 両方見開き可能 → ペアで表示
+        currentPage = prevVisibleIndex
         loadCurrentPage()
         saveViewState()
     }
@@ -780,26 +828,46 @@ class BookViewModel {
     func toggleHidden(at pageIndex: Int) {
         pageDisplaySettings.toggleHidden(at: pageIndex)
         saveViewState()
-        // 非表示にした場合は次の表示可能なページへ移動
+        // 非表示にした場合は表示を再計算
         if pageDisplaySettings.isHidden(pageIndex) && viewMode == .spread {
-            // 次の表示可能なページを探す
-            var nextVisiblePage = pageIndex + 1
-            while nextVisiblePage < totalPages && pageDisplaySettings.isHidden(nextVisiblePage) {
-                nextVisiblePage += 1
+            // 現在の表示のもう一方のページがあればそこを起点にする
+            let otherPage: Int?
+            switch currentDisplay {
+            case .single(let p):
+                otherPage = (p == pageIndex) ? nil : p
+            case .spread(let left, let right):
+                if left == pageIndex {
+                    otherPage = right
+                } else if right == pageIndex {
+                    otherPage = left
+                } else {
+                    otherPage = nil
+                }
             }
-            if nextVisiblePage < totalPages {
-                // 現在の表示を強制的に再計算
-                currentPage = nextVisiblePage
+
+            if let other = otherPage, !pageDisplaySettings.isHidden(other) {
+                // 相方が表示可能ならそこを起点に再計算
+                currentPage = other
                 loadCurrentPage()
             } else {
-                // 後ろに表示可能なページがない場合は前を探す
-                var prevVisiblePage = pageIndex - 1
-                while prevVisiblePage >= 0 && pageDisplaySettings.isHidden(prevVisiblePage) {
-                    prevVisiblePage -= 1
+                // 相方がいないか非表示の場合、次の表示可能なページを探す
+                var nextVisiblePage = pageIndex + 1
+                while nextVisiblePage < totalPages && pageDisplaySettings.isHidden(nextVisiblePage) {
+                    nextVisiblePage += 1
                 }
-                if prevVisiblePage >= 0 {
-                    currentPage = prevVisiblePage
+                if nextVisiblePage < totalPages {
+                    currentPage = nextVisiblePage
                     loadCurrentPage()
+                } else {
+                    // 後ろにない場合は前を探す
+                    var prevVisiblePage = pageIndex - 1
+                    while prevVisiblePage >= 0 && pageDisplaySettings.isHidden(prevVisiblePage) {
+                        prevVisiblePage -= 1
+                    }
+                    if prevVisiblePage >= 0 {
+                        currentPage = prevVisiblePage
+                        loadCurrentPage()
+                    }
                 }
             }
         }
