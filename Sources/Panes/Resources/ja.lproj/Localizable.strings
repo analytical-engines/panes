@@ -34,9 +34,15 @@
 // MARK: - SettingsView - Image Detection
 
 "section_image_detection" = "画像判定";
-"landscape_threshold" = "横長判定の閾値";
+"landscape_threshold" = "見開き画像判定の閾値";
 "landscape_threshold_unit" = "（幅/高さ）";
-"landscape_threshold_description" = "この値以上のアスペクト比の画像を横長と判定し、単ページ表示します";
+"landscape_threshold_description" = "この値以上のアスペクト比の画像を見開き画像と判定し、単ページ表示します";
+
+// MARK: - SettingsView - App Behavior
+
+"section_app_behavior" = "アプリの動作";
+"quit_on_last_window_closed" = "最後のウィンドウを閉じたら終了";
+"quit_on_last_window_closed_description" = "オフにすると、全てのウィンドウを閉じてもアプリはDockに残ります";
 
 // MARK: - SettingsView - History Settings
 

@@ -70,6 +70,14 @@ struct GeneralSettingsTab: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+
+            Section(L("section_app_behavior")) {
+                Toggle(L("quit_on_last_window_closed"), isOn: $settings.quitOnLastWindowClosed)
+
+                Text(L("quit_on_last_window_closed_description"))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
         .formStyle(.grouped)
         .padding()

@@ -34,9 +34,15 @@
 // MARK: - SettingsView - Image Detection
 
 "section_image_detection" = "Image Detection";
-"landscape_threshold" = "Landscape Threshold";
+"landscape_threshold" = "Spread Image Threshold";
 "landscape_threshold_unit" = "(Width/Height)";
-"landscape_threshold_description" = "Images with aspect ratio above this value are detected as landscape and displayed as single page";
+"landscape_threshold_description" = "Images with aspect ratio above this value are detected as spread images and displayed as single page";
+
+// MARK: - SettingsView - App Behavior
+
+"section_app_behavior" = "App Behavior";
+"quit_on_last_window_closed" = "Quit when last window is closed";
+"quit_on_last_window_closed_description" = "When disabled, the app stays in Dock even after all windows are closed";
 
 // MARK: - SettingsView - History Settings
 

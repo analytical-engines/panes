@@ -428,8 +428,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if sessionManager?.isRestoring == true {
             return false
         }
-        // 最後のウィンドウを閉じたらアプリを終了
-        return true
+        // 設定に従って終了するかどうかを決定
+        return appSettings?.quitOnLastWindowClosed ?? true
     }
 
     func applicationWillTerminate(_ notification: Notification) {

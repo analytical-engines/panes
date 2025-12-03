@@ -25,6 +25,7 @@ class AppSettings {
         static let fixedWindowHeight = "fixedWindowHeight"
         static let lastWindowWidth = "lastWindowWidth"
         static let lastWindowHeight = "lastWindowHeight"
+        static let quitOnLastWindowClosed = "quitOnLastWindowClosed"
     }
 
     // MARK: - 表示設定
@@ -93,6 +94,13 @@ class AppSettings {
     /// 最後に使用したウィンドウ高さ
     var lastWindowHeight: Double {
         didSet { defaults.set(lastWindowHeight, forKey: Keys.lastWindowHeight) }
+    }
+
+    // MARK: - アプリ動作設定
+
+    /// 最後のウィンドウを閉じたらアプリを終了するか
+    var quitOnLastWindowClosed: Bool {
+        didSet { defaults.set(quitOnLastWindowClosed, forKey: Keys.quitOnLastWindowClosed) }
     }
 
     /// 新規ウィンドウ用のサイズを取得
@@ -193,6 +201,13 @@ class AppSettings {
             lastWindowHeight = defaults.double(forKey: Keys.lastWindowHeight)
         } else {
             lastWindowHeight = 800  // デフォルト: 800
+        }
+
+        // 最後のウィンドウを閉じた時の動作
+        if defaults.object(forKey: Keys.quitOnLastWindowClosed) != nil {
+            quitOnLastWindowClosed = defaults.bool(forKey: Keys.quitOnLastWindowClosed)
+        } else {
+            quitOnLastWindowClosed = true  // デフォルト: 終了する
         }
     }
 
