@@ -54,6 +54,16 @@ struct GeneralSettingsTab: View {
                 .pickerStyle(.segmented)
 
                 Toggle(L("show_status_bar"), isOn: $settings.defaultShowStatusBar)
+
+                HStack {
+                    Text(L("page_jump_count"))
+                    Spacer()
+                    TextField("", value: $settings.pageJumpCount, format: .number)
+                        .frame(width: 60)
+                        .textFieldStyle(.roundedBorder)
+                    Text(L("page_jump_count_unit"))
+                        .foregroundColor(.secondary)
+                }
             }
 
             Section(L("section_image_detection")) {

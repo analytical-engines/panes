@@ -439,28 +439,52 @@ class BookViewModel {
         saveViewState()
     }
 
-    /// 指定したページ数だけ前に進む
-    func skipForward(pages: Int = 10) {
-        guard let source = imageSource else { return }
-        let targetPage = currentPage + pages
+    /// 指定した回数だけページをめくって進む
+    func skipForward(pages: Int = 5) {
+        guard imageSource != nil else { return }
 
-        // 最終ページを超える場合は、goToLastPage()と同じロジックを適用
-        if targetPage >= source.imageCount - 1 {
-            goToLastPage()
-            return
+        let isSinglePage: (Int) -> Bool = { [weak self] page in
+            self?.isPageSingle(page) ?? false
         }
 
-        currentPage = targetPage
-        loadCurrentPage()
-        saveViewState()
+        var display = currentDisplay
+        for _ in 0..<pages {
+            guard let next = calculateNextDisplay(from: display, isSinglePage: isSinglePage) else {
+                // 終端に到達
+                break
+            }
+            display = next
+        }
+
+        // 表示を更新
+        if display != currentDisplay {
+            updateCurrentPage(for: display)
+            loadImages(for: display)
+            saveViewState()
+        }
     }
 
-    /// 指定したページ数だけ後ろに戻る
-    func skipBackward(pages: Int = 10) {
-        let newPage = max(currentPage - pages, 0)
-        if newPage != currentPage {
-            currentPage = newPage
-            loadCurrentPage()
+    /// 指定した回数だけページをめくって戻る
+    func skipBackward(pages: Int = 5) {
+        guard imageSource != nil else { return }
+
+        let isSinglePage: (Int) -> Bool = { [weak self] page in
+            self?.isPageSingle(page) ?? false
+        }
+
+        var display = currentDisplay
+        for _ in 0..<pages {
+            guard let prev = calculatePreviousDisplay(from: display, isSinglePage: isSinglePage) else {
+                // 先端に到達
+                break
+            }
+            display = prev
+        }
+
+        // 表示を更新
+        if display != currentDisplay {
+            updateCurrentPage(for: display)
+            loadImages(for: display)
             saveViewState()
         }
     }

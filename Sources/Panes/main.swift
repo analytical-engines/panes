@@ -167,7 +167,6 @@ struct ImageViewerApp: App {
                                 : "square"
                         )
                     }
-                    .keyboardShortcut("s", modifiers: .command)
 
                     // 単ページ配置設定
                     Menu(L("menu_single_page_alignment")) {

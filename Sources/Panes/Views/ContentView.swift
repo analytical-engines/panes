@@ -511,7 +511,7 @@ struct ContentView: View {
         }
         .onKeyPress(.home) { viewModel.goToFirstPage(); return .handled }
         .onKeyPress(.end) { viewModel.goToLastPage(); return .handled }
-        .onKeyPress(keys: [.tab]) { _ in viewModel.skipForward(pages: 10); return .handled }
+        .onKeyPress(keys: [.tab]) { _ in viewModel.skipForward(pages: appSettings.pageJumpCount); return .handled }
     }
 
     private func handleOnAppear() {
@@ -759,7 +759,7 @@ struct ContentView: View {
 
                 if event.modifierFlags.contains(.shift) {
                     DebugLogger.log("   ✅ Shift+Tab detected in my window, skipping backward", level: .normal)
-                    viewModel?.skipBackward(pages: 10)
+                    viewModel?.skipBackward(pages: self.appSettings.pageJumpCount)
                     return nil
                 } else {
                     DebugLogger.log("   Tab without shift, passing through", level: .verbose)

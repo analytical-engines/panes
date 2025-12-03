@@ -19,6 +19,7 @@ class AppSettings {
         static let defaultLandscapeThreshold = "defaultLandscapeThreshold"
         static let maxHistoryCount = "maxHistoryCount"
         static let showHistoryOnLaunch = "showHistoryOnLaunch"
+        static let pageJumpCount = "pageJumpCount"
         static let sessionRestoreEnabled = "sessionRestoreEnabled"
         static let sessionConcurrentLoadingLimit = "sessionConcurrentLoadingLimit"
         static let windowSizeMode = "windowSizeMode"
@@ -49,6 +50,11 @@ class AppSettings {
     /// 横長判定のデフォルト閾値
     var defaultLandscapeThreshold: Double {
         didSet { defaults.set(defaultLandscapeThreshold, forKey: Keys.defaultLandscapeThreshold) }
+    }
+
+    /// ページジャンプ回数
+    var pageJumpCount: Int {
+        didSet { defaults.set(pageJumpCount, forKey: Keys.pageJumpCount) }
     }
 
     // MARK: - 履歴設定
@@ -154,6 +160,13 @@ class AppSettings {
             defaultLandscapeThreshold = defaults.double(forKey: Keys.defaultLandscapeThreshold)
         } else {
             defaultLandscapeThreshold = 1.2  // デフォルト: 1.2
+        }
+
+        // ページジャンプ回数の読み込み
+        if defaults.object(forKey: Keys.pageJumpCount) != nil {
+            pageJumpCount = defaults.integer(forKey: Keys.pageJumpCount)
+        } else {
+            pageJumpCount = 5  // デフォルト: 5回
         }
 
         // 履歴最大件数の読み込み

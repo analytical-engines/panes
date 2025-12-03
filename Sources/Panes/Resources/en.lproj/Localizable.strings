@@ -30,6 +30,8 @@
 "reading_direction_rtl" = "Right to Left";
 "reading_direction_ltr" = "Left to Right";
 "show_status_bar" = "Show Status Bar";
+"page_jump_count" = "Page Jump Count";
+"page_jump_count_unit" = "times";
 
 // MARK: - SettingsView - Image Detection
 
