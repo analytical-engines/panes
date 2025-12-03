@@ -90,7 +90,7 @@ struct ContentView: View {
             .pageIndicatorOverlay(
                 archiveName: viewModel.archiveFileName,
                 currentPage: viewModel.currentPage,
-                totalPages: viewModel.totalPages,
+                totalPages: viewModel.visiblePageCount,
                 isSpreadView: true,
                 hasSecondPage: viewModel.secondPageImage != nil,
                 currentFileName: viewModel.currentFileName,
@@ -231,6 +231,22 @@ struct ContentView: View {
                 systemImage: (flip.horizontal || flip.vertical) ? "arrow.left.and.right.righttriangle.left.righttriangle.right.fill" : "arrow.left.and.right.righttriangle.left.righttriangle.right"
             )
         }
+
+        // 非表示切り替え
+        // 単ページモードでは「非表示にする」は無効、「表示する（解除）」は有効
+        Button(action: {
+            viewModel.toggleHidden(at: pageIndex)
+        }) {
+            Label(
+                viewModel.isHidden(at: pageIndex)
+                    ? L("menu_show_page")
+                    : L("menu_hide_page"),
+                systemImage: viewModel.isHidden(at: pageIndex)
+                    ? "eye"
+                    : "eye.slash"
+            )
+        }
+        .disabled(viewModel.viewMode == .single && !viewModel.isHidden(at: pageIndex))
 
         Divider()
 

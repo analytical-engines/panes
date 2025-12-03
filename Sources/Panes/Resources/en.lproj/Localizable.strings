@@ -90,6 +90,8 @@
 "menu_flip" = "Flip";
 "menu_flip_horizontal" = "Flip Horizontal";
 "menu_flip_vertical" = "Flip Vertical";
+"menu_hide_page" = "Hide This Page";
+"menu_show_page" = "Show This Page";
 
 // MARK: - Error Messages
 

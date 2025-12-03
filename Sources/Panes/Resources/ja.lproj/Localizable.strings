@@ -90,6 +90,8 @@
 "menu_flip" = "反転";
 "menu_flip_horizontal" = "左右反転";
 "menu_flip_vertical" = "上下反転";
+"menu_hide_page" = "このページを非表示";
+"menu_show_page" = "このページを表示";
 
 // MARK: - Error Messages
 

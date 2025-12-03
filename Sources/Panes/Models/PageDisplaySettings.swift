@@ -59,6 +59,9 @@ struct PageDisplaySettings: Codable {
     /// アスペクト比判定が完了したページのインデックス集合（回転考慮後）
     var checkedPageIndices: Set<Int> = []
 
+    /// 非表示（スキップ）するページのインデックス集合
+    var hiddenPageIndices: Set<Int> = []
+
     /// ページごとの単ページ表示時の配置設定
     var pageAlignments: [Int: SinglePageAlignment] = [:]
 
@@ -74,6 +77,7 @@ struct PageDisplaySettings: Codable {
         case userForcedSinglePageIndices
         case autoDetectedLandscapeIndices
         case checkedPageIndices
+        case hiddenPageIndices
         case pageAlignments
         case pageRotations
         case pageFlips
@@ -97,6 +101,7 @@ struct PageDisplaySettings: Codable {
         }
 
         checkedPageIndices = (try? container.decode(Set<Int>.self, forKey: .checkedPageIndices)) ?? []
+        hiddenPageIndices = (try? container.decode(Set<Int>.self, forKey: .hiddenPageIndices)) ?? []
         pageAlignments = (try? container.decode([Int: SinglePageAlignment].self, forKey: .pageAlignments)) ?? [:]
         pageRotations = (try? container.decode([Int: ImageRotation].self, forKey: .pageRotations)) ?? [:]
         pageFlips = (try? container.decode([Int: ImageFlip].self, forKey: .pageFlips)) ?? [:]
@@ -107,6 +112,7 @@ struct PageDisplaySettings: Codable {
         try container.encode(userForcedSinglePageIndices, forKey: .userForcedSinglePageIndices)
         try container.encode(autoDetectedLandscapeIndices, forKey: .autoDetectedLandscapeIndices)
         try container.encode(checkedPageIndices, forKey: .checkedPageIndices)
+        try container.encode(hiddenPageIndices, forKey: .hiddenPageIndices)
         try container.encode(pageAlignments, forKey: .pageAlignments)
         try container.encode(pageRotations, forKey: .pageRotations)
         try container.encode(pageFlips, forKey: .pageFlips)
@@ -253,5 +259,26 @@ struct PageDisplaySettings: Codable {
         } else {
             pageFlips[index] = current
         }
+    }
+
+    // MARK: - 非表示設定
+
+    /// 指定したページが非表示かどうか
+    func isHidden(_ index: Int) -> Bool {
+        return hiddenPageIndices.contains(index)
+    }
+
+    /// 指定したページの非表示設定を切り替え
+    mutating func toggleHidden(at index: Int) {
+        if hiddenPageIndices.contains(index) {
+            hiddenPageIndices.remove(index)
+        } else {
+            hiddenPageIndices.insert(index)
+        }
+    }
+
+    /// 非表示ページ数
+    var hiddenPageCount: Int {
+        return hiddenPageIndices.count
     }
 }

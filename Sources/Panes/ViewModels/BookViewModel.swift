@@ -99,8 +99,13 @@ class BookViewModel {
     // 現在の表示状態
     private(set) var currentDisplay: PageDisplay = .single(0)
 
-    // 総ページ数
+    // 総ページ数（元の画像数）
     var totalPages: Int = 0
+
+    // 表示可能ページ数（非表示を除く）
+    var visiblePageCount: Int {
+        return totalPages - pageDisplaySettings.hiddenPageCount
+    }
 
     // ソース名（ファイル名など）
     var sourceName: String = ""
@@ -316,18 +321,24 @@ class BookViewModel {
             return .single(page)
         }
 
-        // page+1が存在しない → [page]
-        if page + 1 >= totalPages {
+        // ペア候補を探す（非表示ページはスキップ）
+        var pairPage = page + 1
+        while pairPage < totalPages && pageDisplaySettings.isHidden(pairPage) {
+            pairPage += 1
+        }
+
+        // ペア候補が存在しない → [page]
+        if pairPage >= totalPages {
             return .single(page)
         }
 
-        // page+1が単ページ属性 → [page]
-        if isPageSingle(page + 1) {
+        // ペア候補が単ページ属性 → [page]
+        if isPageSingle(pairPage) {
             return .single(page)
         }
 
-        // 両方とも見開き可能 → [page+1|page]
-        return .spread(page + 1, page)
+        // 両方とも見開き可能 → [pairPage|page]
+        return .spread(pairPage, page)
     }
 
     /// 次のページへ
@@ -536,37 +547,50 @@ class BookViewModel {
         from current: PageDisplay,
         isSinglePage: (Int) -> Bool
     ) -> PageDisplay? {
-        // m = 現在表示の最大Index + 1
-        let m = current.maxIndex + 1
+        // 単ページモードの場合（非表示設定を無視）
+        if viewMode == .single {
+            let m = current.maxIndex + 1
+            if m >= totalPages {
+                return nil
+            }
+            return .single(m)
+        }
+
+        // 見開きモードの場合（非表示ページはスキップ）
+        // m = 現在表示の最大Index + 1 (非表示ページはスキップ)
+        var m = current.maxIndex + 1
+        while m < totalPages && pageDisplaySettings.isHidden(m) {
+            m += 1
+        }
 
         // 終端チェック
         if m >= totalPages {
             return nil
         }
 
-        // 単ページモードの場合
-        if viewMode == .single {
-            return .single(m)
-        }
-
-        // 見開きモードの場合
         // mが単ページ属性 → [m]
         if isSinglePage(m) {
             return .single(m)
         }
 
+        // m+1を探す（非表示ページはスキップ）
+        var m1 = m + 1
+        while m1 < totalPages && pageDisplaySettings.isHidden(m1) {
+            m1 += 1
+        }
+
         // m+1が存在しない → [m]
-        if m + 1 >= totalPages {
+        if m1 >= totalPages {
             return .single(m)
         }
 
         // m+1が単ページ属性 → [m]
-        if isSinglePage(m + 1) {
+        if isSinglePage(m1) {
             return .single(m)
         }
 
-        // 両方とも見開き可能 → [m+1|m]
-        return .spread(m + 1, m)
+        // 両方とも見開き可能 → [m1|m]
+        return .spread(m1, m)
     }
 
     /// 逆方向ナビゲーション: 前の表示状態を計算
@@ -578,37 +602,50 @@ class BookViewModel {
         from current: PageDisplay,
         isSinglePage: (Int) -> Bool
     ) -> PageDisplay? {
-        // m = 現在表示の最小Index - 1
-        let m = current.minIndex - 1
+        // 単ページモードの場合（非表示設定を無視）
+        if viewMode == .single {
+            let m = current.minIndex - 1
+            if m < 0 {
+                return nil
+            }
+            return .single(m)
+        }
+
+        // 見開きモードの場合（非表示ページはスキップ）
+        // m = 現在表示の最小Index - 1 (非表示ページはスキップ)
+        var m = current.minIndex - 1
+        while m >= 0 && pageDisplaySettings.isHidden(m) {
+            m -= 1
+        }
 
         // 先端チェック
         if m < 0 {
             return nil
         }
 
-        // 単ページモードの場合
-        if viewMode == .single {
-            return .single(m)
-        }
-
-        // 見開きモードの場合
         // mが単ページ属性 → [m]
         if isSinglePage(m) {
             return .single(m)
         }
 
+        // m-1を探す（非表示ページはスキップ）
+        var m1 = m - 1
+        while m1 >= 0 && pageDisplaySettings.isHidden(m1) {
+            m1 -= 1
+        }
+
         // m-1が存在しない → [m]
-        if m - 1 < 0 {
+        if m1 < 0 {
             return .single(m)
         }
 
         // m-1が単ページ属性 → [m]
-        if isSinglePage(m - 1) {
+        if isSinglePage(m1) {
             return .single(m)
         }
 
         // 両方とも見開き可能 → [m|m-1]
-        return .spread(m, m - 1)
+        return .spread(m, m1)
     }
 
     /// 表示状態に基づいて画像をロード
@@ -730,6 +767,52 @@ class BookViewModel {
     /// 指定ページが単ページ表示属性を持つか（ユーザー設定または自動検出）
     func isForcedSingle(at pageIndex: Int) -> Bool {
         return pageDisplaySettings.isForcedSinglePage(pageIndex)
+    }
+
+    // MARK: - 非表示設定
+
+    /// 現在のページの非表示設定を切り替え
+    func toggleCurrentPageHidden() {
+        toggleHidden(at: currentPage)
+    }
+
+    /// 指定ページの非表示設定を切り替え
+    func toggleHidden(at pageIndex: Int) {
+        pageDisplaySettings.toggleHidden(at: pageIndex)
+        saveViewState()
+        // 非表示にした場合は次の表示可能なページへ移動
+        if pageDisplaySettings.isHidden(pageIndex) && viewMode == .spread {
+            // 次の表示可能なページを探す
+            var nextVisiblePage = pageIndex + 1
+            while nextVisiblePage < totalPages && pageDisplaySettings.isHidden(nextVisiblePage) {
+                nextVisiblePage += 1
+            }
+            if nextVisiblePage < totalPages {
+                // 現在の表示を強制的に再計算
+                currentPage = nextVisiblePage
+                loadCurrentPage()
+            } else {
+                // 後ろに表示可能なページがない場合は前を探す
+                var prevVisiblePage = pageIndex - 1
+                while prevVisiblePage >= 0 && pageDisplaySettings.isHidden(prevVisiblePage) {
+                    prevVisiblePage -= 1
+                }
+                if prevVisiblePage >= 0 {
+                    currentPage = prevVisiblePage
+                    loadCurrentPage()
+                }
+            }
+        }
+    }
+
+    /// 現在のページが非表示かどうか
+    var isCurrentPageHidden: Bool {
+        return pageDisplaySettings.isHidden(currentPage)
+    }
+
+    /// 指定ページが非表示かどうか
+    func isHidden(at pageIndex: Int) -> Bool {
+        return pageDisplaySettings.isHidden(pageIndex)
     }
 
     /// 現在のページの配置を取得（デフォルトロジックを含む）
