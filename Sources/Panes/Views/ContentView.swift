@@ -1151,6 +1151,7 @@ struct HistoryListView: View {
                         }
                     }
                 }
+                .scrollIndicators(.visible, axes: .vertical)
                 .frame(maxHeight: 300)
 
                 // フィルタ結果の件数表示
