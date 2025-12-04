@@ -1145,7 +1145,7 @@ struct HistoryListView: View {
                 .cornerRadius(6)
 
                 ScrollView {
-                    VStack(spacing: 8) {
+                    LazyVStack(spacing: 8) {
                         ForEach(filteredHistory) { entry in
                             HistoryEntryRow(entry: entry, onOpenHistoryFile: onOpenHistoryFile)
                         }
