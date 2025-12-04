@@ -10,12 +10,16 @@ final class FileHistoryData {
     var lastAccessDate: Date
     var accessCount: Int
 
+    /// ページ表示設定（JSON形式で保存）
+    var pageSettingsData: Data?
+
     init(fileKey: String, filePath: String, fileName: String) {
         self.fileKey = fileKey
         self.filePath = filePath
         self.fileName = fileName
         self.lastAccessDate = Date()
         self.accessCount = 1
+        self.pageSettingsData = nil
     }
 
     /// ファイルがアクセス可能かどうか
@@ -32,5 +36,16 @@ final class FileHistoryData {
             lastAccessDate: lastAccessDate,
             accessCount: accessCount
         )
+    }
+
+    /// ページ表示設定を取得
+    func getPageSettings() -> PageDisplaySettings? {
+        guard let data = pageSettingsData else { return nil }
+        return try? JSONDecoder().decode(PageDisplaySettings.self, from: data)
+    }
+
+    /// ページ表示設定を保存
+    func setPageSettings(_ settings: PageDisplaySettings) {
+        pageSettingsData = try? JSONEncoder().encode(settings)
     }
 }

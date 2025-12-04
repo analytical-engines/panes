@@ -7,6 +7,7 @@ enum WindowSizeMode: String, CaseIterable {
 }
 
 /// アプリ全体の設定を管理
+@MainActor
 @Observable
 class AppSettings {
     private let defaults = UserDefaults.standard

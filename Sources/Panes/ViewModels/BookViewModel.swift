@@ -56,6 +56,7 @@ enum PageDisplay: Equatable {
 }
 
 /// 書籍（画像アーカイブ）の表示状態を管理するViewModel
+@MainActor
 @Observable
 class BookViewModel {
 
@@ -63,7 +64,7 @@ class BookViewModel {
     private var landscapeAspectRatioThreshold: CGFloat = 1.2
 
     // 閾値変更通知のオブザーバー
-    private var thresholdChangeObserver: NSObjectProtocol?
+    private var thresholdChangeTask: Task<Void, Never>?
 
     // アプリ全体設定への参照
     var appSettings: AppSettings? {
@@ -79,7 +80,6 @@ class BookViewModel {
     private let viewModeKey = "viewMode"
     private let currentPageKey = "currentPage"
     private let readingDirectionKey = "readingDirection"
-    private let pageDisplaySettingsKey = "pageDisplaySettings"
 
     // 履歴管理（外部から注入される）
     var historyManager: FileHistoryManager?
@@ -262,35 +262,33 @@ class BookViewModel {
             return
         }
 
-        // バックグラウンドスレッドでファイル読み込み
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let source: ImageSource?
-
-            // アーカイブファイルの場合
-            if urls.count == 1 {
-                let ext = urls[0].pathExtension.lowercased()
-                if ext == "zip" || ext == "cbz" {
-                    source = ArchiveImageSource(url: urls[0])
-                } else if ext == "rar" || ext == "cbr" {
-                    source = RarImageSource(url: urls[0])
-                } else {
-                    // 画像ファイルの場合
-                    source = FileImageSource(urls: urls)
-                }
+        // バックグラウンドで読み込み、完了後にUI更新
+        Task {
+            let source = await Self.loadImageSource(from: urls)
+            if let source = source {
+                self.openSource(source)
             } else {
-                // 複数ファイルの場合
-                source = FileImageSource(urls: urls)
+                self.errorMessage = L("error_cannot_open_file")
             }
+        }
+    }
 
-            // メインスレッドでUI更新
-            DispatchQueue.main.async {
-                guard let self = self else { return }
-                if let source = source {
-                    self.openSource(source)
-                } else {
-                    self.errorMessage = L("error_cannot_open_file")
-                }
+    /// バックグラウンドでImageSourceを読み込む
+    private nonisolated static func loadImageSource(from urls: [URL]) async -> ImageSource? {
+        // アーカイブファイルの場合
+        if urls.count == 1 {
+            let ext = urls[0].pathExtension.lowercased()
+            if ext == "zip" || ext == "cbz" {
+                return ArchiveImageSource(url: urls[0])
+            } else if ext == "rar" || ext == "cbr" {
+                return RarImageSource(url: urls[0])
+            } else {
+                // 画像ファイルの場合
+                return FileImageSource(urls: urls)
             }
+        } else {
+            // 複数ファイルの場合
+            return FileImageSource(urls: urls)
         }
     }
 
@@ -1022,9 +1020,7 @@ class BookViewModel {
         UserDefaults.standard.set(directionString, forKey: "\(readingDirectionKey)-\(fileKey)")
 
         // ページ表示設定を保存
-        if let encoded = try? JSONEncoder().encode(pageDisplaySettings) {
-            UserDefaults.standard.set(encoded, forKey: "\(pageDisplaySettingsKey)-\(fileKey)")
-        }
+        historyManager?.savePageDisplaySettings(pageDisplaySettings, for: fileKey)
     }
 
     /// 表示状態を復元（モード、ページ番号、読み方向、ページ表示設定）
@@ -1051,14 +1047,8 @@ class BookViewModel {
         }
 
         // ページ表示設定を復元
-        if let data = UserDefaults.standard.data(forKey: "\(pageDisplaySettingsKey)-\(fileKey)") {
-            do {
-                pageDisplaySettings = try JSONDecoder().decode(PageDisplaySettings.self, from: data)
-            } catch {
-                debugLog("Failed to decode PageDisplaySettings: \(error)", level: .minimal)
-                // デコード失敗時は空の設定で初期化
-                pageDisplaySettings = PageDisplaySettings()
-            }
+        if let settings = historyManager?.loadPageDisplaySettings(for: fileKey) {
+            pageDisplaySettings = settings
         } else {
             // 設定が存在しない場合は空の設定で初期化
             pageDisplaySettings = PageDisplaySettings()
@@ -1186,18 +1176,15 @@ class BookViewModel {
 
     /// 閾値変更通知のオブザーバーを設定
     private func setupThresholdChangeObserver() {
-        // 既存のオブザーバーを削除
-        if let observer = thresholdChangeObserver {
-            NotificationCenter.default.removeObserver(observer)
-        }
+        // 既存のタスクをキャンセル
+        thresholdChangeTask?.cancel()
 
-        // 新しいオブザーバーを設定
-        thresholdChangeObserver = NotificationCenter.default.addObserver(
-            forName: .landscapeThresholdDidChange,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            self?.handleThresholdChange()
+        // 新しいオブザーバーを設定（async sequence使用）
+        thresholdChangeTask = Task { [weak self] in
+            for await _ in NotificationCenter.default.notifications(named: .landscapeThresholdDidChange) {
+                guard !Task.isCancelled else { break }
+                self?.handleThresholdChange()
+            }
         }
     }
 

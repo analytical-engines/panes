@@ -26,11 +26,12 @@ struct ContentView: View {
     @State private var pendingURLs: [URL] = []
 
     // 最後に作成されたウィンドウのIDを保持する静的変数
-    private static var lastCreatedWindowID: UUID?
-    private static var lastCreatedWindowIDLock = NSLock()
+    // nonisolated(unsafe)を使用: NSLockで保護されているためスレッドセーフ
+    nonisolated(unsafe) private static var lastCreatedWindowID: UUID?
+    nonisolated(unsafe) private static var lastCreatedWindowIDLock = NSLock()
 
     // 次に作成されるウィンドウがファイル待ち状態かどうか
-    private static var nextWindowShouldWaitForFile = false
+    nonisolated(unsafe) private static var nextWindowShouldWaitForFile = false
 
     // セッション復元用のエントリ
     @State private var restorationEntry: WindowSessionEntry?
@@ -612,14 +613,20 @@ struct ContentView: View {
 
     /// ウィンドウフレーム変更の監視を設定
     private func setupWindowFrameObserver(for window: NSWindow) {
+        let windowID = self.windowID
+        let sessionManager = self.sessionManager
+        let appSettings = self.appSettings
+
         NotificationCenter.default.addObserver(
             forName: NSWindow.didMoveNotification,
             object: window,
             queue: .main
         ) { [weak window] _ in
-            if let frame = window?.frame {
-                self.currentWindowFrame = frame
-                self.sessionManager.updateWindowFrame(id: self.windowID, frame: frame)
+            // queue: .mainなのでMainActorコンテキストで実行される
+            MainActor.assumeIsolated {
+                if let frame = window?.frame {
+                    sessionManager.updateWindowFrame(id: windowID, frame: frame)
+                }
             }
         }
 
@@ -628,17 +635,22 @@ struct ContentView: View {
             object: window,
             queue: .main
         ) { [weak window] _ in
-            if let frame = window?.frame {
-                self.currentWindowFrame = frame
-                self.sessionManager.updateWindowFrame(id: self.windowID, frame: frame)
-                // 最後のウィンドウサイズを保存
-                self.appSettings.updateLastWindowSize(frame.size)
+            // queue: .mainなのでMainActorコンテキストで実行される
+            MainActor.assumeIsolated {
+                if let frame = window?.frame {
+                    sessionManager.updateWindowFrame(id: windowID, frame: frame)
+                    // 最後のウィンドウサイズを保存
+                    appSettings.updateLastWindowSize(frame.size)
+                }
             }
         }
     }
 
     /// セッション復元通知の監視を設定
     private func setupSessionObservers() {
+        let windowID = self.windowID
+        let sessionManager = self.sessionManager
+
         // 復元通知を受け取る
         NotificationCenter.default.addObserver(
             forName: .restoreWindow,
@@ -660,7 +672,9 @@ struct ContentView: View {
 
             if let entry = notification.userInfo?["entry"] as? WindowSessionEntry {
                 DebugLogger.log("📬 Processing entry: \(entry.filePath)", level: .normal)
-                restoreFromSession(entry)
+                Task { @MainActor in
+                    self.restoreFromSession(entry)
+                }
             }
         }
 
@@ -710,22 +724,24 @@ struct ContentView: View {
             object: nil,
             queue: .main
         ) { _ in
-            // 保存されている復元エントリのフレームを適用
-            guard let entry = self.restorationEntry else {
-                DebugLogger.log("📐 No restoration entry for window: \(windowID)", level: .verbose)
-                return
+            Task { @MainActor in
+                // 保存されている復元エントリのフレームを適用
+                guard let entry = self.restorationEntry else {
+                    DebugLogger.log("📐 No restoration entry for window: \(windowID)", level: .verbose)
+                    return
+                }
+
+                let targetFrame = self.validateWindowFrame(entry.frame)
+                DebugLogger.log("📐 Applying frame for window: \(windowID) -> \(targetFrame)", level: .normal)
+
+                if let windowNumber = self.myWindowNumber,
+                   let window = NSApp.windows.first(where: { $0.windowNumber == windowNumber }) {
+                    window.setFrame(targetFrame, display: true, animate: false)
+                    DebugLogger.log("📐 Frame applied to window: \(windowNumber)", level: .normal)
+                }
+
+                self.restorationEntry = nil
             }
-
-            let targetFrame = self.validateWindowFrame(entry.frame)
-            DebugLogger.log("📐 Applying frame for window: \(windowID) -> \(targetFrame)", level: .normal)
-
-            if let windowNumber = self.myWindowNumber,
-               let window = NSApp.windows.first(where: { $0.windowNumber == windowNumber }) {
-                window.setFrame(targetFrame, display: true, animate: false)
-                DebugLogger.log("📐 Frame applied to window: \(windowNumber)", level: .normal)
-            }
-
-            self.restorationEntry = nil
         }
     }
 
@@ -852,22 +868,25 @@ struct ContentView: View {
             }
         }
 
+        let viewModel = self.viewModel
+        let myWindowID = self.windowID
         NotificationCenter.default.addObserver(
             forName: NSNotification.Name("OpenFilesInNewlyCreatedWindow"),
             object: nil,
             queue: .main
-        ) { [viewModel, windowID] notification in
+        ) { notification in
             ContentView.lastCreatedWindowIDLock.lock()
-            let isLastCreated = ContentView.lastCreatedWindowID == windowID
+            let isLastCreated = ContentView.lastCreatedWindowID == myWindowID
             ContentView.lastCreatedWindowIDLock.unlock()
 
-            DebugLogger.log("📬 OpenFilesInNewlyCreatedWindow - windowID: \(windowID), isLastCreated: \(isLastCreated)", level: .normal)
+            DebugLogger.log("📬 OpenFilesInNewlyCreatedWindow - windowID: \(myWindowID), isLastCreated: \(isLastCreated)", level: .normal)
 
             guard isLastCreated else { return }
 
             if let urls = notification.userInfo?["urls"] as? [URL] {
                 DebugLogger.log("📬 Opening file via notification: \(urls.first?.lastPathComponent ?? "unknown")", level: .normal)
-                Task { @MainActor in
+                // queue: .mainなのでMainActorコンテキストで実行される
+                MainActor.assumeIsolated {
                     viewModel.openFiles(urls: urls)
                 }
             }

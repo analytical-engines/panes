@@ -35,10 +35,12 @@ struct FileHistoryEntry: Codable, Identifiable {
 }
 
 /// ファイル履歴を管理するクラス
+@MainActor
 @Observable
 class FileHistoryManager {
     private let legacyHistoryKey = "fileHistory"
     private let migrationCompletedKey = "historyMigrationToSwiftDataCompleted"
+    private let pageSettingsMigrationCompletedKey = "pageSettingsMigrationToSwiftDataCompleted"
 
     // SwiftData用
     private var modelContainer: ModelContainer?
@@ -61,6 +63,7 @@ class FileHistoryManager {
         setupSwiftData()
         if useSwiftData {
             migrateFromUserDefaultsIfNeeded()
+            migratePageSettingsFromUserDefaultsIfNeeded()
             loadHistory()
         } else {
             // フォールバック: UserDefaultsから読み込む
@@ -115,22 +118,89 @@ class FileHistoryManager {
 
         DebugLogger.log("📦 Migrating \(legacyEntries.count) history entries from UserDefaults to SwiftData", level: .minimal)
 
+        var migratedPageSettingsCount = 0
+
         // SwiftDataに移行
         for entry in legacyEntries {
             let historyData = FileHistoryData(fileKey: entry.fileKey, filePath: entry.filePath, fileName: entry.fileName)
             historyData.lastAccessDate = entry.lastAccessDate
             historyData.accessCount = entry.accessCount
+
+            // ページ表示設定も移行
+            if let pageSettingsData = UserDefaults.standard.data(forKey: "\(pageDisplaySettingsKey)-\(entry.fileKey)"),
+               let pageSettings = try? JSONDecoder().decode(PageDisplaySettings.self, from: pageSettingsData) {
+                historyData.setPageSettings(pageSettings)
+                migratedPageSettingsCount += 1
+            }
+
             context.insert(historyData)
         }
 
         do {
             try context.save()
             UserDefaults.standard.set(true, forKey: migrationCompletedKey)
+
             // 移行完了後にUserDefaultsから削除
             UserDefaults.standard.removeObject(forKey: legacyHistoryKey)
-            DebugLogger.log("✅ Migration completed successfully", level: .minimal)
+
+            // ページ表示設定もUserDefaultsから削除
+            for entry in legacyEntries {
+                UserDefaults.standard.removeObject(forKey: "\(pageDisplaySettingsKey)-\(entry.fileKey)")
+            }
+
+            DebugLogger.log("✅ Migration completed: \(legacyEntries.count) entries, \(migratedPageSettingsCount) page settings", level: .minimal)
         } catch {
             DebugLogger.log("❌ Migration failed: \(error)", level: .minimal)
+        }
+    }
+
+    /// ページ表示設定のみをUserDefaultsからSwiftDataへ移行（既存履歴がある場合用）
+    private func migratePageSettingsFromUserDefaultsIfNeeded() {
+        guard !UserDefaults.standard.bool(forKey: pageSettingsMigrationCompletedKey) else {
+            return
+        }
+
+        guard let context = modelContext else {
+            DebugLogger.log("❌ Page settings migration skipped: ModelContext not available", level: .minimal)
+            return
+        }
+
+        DebugLogger.log("📦 Migrating page settings from UserDefaults to SwiftData", level: .minimal)
+
+        do {
+            // 既存のSwiftData履歴を取得
+            let descriptor = FetchDescriptor<FileHistoryData>()
+            let historyEntries = try context.fetch(descriptor)
+
+            var migratedCount = 0
+            var keysToRemove: [String] = []
+
+            for entry in historyEntries {
+                // 既にページ設定がある場合はスキップ
+                guard entry.pageSettingsData == nil else { continue }
+
+                let key = "\(pageDisplaySettingsKey)-\(entry.fileKey)"
+                if let data = UserDefaults.standard.data(forKey: key),
+                   let settings = try? JSONDecoder().decode(PageDisplaySettings.self, from: data) {
+                    entry.setPageSettings(settings)
+                    migratedCount += 1
+                    keysToRemove.append(key)
+                }
+            }
+
+            if migratedCount > 0 {
+                try context.save()
+            }
+
+            // UserDefaultsから削除
+            for key in keysToRemove {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+
+            UserDefaults.standard.set(true, forKey: pageSettingsMigrationCompletedKey)
+            DebugLogger.log("✅ Page settings migration completed: \(migratedCount) settings migrated", level: .minimal)
+        } catch {
+            DebugLogger.log("❌ Page settings migration failed: \(error)", level: .minimal)
         }
     }
 
@@ -358,7 +428,33 @@ class FileHistoryManager {
     }
 
     /// 指定したfileKeyのページ表示設定を読み込む
-    private func loadPageDisplaySettings(for fileKey: String) -> PageDisplaySettings? {
+    func loadPageDisplaySettings(for fileKey: String) -> PageDisplaySettings? {
+        if useSwiftData {
+            return loadPageDisplaySettingsFromSwiftData(for: fileKey)
+        } else {
+            return loadPageDisplaySettingsFromUserDefaults(for: fileKey)
+        }
+    }
+
+    /// SwiftDataからページ表示設定を読み込む
+    private func loadPageDisplaySettingsFromSwiftData(for fileKey: String) -> PageDisplaySettings? {
+        guard let context = modelContext else { return nil }
+        do {
+            let searchKey = fileKey
+            var descriptor = FetchDescriptor<FileHistoryData>(
+                predicate: #Predicate<FileHistoryData> { $0.fileKey == searchKey }
+            )
+            descriptor.fetchLimit = 1
+            let results = try context.fetch(descriptor)
+            return results.first?.getPageSettings()
+        } catch {
+            DebugLogger.log("❌ Failed to load page settings: \(error)", level: .minimal)
+            return nil
+        }
+    }
+
+    /// UserDefaultsからページ表示設定を読み込む（フォールバック）
+    private func loadPageDisplaySettingsFromUserDefaults(for fileKey: String) -> PageDisplaySettings? {
         guard let data = UserDefaults.standard.data(forKey: "\(pageDisplaySettingsKey)-\(fileKey)") else {
             return nil
         }
@@ -366,7 +462,38 @@ class FileHistoryManager {
     }
 
     /// 指定したfileKeyのページ表示設定を保存
-    private func savePageDisplaySettings(_ settings: PageDisplaySettings, for fileKey: String) {
+    func savePageDisplaySettings(_ settings: PageDisplaySettings, for fileKey: String) {
+        if useSwiftData {
+            savePageDisplaySettingsToSwiftData(settings, for: fileKey)
+        } else {
+            savePageDisplaySettingsToUserDefaults(settings, for: fileKey)
+        }
+    }
+
+    /// SwiftDataにページ表示設定を保存
+    private func savePageDisplaySettingsToSwiftData(_ settings: PageDisplaySettings, for fileKey: String) {
+        guard let context = modelContext else { return }
+        do {
+            let searchKey = fileKey
+            var descriptor = FetchDescriptor<FileHistoryData>(
+                predicate: #Predicate<FileHistoryData> { $0.fileKey == searchKey }
+            )
+            descriptor.fetchLimit = 1
+            let results = try context.fetch(descriptor)
+
+            if let historyData = results.first {
+                historyData.setPageSettings(settings)
+                try context.save()
+            } else {
+                DebugLogger.log("⚠️ No history entry found for fileKey: \(fileKey)", level: .verbose)
+            }
+        } catch {
+            DebugLogger.log("❌ Failed to save page settings: \(error)", level: .minimal)
+        }
+    }
+
+    /// UserDefaultsにページ表示設定を保存（フォールバック）
+    private func savePageDisplaySettingsToUserDefaults(_ settings: PageDisplaySettings, for fileKey: String) {
         if let encoded = try? JSONEncoder().encode(settings) {
             UserDefaults.standard.set(encoded, forKey: "\(pageDisplaySettingsKey)-\(fileKey)")
         }
@@ -410,12 +537,11 @@ class FileHistoryManager {
                         )
                         newData.lastAccessDate = item.entry.lastAccessDate
                         newData.accessCount = item.entry.accessCount
-                        context.insert(newData)
-
-                        if let settings = item.pageSettings,
-                           loadPageDisplaySettings(for: item.entry.fileKey) == nil {
-                            savePageDisplaySettings(settings, for: item.entry.fileKey)
+                        // ページ設定を直接設定
+                        if let settings = item.pageSettings {
+                            newData.setPageSettings(settings)
                         }
+                        context.insert(newData)
                     }
                 }
             } else {
@@ -433,11 +559,11 @@ class FileHistoryManager {
                     )
                     newData.lastAccessDate = item.entry.lastAccessDate
                     newData.accessCount = item.entry.accessCount
-                    context.insert(newData)
-
+                    // ページ設定を直接設定
                     if let settings = item.pageSettings {
-                        savePageDisplaySettings(settings, for: item.entry.fileKey)
+                        newData.setPageSettings(settings)
                     }
+                    context.insert(newData)
                 }
             }
 

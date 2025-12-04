@@ -198,7 +198,7 @@ class SessionManager {
 
     /// ウィンドウのフレームを更新する
     func updateWindowFrame(id: UUID, frame: CGRect) {
-        guard var entry = activeWindows[id] else { return }
+        guard let entry = activeWindows[id] else { return }
         let updated = WindowSessionEntry(
             id: entry.id,
             filePath: entry.filePath,
