@@ -466,7 +466,19 @@ class BookViewModel {
     /// 1ページシフト（見開きのズレ調整用）
     func shiftPage(forward: Bool) {
         guard let source = imageSource else { return }
-        let newPage = forward ? currentPage + 1 : currentPage - 1
+
+        // 非表示ページをスキップして次/前の表示可能なページを探す
+        var newPage = forward ? currentPage + 1 : currentPage - 1
+        if forward {
+            while newPage < source.imageCount && pageDisplaySettings.isHidden(newPage) {
+                newPage += 1
+            }
+        } else {
+            while newPage >= 0 && pageDisplaySettings.isHidden(newPage) {
+                newPage -= 1
+            }
+        }
+
         if newPage >= 0 && newPage < source.imageCount {
             currentPage = newPage
             loadCurrentPage()
