@@ -241,6 +241,16 @@ struct ImageViewerApp: App {
                 .environment(sessionManager)
         }
 
+        // 「このアプリケーションで開く」用のウィンドウグループ
+        WindowGroup(id: "new") {
+            ContentView()
+                .environment(historyManager)
+                .environment(appSettings)
+                .environment(sessionManager)
+        }
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(getDefaultWindowSize())
+
         // セッション復元用のウィンドウグループ
         WindowGroup(id: "restore") {
             ContentView()
@@ -432,7 +442,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         // 復元中は終了しない
-        if sessionManager?.isRestoring == true {
+        if sessionManager?.isProcessing == true {
             return false
         }
         // 設定に従って終了するかどうかを決定
@@ -459,11 +469,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func application(_ application: NSApplication, open urls: [URL]) {
         // Finderから「このアプリケーションで開く」でファイルが渡される
-        // 新しいウィンドウを開くための通知を送信
-        NotificationCenter.default.post(
-            name: NSNotification.Name("OpenFilesInNewWindow"),
-            object: nil,
-            userInfo: ["urls": urls]
-        )
+        // SessionManagerの統合キューに追加
+        sessionManager?.addFilesToOpen(urls: urls)
     }
 }

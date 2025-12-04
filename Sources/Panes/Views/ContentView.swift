@@ -33,8 +33,8 @@ struct ContentView: View {
     // 次に作成されるウィンドウがファイル待ち状態かどうか
     nonisolated(unsafe) private static var nextWindowShouldWaitForFile = false
 
-    // セッション復元用のエントリ
-    @State private var restorationEntry: WindowSessionEntry?
+    // セッション復元用のフレーム
+    @State private var pendingFrame: CGRect?
 
     // ウィンドウフレーム追跡用
     @State private var currentWindowFrame: CGRect?
@@ -483,15 +483,15 @@ struct ContentView: View {
                 // ファイルが開かれたらローディング状態を解除
                 isWaitingForFile = false
 
-                // 復元モードの場合はフレームを設定して完了通知
-                if let entry = restorationEntry {
+                // セッション復元モードの場合はフレームを設定して完了通知
+                if let frame = pendingFrame {
                     // 復元フレームでウィンドウを登録
                     sessionManager.registerWindow(
                         id: windowID,
                         filePath: viewModel.currentFilePath ?? "",
                         fileKey: viewModel.currentFileKey,
                         currentPage: viewModel.currentPage,
-                        frame: entry.frame
+                        frame: frame
                     )
 
                     // myWindowNumber がまだ設定されていない場合、ここで取得を試みる
@@ -506,7 +506,7 @@ struct ContentView: View {
                     // フレーム適用は全復元完了後に一括で行う
                     DebugLogger.log("📐 Window ready, waiting for batch frame application: \(windowID)", level: .normal)
                     sessionManager.windowDidFinishLoading(id: windowID)
-                    // restorationEntryはフレーム適用時に使用するため保持
+                    // pendingFrameはフレーム適用時に使用するため保持
                 } else if let frame = currentWindowFrame {
                     // 通常モード：現在のフレームでウィンドウを登録
                     sessionManager.registerWindow(
@@ -516,6 +516,11 @@ struct ContentView: View {
                         currentPage: viewModel.currentPage,
                         frame: frame
                     )
+
+                    // 統合キューからの読み込み完了を通知
+                    if sessionManager.isProcessing {
+                        sessionManager.windowDidFinishLoading(id: windowID)
+                    }
                 }
             } else {
                 // セッションマネージャーからも削除
@@ -646,41 +651,37 @@ struct ContentView: View {
         }
     }
 
-    /// セッション復元通知の監視を設定
+    /// ファイルオープン通知の監視を設定
     private func setupSessionObservers() {
         let windowID = self.windowID
-        let sessionManager = self.sessionManager
 
-        // 復元通知を受け取る
+        // 最初のウィンドウでファイルを開く通知
         NotificationCenter.default.addObserver(
-            forName: .restoreWindow,
+            forName: .openFileInFirstWindow,
             object: nil,
             queue: .main
-        ) { notification in
+        ) { _ in
             // 最後に作成されたウィンドウのみが処理
             ContentView.lastCreatedWindowIDLock.lock()
             let lastID = ContentView.lastCreatedWindowID
             let isLastCreated = lastID == windowID
             ContentView.lastCreatedWindowIDLock.unlock()
 
-            DebugLogger.log("📬 restoreWindow notification received - windowID: \(windowID), lastID: \(String(describing: lastID)), isLast: \(isLastCreated)", level: .normal)
+            DebugLogger.log("📬 openFileInFirstWindow - windowID: \(windowID), lastID: \(String(describing: lastID)), isLast: \(isLastCreated)", level: .normal)
 
             guard isLastCreated else {
                 DebugLogger.log("📬 Ignoring - not the last created window", level: .verbose)
                 return
             }
 
-            if let entry = notification.userInfo?["entry"] as? WindowSessionEntry {
-                DebugLogger.log("📬 Processing entry: \(entry.filePath)", level: .normal)
-                Task { @MainActor in
-                    self.restoreFromSession(entry)
-                }
+            Task { @MainActor in
+                self.openPendingFile()
             }
         }
 
-        // 新しいウィンドウ作成リクエストを受け取る（2つ目以降のセッション復元用）
+        // 新しいウィンドウ作成リクエスト（2つ目以降のファイル用）
         NotificationCenter.default.addObserver(
-            forName: .needNewRestoreWindow,
+            forName: .needNewWindow,
             object: nil,
             queue: .main
         ) { [openWindow] _ in
@@ -690,31 +691,25 @@ struct ContentView: View {
             let isLastCreated = lastID == windowID
             ContentView.lastCreatedWindowIDLock.unlock()
 
-            DebugLogger.log("📬 needNewRestoreWindow notification received - windowID: \(windowID), lastID: \(String(describing: lastID)), isLast: \(isLastCreated)", level: .normal)
+            DebugLogger.log("📬 needNewWindow - windowID: \(windowID), lastID: \(String(describing: lastID)), isLast: \(isLastCreated)", level: .normal)
 
             guard isLastCreated else {
-                DebugLogger.log("📬 Ignoring needNewRestoreWindow - not the last created window", level: .verbose)
+                DebugLogger.log("📬 Ignoring needNewWindow - not the last created window", level: .verbose)
                 return
             }
 
-            // 新しいウィンドウを作成して復元
+            // 新しいウィンドウを作成
             Task { @MainActor in
-                DebugLogger.log("🪟 Creating new window for restoration from windowID: \(windowID)", level: .normal)
-                openWindow(id: "restore")
+                DebugLogger.log("🪟 Creating new window from windowID: \(windowID)", level: .normal)
+                openWindow(id: "new")
                 try? await Task.sleep(nanoseconds: 200_000_000)
 
-                // 新しいウィンドウに復元エントリを渡す
-                if let entry = sessionManager.pendingRestoreEntry {
-                    DebugLogger.log("📬 Posting restoreWindow for: \(entry.filePath)", level: .normal)
-                    sessionManager.pendingRestoreEntry = nil
-                    NotificationCenter.default.post(
-                        name: .restoreWindow,
-                        object: nil,
-                        userInfo: ["entry": entry]
-                    )
-                } else {
-                    DebugLogger.log("⚠️ No pending restore entry!", level: .normal)
-                }
+                // 新しいウィンドウにファイルを開かせる
+                NotificationCenter.default.post(
+                    name: .openFileInFirstWindow,
+                    object: nil,
+                    userInfo: nil
+                )
             }
         }
 
@@ -726,12 +721,12 @@ struct ContentView: View {
         ) { _ in
             Task { @MainActor in
                 // 保存されている復元エントリのフレームを適用
-                guard let entry = self.restorationEntry else {
-                    DebugLogger.log("📐 No restoration entry for window: \(windowID)", level: .verbose)
+                guard let frame = self.pendingFrame else {
+                    DebugLogger.log("📐 No pending frame for window: \(windowID)", level: .verbose)
                     return
                 }
 
-                let targetFrame = self.validateWindowFrame(entry.frame)
+                let targetFrame = self.validateWindowFrame(frame)
                 DebugLogger.log("📐 Applying frame for window: \(windowID) -> \(targetFrame)", level: .normal)
 
                 if let windowNumber = self.myWindowNumber,
@@ -740,28 +735,37 @@ struct ContentView: View {
                     DebugLogger.log("📐 Frame applied to window: \(windowNumber)", level: .normal)
                 }
 
-                self.restorationEntry = nil
+                self.pendingFrame = nil
             }
         }
     }
 
-    /// セッションからウィンドウを復元
-    private func restoreFromSession(_ entry: WindowSessionEntry) {
-        DebugLogger.log("🔄 Restoring window from session: \(entry.filePath) windowID: \(windowID)", level: .normal)
+    /// SessionManagerからの保留ファイルを開く
+    private func openPendingFile() {
+        guard let fileOpen = sessionManager.pendingFileOpen else {
+            DebugLogger.log("⚠️ No pending file to open!", level: .normal)
+            return
+        }
+        sessionManager.pendingFileOpen = nil
+
+        DebugLogger.log("🔄 Opening file: \(fileOpen.filePath) windowID: \(windowID)", level: .normal)
 
         // ファイルがアクセス可能か確認
-        guard entry.isFileAccessible else {
-            showFileNotFoundNotification(filePath: entry.filePath)
+        let fileExists = FileManager.default.fileExists(atPath: fileOpen.filePath)
+        guard fileExists else {
+            showFileNotFoundNotification(filePath: fileOpen.filePath)
             sessionManager.windowDidFinishLoading(id: windowID)
             return
         }
 
-        // 復元エントリを保存（フレーム設定は全復元完了後に一括で行う）
-        restorationEntry = entry
-        DebugLogger.log("📐 Target frame saved: \(entry.frame) windowID: \(windowID)", level: .normal)
+        // セッション復元の場合はフレームを保存
+        if fileOpen.isSessionRestore, let frame = fileOpen.frame {
+            pendingFrame = frame
+            DebugLogger.log("📐 Target frame saved: \(frame) windowID: \(windowID)", level: .normal)
+        }
 
         // ファイルを開く
-        let url = URL(fileURLWithPath: entry.filePath)
+        let url = URL(fileURLWithPath: fileOpen.filePath)
         isWaitingForFile = true
         pendingURLs = [url]
     }
@@ -839,58 +843,8 @@ struct ContentView: View {
     }
 
     private func setupNotificationObservers() {
-        NotificationCenter.default.addObserver(
-            forName: NSNotification.Name("OpenFilesInNewWindow"),
-            object: nil,
-            queue: .main
-        ) { [openWindow, windowID] notification in
-            // 最後に作成されたウィンドウのみが処理
-            ContentView.lastCreatedWindowIDLock.lock()
-            let isLastCreated = ContentView.lastCreatedWindowID == windowID
-            ContentView.lastCreatedWindowIDLock.unlock()
-
-            guard isLastCreated else { return }
-
-            ContentView.lastCreatedWindowIDLock.lock()
-            ContentView.nextWindowShouldWaitForFile = true
-            ContentView.lastCreatedWindowIDLock.unlock()
-
-            if let urls = notification.userInfo?["urls"] as? [URL] {
-                Task { @MainActor in
-                    openWindow(id: "new")
-                    try? await Task.sleep(nanoseconds: 200_000_000)
-                    NotificationCenter.default.post(
-                        name: NSNotification.Name("OpenFilesInNewlyCreatedWindow"),
-                        object: nil,
-                        userInfo: ["urls": urls]
-                    )
-                }
-            }
-        }
-
-        let viewModel = self.viewModel
-        let myWindowID = self.windowID
-        NotificationCenter.default.addObserver(
-            forName: NSNotification.Name("OpenFilesInNewlyCreatedWindow"),
-            object: nil,
-            queue: .main
-        ) { notification in
-            ContentView.lastCreatedWindowIDLock.lock()
-            let isLastCreated = ContentView.lastCreatedWindowID == myWindowID
-            ContentView.lastCreatedWindowIDLock.unlock()
-
-            DebugLogger.log("📬 OpenFilesInNewlyCreatedWindow - windowID: \(myWindowID), isLastCreated: \(isLastCreated)", level: .normal)
-
-            guard isLastCreated else { return }
-
-            if let urls = notification.userInfo?["urls"] as? [URL] {
-                DebugLogger.log("📬 Opening file via notification: \(urls.first?.lastPathComponent ?? "unknown")", level: .normal)
-                // queue: .mainなのでMainActorコンテキストで実行される
-                MainActor.assumeIsolated {
-                    viewModel.openFiles(urls: urls)
-                }
-            }
-        }
+        // 統合キューに移行したため、個別の通知ハンドラは不要になりました
+        // setupSessionObservers() で統合的に処理します
     }
 
     private func handleOnDisappear() {

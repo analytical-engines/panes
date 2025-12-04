@@ -2,6 +2,33 @@ import Foundation
 import AppKit
 import SwiftUI
 
+/// ウィンドウで開くファイルの情報
+struct PendingFileOpen {
+    let filePath: String
+    let fileKey: String?
+    let currentPage: Int
+    let frame: CGRect?
+    let isSessionRestore: Bool  // セッション復元かどうか
+
+    /// 「このアプリケーションで開く」用の初期化
+    init(url: URL) {
+        self.filePath = url.path
+        self.fileKey = nil
+        self.currentPage = 0
+        self.frame = nil
+        self.isSessionRestore = false
+    }
+
+    /// セッション復元用の初期化
+    init(from entry: WindowSessionEntry) {
+        self.filePath = entry.filePath
+        self.fileKey = entry.fileKey
+        self.currentPage = entry.currentPage
+        self.frame = entry.frame
+        self.isSessionRestore = true
+    }
+}
+
 /// セッション（ウィンドウ状態）の管理クラス
 @MainActor
 @Observable
@@ -12,8 +39,8 @@ class SessionManager {
     /// 保存されたセッション
     private(set) var savedSession: [WindowSessionEntry] = []
 
-    /// 復元待ちのエントリ
-    private(set) var pendingRestorations: [WindowSessionEntry] = []
+    /// 開くべきファイルのキュー（セッション復元 + 「このアプリケーションで開く」を統合）
+    private(set) var pendingFileOpens: [PendingFileOpen] = []
 
     /// 現在のアクティブなウィンドウ（追跡用）
     private(set) var activeWindows: [UUID: WindowSessionEntry] = [:]
@@ -21,23 +48,23 @@ class SessionManager {
     /// 現在読み込み中のウィンドウ数
     private(set) var currentLoadingCount: Int = 0
 
-    /// 復元中かどうか
-    private(set) var isRestoring: Bool = false
+    /// ファイルオープン処理中かどうか
+    private(set) var isProcessing: Bool = false
 
     /// 同時読み込み制限（AppSettingsから設定される）
     var concurrentLoadingLimit: Int = 1
 
-    /// 新しいウィンドウで復元すべきエントリ（2つ目以降のウィンドウ用）
-    var pendingRestoreEntry: WindowSessionEntry?
+    /// 次に開くべきファイル情報（ウィンドウに渡す用）
+    var pendingFileOpen: PendingFileOpen?
 
-    /// 最初のウィンドウの復元が完了したかどうか
-    private var isFirstWindowRestored: Bool = false
+    /// 最初のウィンドウを使ったかどうか
+    private var isFirstWindowUsed: Bool = false
 
-    /// 復元完了したウィンドウ数
-    private var restoredWindowCount: Int = 0
+    /// 処理完了したウィンドウ数
+    private var processedWindowCount: Int = 0
 
-    /// 復元対象のウィンドウ総数
-    private var totalWindowsToRestore: Int = 0
+    /// 処理対象のウィンドウ総数
+    private var totalWindowsToProcess: Int = 0
 
     /// ローディングパネル
     private var loadingPanel: NSPanel?
@@ -80,7 +107,13 @@ class SessionManager {
         DebugLogger.log("🗑️ Session cleared", level: .normal)
     }
 
-    // MARK: - Restoration Queue
+    // MARK: - File Open Queue
+
+    /// 「このアプリケーションで開く」からファイルをキューに追加
+    func addFilesToOpen(urls: [URL]) {
+        let items = urls.map { PendingFileOpen(url: $0) }
+        addToQueue(items)
+    }
 
     /// セッション復元を開始する
     func startRestoration() {
@@ -88,51 +121,102 @@ class SessionManager {
             DebugLogger.log("📂 No session to restore", level: .normal)
             return
         }
-
-        isRestoring = true
-        pendingRestorations = savedSession
-        totalWindowsToRestore = savedSession.count
-        restoredWindowCount = 0
-        DebugLogger.log("🔄 Starting session restoration: \(pendingRestorations.count) windows", level: .normal)
-
-        // ローディングパネルを表示
-        showLoadingPanel()
-
-        // 復元キューを処理開始
-        processNextPendingWindow()
+        let items = savedSession.map { PendingFileOpen(from: $0) }
+        addToQueue(items)
     }
 
-    /// 次の待機中ウィンドウを処理する
-    func processNextPendingWindow() {
-        guard isRestoring else { return }
+    /// キューにアイテムを追加（統合メソッド）
+    private func addToQueue(_ items: [PendingFileOpen]) {
+        pendingFileOpens.append(contentsOf: items)
+        DebugLogger.log("📂 Added \(items.count) files to queue (total: \(pendingFileOpens.count))", level: .normal)
+
+        if isProcessing {
+            // 処理中：totalを更新してダイアログ表示
+            let newTotal = processedWindowCount + pendingFileOpens.count + currentLoadingCount
+            if newTotal > totalWindowsToProcess {
+                totalWindowsToProcess = newTotal
+                DebugLogger.log("📂 Updated total to \(totalWindowsToProcess)", level: .normal)
+
+                if totalWindowsToProcess > 1 && loadingPanel == nil {
+                    showLoadingPanel()
+                } else {
+                    updateLoadingProgress()
+                }
+            }
+        } else {
+            // 未処理：処理開始をスケジュール
+            scheduleProcessingIfNeeded()
+        }
+    }
+
+    /// 処理開始をスケジュール
+    private var processingScheduled = false
+
+    private func scheduleProcessingIfNeeded() {
+        guard !processingScheduled else { return }
+        processingScheduled = true
+
+        // 少し待ってから処理（複数ソースからの追加を待つ）
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            guard let self = self else { return }
+            self.processingScheduled = false
+            if !self.isProcessing && !self.pendingFileOpens.isEmpty {
+                self.startProcessing()
+            }
+        }
+    }
+
+    /// ファイルオープン処理を開始
+    private func startProcessing() {
+        guard !pendingFileOpens.isEmpty else { return }
+
+        isProcessing = true
+        isFirstWindowUsed = false
+        processedWindowCount = 0
+        totalWindowsToProcess = pendingFileOpens.count
+
+        DebugLogger.log("🔄 Starting file open processing: \(totalWindowsToProcess) files", level: .normal)
+
+        // 複数ファイルの場合はローディングパネルを表示
+        if totalWindowsToProcess > 1 {
+            showLoadingPanel()
+        }
+
+        // 処理開始
+        processNextFile()
+    }
+
+    /// 次のファイルを処理する
+    func processNextFile() {
+        guard isProcessing else { return }
         guard currentLoadingCount < concurrentLoadingLimit else {
             DebugLogger.log("⏳ Loading limit reached (\(currentLoadingCount)/\(concurrentLoadingLimit)), waiting...", level: .verbose)
             return
         }
-        guard !pendingRestorations.isEmpty else {
-            // すべてのウィンドウの読み込み開始が完了（読み込み自体はまだ進行中かもしれない）
-            DebugLogger.log("📋 All windows queued for restoration", level: .verbose)
+        guard !pendingFileOpens.isEmpty else {
+            DebugLogger.log("📋 All files queued for opening", level: .verbose)
             return
         }
 
-        let entry = pendingRestorations.removeFirst()
+        let fileOpen = pendingFileOpens.removeFirst()
         currentLoadingCount += 1
 
-        DebugLogger.log("🪟 Restoring window: \(entry.filePath) (\(currentLoadingCount)/\(concurrentLoadingLimit))", level: .normal)
+        DebugLogger.log("🪟 Opening file: \(fileOpen.filePath) (\(currentLoadingCount)/\(concurrentLoadingLimit))", level: .normal)
 
-        if !isFirstWindowRestored {
-            // 最初のウィンドウ：起動時に作成されたウィンドウを使用
-            isFirstWindowRestored = true
+        pendingFileOpen = fileOpen
+
+        if !isFirstWindowUsed {
+            // 最初のファイル：起動時に作成されたウィンドウを使用
+            isFirstWindowUsed = true
             NotificationCenter.default.post(
-                name: .restoreWindow,
+                name: .openFileInFirstWindow,
                 object: nil,
-                userInfo: ["entry": entry]
+                userInfo: nil
             )
         } else {
-            // 2つ目以降のウィンドウ：新しいウィンドウを作成する必要がある
-            pendingRestoreEntry = entry
+            // 2つ目以降のファイル：新しいウィンドウを作成
             NotificationCenter.default.post(
-                name: .needNewRestoreWindow,
+                name: .needNewWindow,
                 object: nil,
                 userInfo: nil
             )
@@ -142,43 +226,36 @@ class SessionManager {
     /// ウィンドウの読み込み完了を通知する
     func windowDidFinishLoading(id: UUID) {
         currentLoadingCount = max(0, currentLoadingCount - 1)
-        restoredWindowCount += 1
-        DebugLogger.log("✅ Window finished loading: \(id) (\(restoredWindowCount)/\(totalWindowsToRestore))", level: .normal)
+        processedWindowCount += 1
+        DebugLogger.log("✅ Window finished loading: \(id) (\(processedWindowCount)/\(totalWindowsToProcess))", level: .normal)
 
         // ローディングパネルの進捗を更新
         updateLoadingProgress()
 
-        // 全ウィンドウの復元が完了したかチェック
-        if restoredWindowCount >= totalWindowsToRestore && pendingRestorations.isEmpty {
-            DebugLogger.log("🎉 All windows restored! Revealing windows...", level: .normal)
-            finishRestoration()
+        // 全ウィンドウの処理が完了したかチェック
+        if processedWindowCount >= totalWindowsToProcess && pendingFileOpens.isEmpty {
+            DebugLogger.log("🎉 All files opened!", level: .normal)
+            finishProcessing()
         } else {
-            // 次のウィンドウを処理
-            processNextPendingWindow()
+            // 次のファイルを処理
+            processNextFile()
         }
     }
 
-    /// 復元完了処理
-    private func finishRestoration() {
-        isRestoring = false
-        isFirstWindowRestored = false
-        restoredWindowCount = 0
-        totalWindowsToRestore = 0
+    /// 処理完了
+    private func finishProcessing() {
+        isProcessing = false
+        isFirstWindowUsed = false
+        processedWindowCount = 0
+        totalWindowsToProcess = 0
 
         // ローディングパネルを閉じる
         hideLoadingPanel()
 
-        // 全ウィンドウを一斉に表示する通知
+        // 全ウィンドウを一斉に表示する通知（セッション復元の場合）
         NotificationCenter.default.post(name: .revealAllWindows, object: nil)
 
-        DebugLogger.log("✅ Session restoration complete", level: .normal)
-    }
-
-    /// 復元エントリを取得する（ContentViewから呼ばれる）
-    func getNextRestorationEntry() -> WindowSessionEntry? {
-        // 最後にpostされたエントリを返す
-        // （NotificationCenter経由で渡されるため、ここでは使用しない）
-        return nil
+        DebugLogger.log("✅ File open processing complete", level: .normal)
     }
 
     // MARK: - Window Tracking
@@ -254,8 +331,8 @@ class SessionManager {
 
         // SwiftUIビューをホスト
         let hostingView = NSHostingView(rootView: LoadingPanelContent(
-            restoredCount: restoredWindowCount,
-            totalCount: totalWindowsToRestore
+            restoredCount: processedWindowCount,
+            totalCount: totalWindowsToProcess
         ))
         panel.contentView = hostingView
 
@@ -277,8 +354,8 @@ class SessionManager {
     func updateLoadingProgress() {
         if let panel = loadingPanel {
             let hostingView = NSHostingView(rootView: LoadingPanelContent(
-                restoredCount: restoredWindowCount,
-                totalCount: totalWindowsToRestore
+                restoredCount: processedWindowCount,
+                totalCount: totalWindowsToProcess
             ))
             panel.contentView = hostingView
         }
@@ -309,7 +386,7 @@ private struct LoadingPanelContent: View {
                 }
 
             VStack(spacing: 4) {
-                Text(L("restoring_session"))
+                Text(L("opening_windows"))
                     .font(.headline)
                 Text("\(restoredCount) / \(totalCount)")
                     .font(.caption)
@@ -323,14 +400,11 @@ private struct LoadingPanelContent: View {
 // MARK: - Notification Names
 
 extension NSNotification.Name {
-    /// ウィンドウ復元通知
-    static let restoreWindow = NSNotification.Name("RestoreWindowFromSession")
+    /// 最初のウィンドウでファイルを開く通知
+    static let openFileInFirstWindow = NSNotification.Name("OpenFileInFirstWindow")
 
-    /// 新しいウィンドウ作成リクエスト（2つ目以降のセッション復元用）
-    static let needNewRestoreWindow = NSNotification.Name("NeedNewRestoreWindow")
-
-    /// ウィンドウ状態収集通知
-    static let collectWindowState = NSNotification.Name("CollectWindowStateForSession")
+    /// 新しいウィンドウ作成リクエスト（2つ目以降のファイル用）
+    static let needNewWindow = NSNotification.Name("NeedNewWindow")
 
     /// 全ウィンドウ一斉表示通知
     static let revealAllWindows = NSNotification.Name("RevealAllWindowsAfterRestoration")
