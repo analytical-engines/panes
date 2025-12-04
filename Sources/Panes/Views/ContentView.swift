@@ -1163,14 +1163,13 @@ struct HistoryListView: View {
                 .background(Color.white.opacity(0.1))
                 .cornerRadius(6)
 
-                ScrollView {
+                CustomScrollView {
                     LazyVStack(spacing: 8) {
                         ForEach(filteredHistory) { entry in
                             HistoryEntryRow(entry: entry, onOpenHistoryFile: onOpenHistoryFile)
                         }
                     }
                 }
-                .scrollIndicators(.visible, axes: .vertical)
                 .frame(maxHeight: 300)
 
                 // フィルタ結果の件数表示
@@ -1333,6 +1332,76 @@ struct SpreadPageView<ContextMenu: View>: View {
                 )
             }
         }
+    }
+}
+
+/// グレー半透明スクロールバーのカスタムScrollView
+struct CustomScrollView<Content: View>: NSViewRepresentable {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = false
+        scrollView.drawsBackground = false
+
+        // カスタムスクローラーを設定（システム設定に従う）
+        let scroller = GrayScroller()
+        scrollView.verticalScroller = scroller
+
+        // SwiftUIコンテンツをホスト
+        let hostingView = NSHostingView(rootView: content)
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
+
+        scrollView.documentView = hostingView
+
+        // ドキュメントビューのサイズをスクロールビューの幅に合わせる
+        NSLayoutConstraint.activate([
+            hostingView.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
+            hostingView.trailingAnchor.constraint(equalTo: scrollView.contentView.trailingAnchor)
+        ])
+
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        if let hostingView = scrollView.documentView as? NSHostingView<Content> {
+            hostingView.rootView = content
+        }
+    }
+}
+
+/// グレー半透明のカスタムスクローラー
+class GrayScroller: NSScroller {
+    override class var isCompatibleWithOverlayScrollers: Bool { true }
+
+    override func drawKnobSlot(in slotRect: NSRect, highlight flag: Bool) {
+        // トラック背景を暗いグレーで描画（「常に表示」設定時用）
+        let path = NSBezierPath(roundedRect: slotRect, xRadius: 4, yRadius: 4)
+        NSColor.darkGray.withAlphaComponent(0.3).setFill()
+        path.fill()
+    }
+
+    override func drawKnob() {
+        let knobRect = self.rect(for: .knob).insetBy(dx: 2, dy: 2)
+        guard !knobRect.isEmpty else { return }
+
+        let path = NSBezierPath(roundedRect: knobRect, xRadius: 4, yRadius: 4)
+        NSColor.gray.withAlphaComponent(0.6).setFill()
+        path.fill()
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        // トラックを描画（「常に表示」設定時）
+        if self.scrollerStyle == .legacy {
+            self.drawKnobSlot(in: self.rect(for: .knobSlot), highlight: false)
+        }
+        self.drawKnob()
     }
 }
 
