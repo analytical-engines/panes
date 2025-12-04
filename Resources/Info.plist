@@ -2,84 +2,25 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>NSQuitAlwaysKeepsWindows</key>
-    <false/>
-    <key>CFBundleName</key>
-    <string>Panes</string>
-    <key>CFBundleDisplayName</key>
-    <string>Panes</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.panes.imageviewer</string>
-    <key>CFBundleVersion</key>
-    <string>0.2.0</string>
-    <key>CFBundleShortVersionString</key>
-    <string>0.2.0</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleExecutable</key>
-    <string>Panes</string>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>15.0</string>
-    <key>NSHumanReadableCopyright</key>
-    <string>Copyright © 2024. All rights reserved.</string>
-    <key>CFBundleDocumentTypes</key>
-    <array>
-        <!-- ZIP archives -->
-        <dict>
-            <key>CFBundleTypeName</key>
-            <string>ZIP Archive</string>
-            <key>CFBundleTypeRole</key>
-            <string>Viewer</string>
-            <key>LSHandlerRank</key>
-            <string>Alternate</string>
-            <key>LSItemContentTypes</key>
-            <array>
-                <string>public.zip-archive</string>
-                <string>com.pkware.zip-archive</string>
-            </array>
-        </dict>
-        <!-- RAR archives -->
-        <dict>
-            <key>CFBundleTypeName</key>
-            <string>RAR Archive</string>
-            <key>CFBundleTypeRole</key>
-            <string>Viewer</string>
-            <key>LSHandlerRank</key>
-            <string>Alternate</string>
-            <key>LSItemContentTypes</key>
-            <array>
-                <string>com.rarlab.rar-archive</string>
-                <string>public.rar-archive</string>
-            </array>
-        </dict>
-        <!-- JPEG images -->
-        <dict>
-            <key>CFBundleTypeName</key>
-            <string>JPEG Image</string>
-            <key>CFBundleTypeRole</key>
-            <string>Viewer</string>
-            <key>LSHandlerRank</key>
-            <string>Alternate</string>
-            <key>LSItemContentTypes</key>
-            <array>
-                <string>public.jpeg</string>
-            </array>
-        </dict>
-        <!-- PNG images -->
-        <dict>
-            <key>CFBundleTypeName</key>
-            <string>PNG Image</string>
-            <key>CFBundleTypeRole</key>
-            <string>Viewer</string>
-            <key>LSHandlerRank</key>
-            <string>Alternate</string>
-            <key>LSItemContentTypes</key>
-            <array>
-                <string>public.png</string>
-            </array>
-        </dict>
-    </array>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
 </dict>
 </plist>

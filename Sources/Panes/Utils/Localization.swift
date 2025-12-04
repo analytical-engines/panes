@@ -1,5 +1,14 @@
 import Foundation
 
+/// リソースバンドルを取得（Swift Package Manager と Xcode プロジェクト両対応）
+private var resourceBundle: Bundle {
+    #if SWIFT_PACKAGE
+    return Bundle.module
+    #else
+    return Bundle.main
+    #endif
+}
+
 /// ローカライズ用バンドルを取得
 private let localizedBundle: Bundle = {
     // ユーザーの優先言語を取得
@@ -21,14 +30,14 @@ private let localizedBundle: Bundle = {
     DebugLogger.log("🌐 Selected language: \(selectedLanguage)", level: .verbose)
 
     // 対応する.lprojバンドルを取得
-    if let path = Bundle.module.path(forResource: selectedLanguage, ofType: "lproj"),
+    if let path = resourceBundle.path(forResource: selectedLanguage, ofType: "lproj"),
        let bundle = Bundle(path: path) {
         DebugLogger.log("🌐 Localization bundle loaded: \(path)", level: .verbose)
         return bundle
     }
 
     DebugLogger.log("🌐 Localization bundle not found, using default", level: .normal)
-    return Bundle.module
+    return resourceBundle
 }()
 
 /// ローカライズ文字列を取得するヘルパー関数

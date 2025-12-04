@@ -402,10 +402,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // アプリ起動時にフォーカスを取得
         NSApp.activate(ignoringOtherApps: true)
 
+        // TODO: 一時的にセッション復元を無効化（デバッグ用）
         // セッション復元を遅延実行（参照が設定されるのを待つ）
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.startSessionRestorationIfNeeded()
-        }
+        // DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+        //     self?.startSessionRestorationIfNeeded()
+        // }
     }
 
     /// セッション復元を開始（必要な場合）
