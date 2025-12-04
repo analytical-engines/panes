@@ -54,21 +54,28 @@ class FileHistoryManager {
 
     var history: [FileHistoryEntry] = []
 
+    /// SwiftDataが利用可能かどうか
+    private var useSwiftData = false
+
     init() {
-        // TODO: 一時的にSwiftDataを無効化してデバッグ
-        // setupSwiftData()
-        // migrateFromUserDefaultsIfNeeded()
-        // loadHistory()
-        loadHistoryFromUserDefaultsLegacy()
+        setupSwiftData()
+        if useSwiftData {
+            migrateFromUserDefaultsIfNeeded()
+            loadHistory()
+        } else {
+            // フォールバック: UserDefaultsから読み込む
+            loadHistoryFromUserDefaultsLegacy()
+        }
     }
 
-    /// UserDefaultsから履歴を読み込む（レガシー、デバッグ用）
+    /// UserDefaultsから履歴を読み込む（フォールバック用）
     private func loadHistoryFromUserDefaultsLegacy() {
         guard let data = UserDefaults.standard.data(forKey: legacyHistoryKey),
               let decoded = try? JSONDecoder().decode([FileHistoryEntry].self, from: data) else {
             return
         }
         history = decoded
+        DebugLogger.log("📦 Loaded \(history.count) history entries from UserDefaults (fallback)", level: .normal)
     }
 
     /// SwiftDataのセットアップ
@@ -78,9 +85,11 @@ class FileHistoryManager {
             let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
             modelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])
             modelContext = ModelContext(modelContainer!)
+            useSwiftData = true
             DebugLogger.log("📦 SwiftData initialized for FileHistory", level: .normal)
         } catch {
-            DebugLogger.log("❌ Failed to initialize SwiftData: \(error)", level: .minimal)
+            useSwiftData = false
+            DebugLogger.log("❌ Failed to initialize SwiftData: \(error), falling back to UserDefaults", level: .minimal)
         }
     }
 
@@ -148,28 +157,75 @@ class FileHistoryManager {
     func recordAccess(fileKey: String, filePath: String, fileName: String) {
         DebugLogger.log("📊 recordAccess called: \(fileName)", level: .normal)
 
-        // TODO: 一時的にUserDefaultsを使用（デバッグ用）
-        // 既存のエントリを探す
+        if useSwiftData {
+            recordAccessWithSwiftData(fileKey: fileKey, filePath: filePath, fileName: fileName)
+        } else {
+            recordAccessWithUserDefaults(fileKey: fileKey, filePath: filePath, fileName: fileName)
+        }
+    }
+
+    /// SwiftDataでアクセス記録
+    private func recordAccessWithSwiftData(fileKey: String, filePath: String, fileName: String) {
+        guard let context = modelContext else { return }
+
+        do {
+            let searchKey = fileKey
+            var descriptor = FetchDescriptor<FileHistoryData>(
+                predicate: #Predicate<FileHistoryData> { $0.fileKey == searchKey }
+            )
+            descriptor.fetchLimit = 1
+            let existing = try context.fetch(descriptor)
+
+            if let historyData = existing.first {
+                historyData.lastAccessDate = Date()
+                historyData.accessCount += 1
+            } else {
+                let newData = FileHistoryData(fileKey: fileKey, filePath: filePath, fileName: fileName)
+                context.insert(newData)
+
+                let countDescriptor = FetchDescriptor<FileHistoryData>()
+                let totalCount = try context.fetchCount(countDescriptor)
+                if totalCount > maxHistoryCount {
+                    let oldestDescriptor = FetchDescriptor<FileHistoryData>(
+                        sortBy: [SortDescriptor(\.lastAccessDate, order: .forward)]
+                    )
+                    let oldest = try context.fetch(oldestDescriptor)
+                    let deleteCount = totalCount - maxHistoryCount
+                    for i in 0..<deleteCount {
+                        if i < oldest.count {
+                            context.delete(oldest[i])
+                        }
+                    }
+                }
+            }
+
+            try context.save()
+            loadHistory()
+        } catch {
+            DebugLogger.log("❌ Failed to record access: \(error)", level: .minimal)
+        }
+    }
+
+    /// UserDefaultsでアクセス記録
+    private func recordAccessWithUserDefaults(fileKey: String, filePath: String, fileName: String) {
         if let index = history.firstIndex(where: { $0.fileKey == fileKey }) {
-            // 既存エントリを更新
             var entry = history[index]
             entry.lastAccessDate = Date()
             entry.accessCount += 1
             history.remove(at: index)
             history.insert(entry, at: 0)
         } else {
-            // 新規エントリを追加
             let newEntry = FileHistoryEntry(fileKey: fileKey, filePath: filePath, fileName: fileName)
             history.insert(newEntry, at: 0)
             if history.count > maxHistoryCount {
                 history.removeLast()
             }
         }
-        saveHistoryToUserDefaultsLegacy()
+        saveHistoryToUserDefaults()
     }
 
-    /// UserDefaultsに履歴を保存（レガシー、デバッグ用）
-    private func saveHistoryToUserDefaultsLegacy() {
+    /// UserDefaultsに履歴を保存
+    private func saveHistoryToUserDefaults() {
         guard let encoded = try? JSONEncoder().encode(history) else { return }
         UserDefaults.standard.set(encoded, forKey: legacyHistoryKey)
     }
@@ -186,25 +242,71 @@ class FileHistoryManager {
 
     /// 指定したfileKeyのエントリを削除
     func removeEntry(withFileKey fileKey: String) {
-        // TODO: 一時的にUserDefaultsを使用（デバッグ用）
-        history.removeAll(where: { $0.fileKey == fileKey })
-        saveHistoryToUserDefaultsLegacy()
+        if useSwiftData {
+            guard let context = modelContext else { return }
+            do {
+                let searchKey = fileKey
+                var descriptor = FetchDescriptor<FileHistoryData>(
+                    predicate: #Predicate<FileHistoryData> { $0.fileKey == searchKey }
+                )
+                descriptor.fetchLimit = 1
+                let toDelete = try context.fetch(descriptor)
+                for item in toDelete {
+                    context.delete(item)
+                }
+                try context.save()
+                loadHistory()
+            } catch {
+                DebugLogger.log("❌ Failed to remove entry: \(error)", level: .minimal)
+            }
+        } else {
+            history.removeAll(where: { $0.fileKey == fileKey })
+            saveHistoryToUserDefaults()
+        }
     }
 
     /// 全ての履歴をクリア
     func clearAllHistory() {
-        // TODO: 一時的にUserDefaultsを使用（デバッグ用）
-        history.removeAll()
-        saveHistoryToUserDefaultsLegacy()
+        if useSwiftData {
+            guard let context = modelContext else { return }
+            do {
+                let descriptor = FetchDescriptor<FileHistoryData>()
+                let all = try context.fetch(descriptor)
+                for item in all {
+                    context.delete(item)
+                }
+                try context.save()
+                history.removeAll()
+            } catch {
+                DebugLogger.log("❌ Failed to clear history: \(error)", level: .minimal)
+            }
+        } else {
+            history.removeAll()
+            saveHistoryToUserDefaults()
+        }
     }
 
     /// 全てのアクセスカウントを1にリセット
     func resetAllAccessCounts() {
-        // TODO: 一時的にUserDefaultsを使用（デバッグ用）
-        for i in history.indices {
-            history[i].accessCount = 1
+        if useSwiftData {
+            guard let context = modelContext else { return }
+            do {
+                let descriptor = FetchDescriptor<FileHistoryData>()
+                let all = try context.fetch(descriptor)
+                for item in all {
+                    item.accessCount = 1
+                }
+                try context.save()
+                loadHistory()
+            } catch {
+                DebugLogger.log("❌ Failed to reset access counts: \(error)", level: .minimal)
+            }
+        } else {
+            for i in history.indices {
+                history[i].accessCount = 1
+            }
+            saveHistoryToUserDefaults()
         }
-        saveHistoryToUserDefaultsLegacy()
     }
 
     // MARK: - Export/Import
@@ -272,7 +374,19 @@ class FileHistoryManager {
 
     /// JSONデータから履歴をImport（ページ表示設定含む）
     func importHistory(from data: Data, merge: Bool) -> (success: Bool, message: String, importedCount: Int) {
-        // TODO: 一時的にUserDefaultsを使用（デバッグ用）
+        if useSwiftData {
+            return importHistoryWithSwiftData(from: data, merge: merge)
+        } else {
+            return importHistoryWithUserDefaults(from: data, merge: merge)
+        }
+    }
+
+    /// SwiftDataで履歴をImport
+    private func importHistoryWithSwiftData(from data: Data, merge: Bool) -> (success: Bool, message: String, importedCount: Int) {
+        guard let context = modelContext else {
+            return (false, "Database not available", 0)
+        }
+
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
@@ -280,29 +394,105 @@ class FileHistoryManager {
             let importData = try decoder.decode(HistoryExport.self, from: data)
 
             if merge {
-                // マージモード: 既存の履歴と統合
-                var merged = history
                 for item in importData.entries {
-                    if !merged.contains(where: { $0.fileKey == item.entry.fileKey }) {
-                        merged.append(item.entry)
-                        // ページ表示設定も保存（既存がない場合のみ）
+                    let key = item.entry.fileKey
+                    var descriptor = FetchDescriptor<FileHistoryData>(
+                        predicate: #Predicate<FileHistoryData> { $0.fileKey == key }
+                    )
+                    descriptor.fetchLimit = 1
+                    let existing = try context.fetch(descriptor)
+
+                    if existing.isEmpty {
+                        let newData = FileHistoryData(
+                            fileKey: item.entry.fileKey,
+                            filePath: item.entry.filePath,
+                            fileName: item.entry.fileName
+                        )
+                        newData.lastAccessDate = item.entry.lastAccessDate
+                        newData.accessCount = item.entry.accessCount
+                        context.insert(newData)
+
                         if let settings = item.pageSettings,
                            loadPageDisplaySettings(for: item.entry.fileKey) == nil {
                             savePageDisplaySettings(settings, for: item.entry.fileKey)
                         }
                     }
                 }
-                // 日付順でソート（新しい順）
+            } else {
+                let allDescriptor = FetchDescriptor<FileHistoryData>()
+                let all = try context.fetch(allDescriptor)
+                for item in all {
+                    context.delete(item)
+                }
+
+                for item in importData.entries {
+                    let newData = FileHistoryData(
+                        fileKey: item.entry.fileKey,
+                        filePath: item.entry.filePath,
+                        fileName: item.entry.fileName
+                    )
+                    newData.lastAccessDate = item.entry.lastAccessDate
+                    newData.accessCount = item.entry.accessCount
+                    context.insert(newData)
+
+                    if let settings = item.pageSettings {
+                        savePageDisplaySettings(settings, for: item.entry.fileKey)
+                    }
+                }
+            }
+
+            // 上限を超えたら古いものを削除
+            let countDescriptor = FetchDescriptor<FileHistoryData>()
+            let totalCount = try context.fetchCount(countDescriptor)
+            if totalCount > maxHistoryCount {
+                let oldestDescriptor = FetchDescriptor<FileHistoryData>(
+                    sortBy: [SortDescriptor(\.lastAccessDate, order: .forward)]
+                )
+                let oldest = try context.fetch(oldestDescriptor)
+                let deleteCount = totalCount - maxHistoryCount
+                for i in 0..<deleteCount {
+                    if i < oldest.count {
+                        context.delete(oldest[i])
+                    }
+                }
+            }
+
+            try context.save()
+            loadHistory()
+
+            return (true, "", importData.entryCount)
+        } catch {
+            DebugLogger.log("❌ Failed to import history: \(error)", level: .minimal)
+            return (false, error.localizedDescription, 0)
+        }
+    }
+
+    /// UserDefaultsで履歴をImport
+    private func importHistoryWithUserDefaults(from data: Data, merge: Bool) -> (success: Bool, message: String, importedCount: Int) {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        do {
+            let importData = try decoder.decode(HistoryExport.self, from: data)
+
+            if merge {
+                var merged = history
+                for item in importData.entries {
+                    if !merged.contains(where: { $0.fileKey == item.entry.fileKey }) {
+                        merged.append(item.entry)
+                        if let settings = item.pageSettings,
+                           loadPageDisplaySettings(for: item.entry.fileKey) == nil {
+                            savePageDisplaySettings(settings, for: item.entry.fileKey)
+                        }
+                    }
+                }
                 merged.sort { $0.lastAccessDate > $1.lastAccessDate }
-                // 上限を超えたら削除
                 if merged.count > maxHistoryCount {
                     merged = Array(merged.prefix(maxHistoryCount))
                 }
                 history = merged
             } else {
-                // 置換モード: 既存の履歴を置き換え
                 history = importData.entries.map { $0.entry }
-                // ページ表示設定も全て上書き
                 for item in importData.entries {
                     if let settings = item.pageSettings {
                         savePageDisplaySettings(settings, for: item.entry.fileKey)
@@ -310,7 +500,7 @@ class FileHistoryManager {
                 }
             }
 
-            saveHistoryToUserDefaultsLegacy()
+            saveHistoryToUserDefaults()
 
             return (true, "", importData.entryCount)
         } catch {
