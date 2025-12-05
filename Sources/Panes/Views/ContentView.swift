@@ -1179,6 +1179,20 @@ struct HistoryEntryRow: View {
         }
         .background(Color.white.opacity(entry.isAccessible ? 0.1 : 0.05))
         .cornerRadius(4)
+        .contextMenu {
+            Button(action: {
+                revealInFinder()
+            }) {
+                Label(L("menu_reveal_in_finder"), systemImage: "folder")
+            }
+            .disabled(!entry.isAccessible)
+        }
+    }
+
+    /// Finderでファイルを表示
+    private func revealInFinder() {
+        let url = URL(fileURLWithPath: entry.filePath)
+        NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 }
 

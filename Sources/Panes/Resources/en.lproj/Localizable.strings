@@ -93,6 +93,7 @@
 "menu_hide_page" = "Hide This Page";
 "menu_show_page" = "Show This Page";
 "menu_copy_image" = "Copy Image";
+"menu_reveal_in_finder" = "Reveal in Finder";
 
 // MARK: - Error Messages
 

@@ -93,6 +93,7 @@
 "menu_hide_page" = "このページを非表示";
 "menu_show_page" = "このページを表示";
 "menu_copy_image" = "画像をコピー";
+"menu_reveal_in_finder" = "Finderで表示";
 
 // MARK: - Error Messages
 
