@@ -45,6 +45,9 @@ struct ContentView: View {
     // 画像情報モーダル表示用
     @State private var showImageInfo = false
 
+    // 履歴フィルタ（ファイルを閉じても維持）
+    @State private var historyFilterText: String = ""
+
     @ViewBuilder
     private var mainContent: some View {
         // isWaitingForFileを最優先でチェック（D&D時にローディング画面を表示するため）
@@ -109,6 +112,7 @@ struct ContentView: View {
         } else {
             InitialScreenView(
                 errorMessage: viewModel.errorMessage,
+                filterText: $historyFilterText,
                 onOpenFile: openFilePicker,
                 onOpenHistoryFile: openHistoryFile
             )
@@ -1048,6 +1052,7 @@ struct InitialScreenView: View {
     @Environment(AppSettings.self) private var appSettings
 
     let errorMessage: String?
+    @Binding var filterText: String
     let onOpenFile: () -> Void
     let onOpenHistoryFile: (String) -> Void
 
@@ -1072,7 +1077,7 @@ struct InitialScreenView: View {
             .buttonStyle(.borderedProminent)
 
             // 履歴表示
-            HistoryListView(onOpenHistoryFile: onOpenHistoryFile)
+            HistoryListView(filterText: $filterText, onOpenHistoryFile: onOpenHistoryFile)
         }
     }
 }
@@ -1081,7 +1086,8 @@ struct InitialScreenView: View {
 struct HistoryListView: View {
     @Environment(FileHistoryManager.self) private var historyManager
     @Environment(AppSettings.self) private var appSettings
-    @State private var filterText: String = ""
+    @Binding var filterText: String
+    @FocusState private var isFilterFocused: Bool
 
     let onOpenHistoryFile: (String) -> Void
 
@@ -1108,6 +1114,11 @@ struct HistoryListView: View {
                     TextField(L("history_filter_placeholder"), text: $filterText)
                         .textFieldStyle(.plain)
                         .foregroundColor(.white)
+                        .focused($isFilterFocused)
+                        .onExitCommand {
+                            filterText = ""
+                            isFilterFocused = false
+                        }
                     if !filterText.isEmpty {
                         Button(action: { filterText = "" }) {
                             Image(systemName: "xmark.circle.fill")
@@ -1121,11 +1132,12 @@ struct HistoryListView: View {
                 .cornerRadius(6)
 
                 CustomScrollView {
-                    LazyVStack(spacing: 8) {
+                    VStack(spacing: 8) {
                         ForEach(filteredHistory) { entry in
                             HistoryEntryRow(entry: entry, onOpenHistoryFile: onOpenHistoryFile)
                         }
                     }
+                    .padding(.vertical, 4)
                 }
                 .frame(maxHeight: 300)
 
@@ -1408,6 +1420,9 @@ struct CustomScrollView<Content: View>: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         if let hostingView = scrollView.documentView as? NSHostingView<Content> {
             hostingView.rootView = content
+            // コンテンツサイズが変わった時にスクロール領域を更新
+            hostingView.invalidateIntrinsicContentSize()
+            hostingView.layoutSubtreeIfNeeded()
         }
     }
 }
