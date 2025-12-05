@@ -48,6 +48,11 @@ struct ContentView: View {
     // 履歴フィルタ（ファイルを閉じても維持）
     @State private var historyFilterText: String = ""
 
+    // メモ編集用
+    @State private var showMemoEdit = false
+    @State private var editingMemoText = ""
+    @State private var editingMemoFileKey: String?  // 履歴エントリ編集時に使用
+
     @ViewBuilder
     private var mainContent: some View {
         // isWaitingForFileを最優先でチェック（D&D時にローディング画面を表示するため）
@@ -114,7 +119,12 @@ struct ContentView: View {
                 errorMessage: viewModel.errorMessage,
                 filterText: $historyFilterText,
                 onOpenFile: openFilePicker,
-                onOpenHistoryFile: openHistoryFile
+                onOpenHistoryFile: openHistoryFile,
+                onEditMemo: { fileKey, currentMemo in
+                    editingMemoFileKey = fileKey
+                    editingMemoText = currentMemo ?? ""
+                    showMemoEdit = true
+                }
             )
             .contextMenu { initialScreenContextMenu }
         }
@@ -313,6 +323,16 @@ struct ContentView: View {
 
         Divider()
 
+        // メモ編集
+        Button(action: {
+            editingMemoText = viewModel.getCurrentMemo() ?? ""
+            showMemoEdit = true
+        }) {
+            Label(L("menu_edit_memo"), systemImage: "square.and.pencil")
+        }
+
+        Divider()
+
         // ページ設定サブメニュー
         Menu {
             Button(action: {
@@ -399,6 +419,16 @@ struct ContentView: View {
                     ? "eye.slash"
                     : "eye"
             )
+        }
+
+        Divider()
+
+        // メモ編集
+        Button(action: {
+            editingMemoText = viewModel.getCurrentMemo() ?? ""
+            showMemoEdit = true
+        }) {
+            Label(L("menu_edit_memo"), systemImage: "square.and.pencil")
         }
 
         Divider()
@@ -572,6 +602,36 @@ struct ContentView: View {
                 ImageInfoView(
                     infos: viewModel.getCurrentImageInfos(),
                     onDismiss: { showImageInfo = false }
+                )
+            }
+
+            // メモ編集モーダル
+            if showMemoEdit {
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        showMemoEdit = false
+                        editingMemoFileKey = nil
+                    }
+
+                MemoEditPopover(
+                    memo: $editingMemoText,
+                    onSave: {
+                        let newMemo = editingMemoText.isEmpty ? nil : editingMemoText
+                        if let fileKey = editingMemoFileKey {
+                            // 履歴エントリのメモを更新
+                            historyManager.updateMemo(for: fileKey, memo: newMemo)
+                        } else {
+                            // 現在開いているファイルのメモを更新
+                            viewModel.updateCurrentMemo(newMemo)
+                        }
+                        showMemoEdit = false
+                        editingMemoFileKey = nil
+                    },
+                    onCancel: {
+                        showMemoEdit = false
+                        editingMemoFileKey = nil
+                    }
                 )
             }
         }
@@ -1055,6 +1115,7 @@ struct InitialScreenView: View {
     @Binding var filterText: String
     let onOpenFile: () -> Void
     let onOpenHistoryFile: (String) -> Void
+    let onEditMemo: (String, String?) -> Void  // (fileKey, currentMemo)
 
     var body: some View {
         VStack(spacing: 20) {
@@ -1077,7 +1138,7 @@ struct InitialScreenView: View {
             .buttonStyle(.borderedProminent)
 
             // 履歴表示
-            HistoryListView(filterText: $filterText, onOpenHistoryFile: onOpenHistoryFile)
+            HistoryListView(filterText: $filterText, onOpenHistoryFile: onOpenHistoryFile, onEditMemo: onEditMemo)
         }
     }
 }
@@ -1090,6 +1151,7 @@ struct HistoryListView: View {
     @FocusState private var isFilterFocused: Bool
 
     let onOpenHistoryFile: (String) -> Void
+    let onEditMemo: (String, String?) -> Void  // (fileKey, currentMemo)
 
     var body: some View {
         let recentHistory = historyManager.getRecentHistory(limit: appSettings.maxHistoryCount)
@@ -1134,7 +1196,7 @@ struct HistoryListView: View {
                 CustomScrollView {
                     VStack(spacing: 8) {
                         ForEach(filteredHistory) { entry in
-                            HistoryEntryRow(entry: entry, onOpenHistoryFile: onOpenHistoryFile)
+                            HistoryEntryRow(entry: entry, onOpenHistoryFile: onOpenHistoryFile, onEditMemo: onEditMemo)
                         }
                     }
                     .padding(.vertical, 4)
@@ -1160,9 +1222,7 @@ struct HistoryEntryRow: View {
 
     let entry: FileHistoryEntry
     let onOpenHistoryFile: (String) -> Void
-
-    @State private var showMemoPopover = false
-    @State private var editingMemo = ""
+    let onEditMemo: (String, String?) -> Void  // (fileKey, currentMemo)
 
     var body: some View {
         HStack(spacing: 0) {
@@ -1208,8 +1268,7 @@ struct HistoryEntryRow: View {
         .cornerRadius(4)
         .contextMenu {
             Button(action: {
-                editingMemo = entry.memo ?? ""
-                showMemoPopover = true
+                onEditMemo(entry.fileKey, entry.memo)
             }) {
                 Label(L("menu_edit_memo"), systemImage: "square.and.pencil")
             }
@@ -1222,18 +1281,6 @@ struct HistoryEntryRow: View {
                 Label(L("menu_reveal_in_finder"), systemImage: "folder")
             }
             .disabled(!entry.isAccessible)
-        }
-        .popover(isPresented: $showMemoPopover) {
-            MemoEditPopover(
-                memo: $editingMemo,
-                onSave: {
-                    historyManager.updateMemo(for: entry.fileKey, memo: editingMemo)
-                    showMemoPopover = false
-                },
-                onCancel: {
-                    showMemoPopover = false
-                }
-            )
         }
     }
 
@@ -1250,6 +1297,8 @@ struct MemoEditPopover: View {
     let onSave: () -> Void
     let onCancel: () -> Void
 
+    @FocusState private var isFocused: Bool
+
     var body: some View {
         VStack(spacing: 12) {
             Text(L("memo_edit_title"))
@@ -1258,6 +1307,10 @@ struct MemoEditPopover: View {
             TextField(L("memo_placeholder"), text: $memo)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 250)
+                .focused($isFocused)
+                .onSubmit {
+                    onSave()
+                }
 
             HStack {
                 Button(L("cancel")) {
@@ -1273,6 +1326,12 @@ struct MemoEditPopover: View {
             }
         }
         .padding()
+        .onAppear {
+            // 少し遅延させてフォーカスを設定
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                isFocused = true
+            }
+        }
     }
 }
 

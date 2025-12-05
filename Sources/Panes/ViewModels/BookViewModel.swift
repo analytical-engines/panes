@@ -206,6 +206,18 @@ class BookViewModel {
         return imageSource != nil
     }
 
+    /// 現在のファイルのメモを取得
+    func getCurrentMemo() -> String? {
+        guard let fileKey = currentFileKey else { return nil }
+        return historyManager?.history.first(where: { $0.fileKey == fileKey })?.memo
+    }
+
+    /// 現在のファイルのメモを更新
+    func updateCurrentMemo(_ memo: String?) {
+        guard let fileKey = currentFileKey else { return }
+        historyManager?.updateMemo(for: fileKey, memo: memo)
+    }
+
     /// 画像ソースを開く（zipまたは画像ファイル）
     func openSource(_ source: ImageSource) {
         guard source.imageCount > 0 else {

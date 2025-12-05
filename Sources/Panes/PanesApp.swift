@@ -73,6 +73,14 @@ struct ImageViewerApp: App {
                 .keyboardShortcut("w", modifiers: [.command, .shift])
                 .disabled(focusedViewModel?.hasOpenFile != true)
 
+                Button(action: {
+                    editCurrentFileMemo()
+                }) {
+                    Label(L("menu_edit_memo"), systemImage: "square.and.pencil")
+                }
+                .keyboardShortcut("m", modifiers: [.command, .shift])
+                .disabled(focusedViewModel?.hasOpenFile != true)
+
                 Divider()
 
                 Menu(L("menu_history")) {
@@ -358,6 +366,30 @@ struct ImageViewerApp: App {
                     alert.runModal()
                 }
             }
+        }
+    }
+
+    /// 現在のファイルのメモを編集
+    private func editCurrentFileMemo() {
+        guard let viewModel = focusedViewModel else { return }
+
+        let alert = NSAlert()
+        alert.messageText = L("memo_edit_title")
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: L("save"))
+        alert.addButton(withTitle: L("cancel"))
+
+        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        textField.stringValue = viewModel.getCurrentMemo() ?? ""
+        textField.placeholderString = L("memo_placeholder")
+        alert.accessoryView = textField
+
+        // テキストフィールドにフォーカスを設定
+        alert.window.initialFirstResponder = textField
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            let newMemo = textField.stringValue
+            viewModel.updateCurrentMemo(newMemo.isEmpty ? nil : newMemo)
         }
     }
 
