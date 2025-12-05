@@ -82,14 +82,15 @@ struct PageIndicatorOverlayContent: View {
     let onHover: () -> Void
 
     @State private var hoverPosition: CGFloat?
+    @State private var barWidth: CGFloat = 300
 
     /// 右→左読みの場合、バーは右から左に進む
     private var isRightToLeft: Bool {
         readingDirection == .rightToLeft
     }
 
-    /// プログレスバーの固定幅
-    private let barFixedWidth: CGFloat = 300
+    /// プログレスバーの最小幅
+    private let barMinWidth: CGFloat = 300
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -104,48 +105,53 @@ struct PageIndicatorOverlayContent: View {
                 .font(.system(size: 13, weight: .medium))
                 .fixedSize(horizontal: true, vertical: false)
 
-            // プログレスバー（固定幅）
-            ZStack(alignment: isRightToLeft ? .trailing : .leading) {
-                // 背景
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(Color.white.opacity(0.3))
-                    .frame(width: barFixedWidth, height: 6)
+            // プログレスバー（VStackの幅に合わせる）
+            GeometryReader { geometry in
+                let actualWidth = max(barMinWidth, geometry.size.width)
+                ZStack(alignment: isRightToLeft ? .trailing : .leading) {
+                    // 背景
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color.white.opacity(0.3))
 
-                // 進捗
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(Color.white.opacity(0.8))
-                    .frame(width: progressWidth(in: barFixedWidth), height: 6)
-                    .frame(width: barFixedWidth, alignment: isRightToLeft ? .trailing : .leading)
-            }
-            .frame(width: barFixedWidth, height: 6)
-            .contentShape(Rectangle())
-            .onContinuousHover { phase in
-                switch phase {
-                case .active(let location):
-                    hoverPosition = location.x
-                    onHover()
-                case .ended:
-                    hoverPosition = nil
+                    // 進捗
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color.white.opacity(0.8))
+                        .frame(width: progressWidth(in: actualWidth))
+                        .frame(maxWidth: .infinity, alignment: isRightToLeft ? .trailing : .leading)
+                }
+                .contentShape(Rectangle())
+                .onContinuousHover { phase in
+                    switch phase {
+                    case .active(let location):
+                        hoverPosition = location.x
+                        barWidth = actualWidth
+                        onHover()
+                    case .ended:
+                        hoverPosition = nil
+                    }
+                }
+                .onTapGesture { location in
+                    let targetPage = pageForPosition(location.x, in: actualWidth)
+                    onJumpToPage(targetPage)
+                }
+                .overlay(alignment: .top) {
+                    // ホバー時のツールチップ
+                    if let hoverX = hoverPosition {
+                        let targetPage = pageForPosition(hoverX, in: barWidth)
+                        Text(tooltipText(for: targetPage))
+                            .font(.system(size: 11))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.black.opacity(0.8), in: RoundedRectangle(cornerRadius: 4))
+                            .offset(x: hoverX - barWidth / 2, y: -28)
+                    }
                 }
             }
-            .onTapGesture { location in
-                let targetPage = pageForPosition(location.x)
-                onJumpToPage(targetPage)
-            }
-            .overlay(alignment: .top) {
-                // ホバー時のツールチップ
-                if let hoverX = hoverPosition {
-                    let targetPage = pageForPosition(hoverX)
-                    Text(tooltipText(for: targetPage))
-                        .font(.system(size: 11))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.black.opacity(0.8), in: RoundedRectangle(cornerRadius: 4))
-                        .offset(x: hoverX - barFixedWidth / 2, y: -28)
-                }
-            }
+            .frame(height: 6)
+            .frame(minWidth: barMinWidth)
         }
+        .fixedSize()
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(Color.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 8))
@@ -229,12 +235,12 @@ struct PageIndicatorOverlayContent: View {
     }
 
     /// 位置からページ番号を計算
-    private func pageForPosition(_ x: CGFloat) -> Int {
+    private func pageForPosition(_ x: CGFloat, in width: CGFloat) -> Int {
         guard totalPages > 0 else { return 0 }
 
         // 右→左読みの場合、クリック位置の解釈を反転
-        let adjustedX = isRightToLeft ? (barFixedWidth - x) : x
-        let ratio = max(0, min(1, adjustedX / barFixedWidth))
+        let adjustedX = isRightToLeft ? (width - x) : x
+        let ratio = max(0, min(1, adjustedX / width))
         let page = Int(ratio * CGFloat(totalPages - 1))
         return max(0, min(totalPages - 1, page))
     }
