@@ -9,6 +9,7 @@ struct FileHistoryEntry: Codable, Identifiable {
     let fileName: String
     var lastAccessDate: Date
     var accessCount: Int
+    var memo: String?
 
     init(fileKey: String, filePath: String, fileName: String) {
         self.id = fileKey
@@ -17,15 +18,17 @@ struct FileHistoryEntry: Codable, Identifiable {
         self.fileName = fileName
         self.lastAccessDate = Date()
         self.accessCount = 1
+        self.memo = nil
     }
 
-    init(fileKey: String, filePath: String, fileName: String, lastAccessDate: Date, accessCount: Int) {
+    init(fileKey: String, filePath: String, fileName: String, lastAccessDate: Date, accessCount: Int, memo: String? = nil) {
         self.id = fileKey
         self.fileKey = fileKey
         self.filePath = filePath
         self.fileName = fileName
         self.lastAccessDate = lastAccessDate
         self.accessCount = accessCount
+        self.memo = memo
     }
 
     /// ファイルがアクセス可能かどうか
@@ -375,6 +378,46 @@ class FileHistoryManager {
             for i in history.indices {
                 history[i].accessCount = 1
             }
+            saveHistoryToUserDefaults()
+        }
+    }
+
+    // MARK: - Memo
+
+    /// 指定したfileKeyのメモを更新
+    func updateMemo(for fileKey: String, memo: String?) {
+        if useSwiftData {
+            updateMemoWithSwiftData(for: fileKey, memo: memo)
+        } else {
+            updateMemoWithUserDefaults(for: fileKey, memo: memo)
+        }
+    }
+
+    /// SwiftDataでメモを更新
+    private func updateMemoWithSwiftData(for fileKey: String, memo: String?) {
+        guard let context = modelContext else { return }
+        do {
+            let searchKey = fileKey
+            var descriptor = FetchDescriptor<FileHistoryData>(
+                predicate: #Predicate<FileHistoryData> { $0.fileKey == searchKey }
+            )
+            descriptor.fetchLimit = 1
+            let results = try context.fetch(descriptor)
+            if let historyData = results.first {
+                // 空文字列はnilとして保存
+                historyData.memo = memo?.isEmpty == true ? nil : memo
+                try context.save()
+                loadHistory()
+            }
+        } catch {
+            DebugLogger.log("❌ Failed to update memo: \(error)", level: .minimal)
+        }
+    }
+
+    /// UserDefaultsでメモを更新
+    private func updateMemoWithUserDefaults(for fileKey: String, memo: String?) {
+        if let index = history.firstIndex(where: { $0.fileKey == fileKey }) {
+            history[index].memo = memo?.isEmpty == true ? nil : memo
             saveHistoryToUserDefaults()
         }
     }

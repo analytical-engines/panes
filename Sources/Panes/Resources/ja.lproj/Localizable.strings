@@ -94,6 +94,14 @@
 "menu_show_page" = "このページを表示";
 "menu_copy_image" = "画像をコピー";
 "menu_reveal_in_finder" = "Finderで表示";
+"menu_edit_memo" = "メモを編集";
+
+// MARK: - Memo
+
+"memo_edit_title" = "メモを編集";
+"memo_placeholder" = "メモを入力...";
+"cancel" = "キャンセル";
+"save" = "保存";
 
 // MARK: - Error Messages
 

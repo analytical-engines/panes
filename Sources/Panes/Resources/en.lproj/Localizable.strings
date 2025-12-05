@@ -94,6 +94,14 @@
 "menu_show_page" = "Show This Page";
 "menu_copy_image" = "Copy Image";
 "menu_reveal_in_finder" = "Reveal in Finder";
+"menu_edit_memo" = "Edit Memo";
+
+// MARK: - Memo
+
+"memo_edit_title" = "Edit Memo";
+"memo_placeholder" = "Enter memo...";
+"cancel" = "Cancel";
+"save" = "Save";
 
 // MARK: - Error Messages
 

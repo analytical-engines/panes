@@ -13,6 +13,9 @@ final class FileHistoryData {
     /// ページ表示設定（JSON形式で保存）
     var pageSettingsData: Data?
 
+    /// ユーザーメモ
+    var memo: String?
+
     init(fileKey: String, filePath: String, fileName: String) {
         self.fileKey = fileKey
         self.filePath = filePath
@@ -34,7 +37,8 @@ final class FileHistoryData {
             filePath: filePath,
             fileName: fileName,
             lastAccessDate: lastAccessDate,
-            accessCount: accessCount
+            accessCount: accessCount,
+            memo: memo
         )
     }
 

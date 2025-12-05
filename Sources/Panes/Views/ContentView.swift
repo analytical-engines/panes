@@ -1089,7 +1089,10 @@ struct HistoryListView: View {
         let recentHistory = historyManager.getRecentHistory(limit: appSettings.maxHistoryCount)
         let filteredHistory = filterText.isEmpty
             ? recentHistory
-            : recentHistory.filter { $0.fileName.localizedCaseInsensitiveContains(filterText) }
+            : recentHistory.filter {
+                $0.fileName.localizedCaseInsensitiveContains(filterText) ||
+                ($0.memo?.localizedCaseInsensitiveContains(filterText) ?? false)
+            }
 
         if appSettings.showHistoryOnLaunch && !recentHistory.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
@@ -1146,6 +1149,9 @@ struct HistoryEntryRow: View {
     let entry: FileHistoryEntry
     let onOpenHistoryFile: (String) -> Void
 
+    @State private var showMemoPopover = false
+    @State private var editingMemo = ""
+
     var body: some View {
         HStack(spacing: 0) {
             Button(action: {
@@ -1153,13 +1159,22 @@ struct HistoryEntryRow: View {
                     onOpenHistoryFile(entry.filePath)
                 }
             }) {
-                HStack {
-                    Text(entry.fileName)
-                        .foregroundColor(entry.isAccessible ? .white : .gray)
-                    Spacer()
-                    Text(L("access_count_format", entry.accessCount))
-                        .foregroundColor(.gray)
-                        .font(.caption)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack {
+                        Text(entry.fileName)
+                            .foregroundColor(entry.isAccessible ? .white : .gray)
+                        Spacer()
+                        Text(L("access_count_format", entry.accessCount))
+                            .foregroundColor(.gray)
+                            .font(.caption)
+                    }
+                    // メモがある場合は表示
+                    if let memo = entry.memo, !memo.isEmpty {
+                        Text(memo)
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                            .lineLimit(1)
+                    }
                 }
             }
             .buttonStyle(.plain)
@@ -1181,11 +1196,32 @@ struct HistoryEntryRow: View {
         .cornerRadius(4)
         .contextMenu {
             Button(action: {
+                editingMemo = entry.memo ?? ""
+                showMemoPopover = true
+            }) {
+                Label(L("menu_edit_memo"), systemImage: "square.and.pencil")
+            }
+
+            Divider()
+
+            Button(action: {
                 revealInFinder()
             }) {
                 Label(L("menu_reveal_in_finder"), systemImage: "folder")
             }
             .disabled(!entry.isAccessible)
+        }
+        .popover(isPresented: $showMemoPopover) {
+            MemoEditPopover(
+                memo: $editingMemo,
+                onSave: {
+                    historyManager.updateMemo(for: entry.fileKey, memo: editingMemo)
+                    showMemoPopover = false
+                },
+                onCancel: {
+                    showMemoPopover = false
+                }
+            )
         }
     }
 
@@ -1193,6 +1229,38 @@ struct HistoryEntryRow: View {
     private func revealInFinder() {
         let url = URL(fileURLWithPath: entry.filePath)
         NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+}
+
+/// メモ編集用のポップオーバー
+struct MemoEditPopover: View {
+    @Binding var memo: String
+    let onSave: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text(L("memo_edit_title"))
+                .font(.headline)
+
+            TextField(L("memo_placeholder"), text: $memo)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 250)
+
+            HStack {
+                Button(L("cancel")) {
+                    onCancel()
+                }
+                .keyboardShortcut(.escape, modifiers: [])
+
+                Button(L("save")) {
+                    onSave()
+                }
+                .keyboardShortcut(.return, modifiers: [])
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding()
     }
 }
 
