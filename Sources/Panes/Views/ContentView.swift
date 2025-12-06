@@ -13,7 +13,6 @@ struct ContentView: View {
     @Environment(FileHistoryManager.self) private var historyManager
     @Environment(AppSettings.self) private var appSettings
     @Environment(SessionManager.self) private var sessionManager
-    @State private var isFilePickerPresented = false
     @Environment(\.openWindow) private var openWindow
     @State private var eventMonitor: Any?
     @State private var myWindowNumber: Int?
@@ -508,12 +507,6 @@ struct ContentView: View {
         .onAppear(perform: handleOnAppear)
         .onDisappear(perform: handleOnDisappear)
         .onDrop(of: [.fileURL], isTargeted: nil, perform: handleDrop)
-        .fileImporter(
-            isPresented: $isFilePickerPresented,
-            allowedContentTypes: [.zip, .cbz, .rar, .cbr, .jpeg, .png, .gif, .webP],
-            allowsMultipleSelection: true,
-            onCompletion: handleFileImport
-        )
         .onChange(of: pendingURLs) { _, newValue in
             if !newValue.isEmpty {
                 withAnimation { isWaitingForFile = true }
@@ -960,15 +953,6 @@ struct ContentView: View {
         sessionManager.removeWindow(id: windowID)
     }
 
-    private func handleFileImport(_ result: Result<[URL], Error>) {
-        switch result {
-        case .success(let urls):
-            handleSelectedFiles(urls)
-        case .failure(let error):
-            print("File selection error: \(error)")
-        }
-    }
-
     private func toggleFullScreen() {
         NSApp.keyWindow?.toggleFullScreen(nil)
     }
@@ -996,7 +980,21 @@ struct ContentView: View {
     }
 
     private func openFilePicker() {
-        isFilePickerPresented = true
+        let openPanel = NSOpenPanel()
+        openPanel.canChooseFiles = true
+        openPanel.canChooseDirectories = true
+        openPanel.allowsMultipleSelection = true
+        openPanel.allowedContentTypes = [.zip, .cbz, .rar, .cbr, .jpeg, .png, .gif, .webP, .folder]
+        openPanel.message = L("drop_files_hint")
+
+        openPanel.begin { response in
+            if response == .OK {
+                let urls = openPanel.urls
+                if !urls.isEmpty {
+                    handleSelectedFiles(urls)
+                }
+            }
+        }
     }
 
     private func handleSelectedFiles(_ urls: [URL]) {
