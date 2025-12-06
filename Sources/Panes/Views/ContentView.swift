@@ -590,6 +590,14 @@ struct ContentView: View {
                 }
             }
         }
+        .onChange(of: showMemoEdit) { _, newValue in
+            // メモ編集モーダルが閉じられたらメインビューにフォーカスを戻す
+            if !newValue {
+                DispatchQueue.main.async {
+                    isMainViewFocused = true
+                }
+            }
+        }
         .onKeyPress(keys: [.leftArrow]) { handleLeftArrow($0) }
         .onKeyPress(keys: [.rightArrow]) { handleRightArrow($0) }
         .onKeyPress(keys: [.space]) { press in

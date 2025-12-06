@@ -9,7 +9,7 @@
 "recent_files" = "最近開いたファイル:";
 "loading" = "読み込み中...";
 "opening_windows" = "ウィンドウを開いています...";
-"drop_files_hint" = "zipファイルまたは画像ファイルをドロップ";
+"drop_files_hint" = "書庫ファイルまたは画像ファイルをドロップ";
 "access_count_format" = "(%d回)";
 "history_filter_placeholder" = "ファイル名で絞り込み";
 "history_filter_result_format" = "%d件 / %d件";
