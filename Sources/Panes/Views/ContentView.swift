@@ -575,6 +575,12 @@ struct ContentView: View {
             // ページが変わったらセッションマネージャーを更新
             sessionManager.updateWindowState(id: windowID, currentPage: newPage)
         }
+        .onChange(of: viewModel.errorMessage) { _, newValue in
+            // エラーが発生した場合もローディング状態を解除
+            if newValue != nil {
+                isWaitingForFile = false
+            }
+        }
         .onChange(of: showHistoryFilter) { _, newValue in
             // フィルタが非表示になったらメインビューにフォーカスを戻す
             if !newValue {
