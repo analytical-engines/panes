@@ -70,6 +70,8 @@
 
 "menu_close_file" = "Close File";
 "menu_show_history" = "Show History";
+"menu_show_history_toggle" = "Show History";
+"menu_hide_history" = "Hide History";
 "menu_single_view" = "Single View";
 "menu_spread_view" = "Spread View";
 "menu_reading_direction_rtl" = "Reading Direction: Right to Left";
@@ -186,3 +188,9 @@
 "image_info_aspect_ratio" = "Ratio";
 "image_info_file_size" = "Size";
 "image_info_format" = "Format";
+
+// MARK: - History Tooltip
+
+"tooltip_file_size" = "Size";
+"tooltip_archive_type" = "Type";
+"tooltip_last_access" = "Last Access";

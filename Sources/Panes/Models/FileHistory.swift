@@ -11,10 +11,12 @@ struct FileHistoryEntry: Codable, Identifiable {
     var accessCount: Int
     var memo: String?
 
-    /// ファイルがアクセス可能かどうか（キャッシュ済み）
-    var isAccessible: Bool
+    /// ファイルがアクセス可能かどうか（表示時にチェック、LazyVStackにより表示行のみ）
+    var isAccessible: Bool {
+        FileManager.default.fileExists(atPath: filePath)
+    }
 
-    // Codable用のCodingKeys（isAccessibleは永続化しない）
+    // Codable用のCodingKeys
     private enum CodingKeys: String, CodingKey {
         case id, fileKey, filePath, fileName, lastAccessDate, accessCount, memo
     }
@@ -27,10 +29,9 @@ struct FileHistoryEntry: Codable, Identifiable {
         self.lastAccessDate = Date()
         self.accessCount = 1
         self.memo = nil
-        self.isAccessible = true  // 新規アクセス時は必ずアクセス可能
     }
 
-    init(fileKey: String, filePath: String, fileName: String, lastAccessDate: Date, accessCount: Int, memo: String? = nil, isAccessible: Bool? = nil) {
+    init(fileKey: String, filePath: String, fileName: String, lastAccessDate: Date, accessCount: Int, memo: String? = nil) {
         self.id = fileKey
         self.fileKey = fileKey
         self.filePath = filePath
@@ -38,11 +39,9 @@ struct FileHistoryEntry: Codable, Identifiable {
         self.lastAccessDate = lastAccessDate
         self.accessCount = accessCount
         self.memo = memo
-        // isAccessibleが指定されていなければチェックする
-        self.isAccessible = isAccessible ?? FileManager.default.fileExists(atPath: filePath)
     }
 
-    // Decodable: デコード時にisAccessibleをチェック
+    // Decodable
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try container.decode(String.self, forKey: .id)
@@ -52,8 +51,6 @@ struct FileHistoryEntry: Codable, Identifiable {
         self.lastAccessDate = try container.decode(Date.self, forKey: .lastAccessDate)
         self.accessCount = try container.decode(Int.self, forKey: .accessCount)
         self.memo = try container.decodeIfPresent(String.self, forKey: .memo)
-        // デコード時にアクセス可能かチェック
-        self.isAccessible = FileManager.default.fileExists(atPath: self.filePath)
     }
 }
 
@@ -81,6 +78,25 @@ class FileHistoryManager {
 
     /// SwiftDataが利用可能かどうか
     private var useSwiftData = false
+
+    /// isAccessibleのキャッシュ（fileKey -> isAccessible）
+    private var accessibilityCache: [String: Bool] = [:]
+
+    /// キャッシュ済みのisAccessibleを取得（未キャッシュならチェックしてキャッシュ）
+    func isAccessible(for entry: FileHistoryEntry) -> Bool {
+        if let cached = accessibilityCache[entry.fileKey] {
+            return cached
+        }
+        DebugLogger.log("📁 Checking file exists: \(entry.fileName)", level: .verbose)
+        let accessible = FileManager.default.fileExists(atPath: entry.filePath)
+        accessibilityCache[entry.fileKey] = accessible
+        return accessible
+    }
+
+    /// アクセシビリティキャッシュをクリア（履歴更新時など）
+    func clearAccessibilityCache() {
+        accessibilityCache.removeAll()
+    }
 
     init() {
         setupSwiftData()

@@ -70,6 +70,8 @@
 
 "menu_close_file" = "ファイルを閉じる";
 "menu_show_history" = "履歴を表示";
+"menu_show_history_toggle" = "履歴を表示";
+"menu_hide_history" = "履歴を非表示";
 "menu_single_view" = "単ページ表示";
 "menu_spread_view" = "見開き表示";
 "menu_reading_direction_rtl" = "読み方向: 右から左";
@@ -186,3 +188,9 @@
 "image_info_aspect_ratio" = "縦横比";
 "image_info_file_size" = "サイズ";
 "image_info_format" = "形式";
+
+// MARK: - History Tooltip
+
+"tooltip_file_size" = "サイズ";
+"tooltip_archive_type" = "種類";
+"tooltip_last_access" = "最終アクセス";

@@ -47,11 +47,15 @@ struct ContentView: View {
 
     // 履歴フィルタ（ファイルを閉じても維持）
     @State private var historyFilterText: String = ""
+    @State private var showHistoryFilter: Bool = false
 
     // メモ編集用
     @State private var showMemoEdit = false
     @State private var editingMemoText = ""
     @State private var editingMemoFileKey: String?  // 履歴エントリ編集時に使用
+
+    // メインビューのフォーカス管理
+    @FocusState private var isMainViewFocused: Bool
 
     @ViewBuilder
     private var mainContent: some View {
@@ -118,6 +122,7 @@ struct ContentView: View {
             InitialScreenView(
                 errorMessage: viewModel.errorMessage,
                 filterText: $historyFilterText,
+                showFilterField: $showHistoryFilter,
                 onOpenFile: openFilePicker,
                 onOpenHistoryFile: openHistoryFile,
                 onEditMemo: { fileKey, currentMemo in
@@ -371,8 +376,17 @@ struct ContentView: View {
     /// 初期画面のコンテキストメニュー
     @ViewBuilder
     private var initialScreenContextMenu: some View {
-        Button(action: openFilePicker) {
-            Label(L("open_file"), systemImage: "folder")
+        Button(action: {
+            appSettings.showHistoryOnLaunch.toggle()
+        }) {
+            Label(
+                appSettings.showHistoryOnLaunch
+                    ? L("menu_hide_history")
+                    : L("menu_show_history_toggle"),
+                systemImage: appSettings.showHistoryOnLaunch
+                    ? "eye.slash"
+                    : "eye"
+            )
         }
     }
 
@@ -486,6 +500,7 @@ struct ContentView: View {
         }
         .frame(minWidth: 800, minHeight: 600)
         .focusable()
+        .focused($isMainViewFocused)
         .focusEffectDisabled()
         .focusedValue(\.bookViewModel, viewModel)
         .background(WindowNumberGetter(windowNumber: $myWindowNumber))
@@ -567,6 +582,14 @@ struct ContentView: View {
             // ページが変わったらセッションマネージャーを更新
             sessionManager.updateWindowState(id: windowID, currentPage: newPage)
         }
+        .onChange(of: showHistoryFilter) { _, newValue in
+            // フィルタが非表示になったらメインビューにフォーカスを戻す
+            if !newValue {
+                DispatchQueue.main.async {
+                    isMainViewFocused = true
+                }
+            }
+        }
         .onKeyPress(keys: [.leftArrow]) { handleLeftArrow($0) }
         .onKeyPress(keys: [.rightArrow]) { handleRightArrow($0) }
         .onKeyPress(keys: [.space]) { press in
@@ -577,6 +600,14 @@ struct ContentView: View {
         .onKeyPress(characters: CharacterSet(charactersIn: "fF")) { press in
             if press.modifiers.contains(.command) && press.modifiers.contains(.control) {
                 toggleFullScreen()
+                return .handled
+            }
+            // ⌘F でフィルタ表示/非表示（初期画面のみ）
+            if press.modifiers.contains(.command) && !press.modifiers.contains(.control) && !viewModel.hasOpenFile {
+                showHistoryFilter.toggle()
+                if !showHistoryFilter {
+                    historyFilterText = ""  // 非表示時にクリア
+                }
                 return .handled
             }
             return .ignored
@@ -1113,6 +1144,7 @@ struct InitialScreenView: View {
 
     let errorMessage: String?
     @Binding var filterText: String
+    @Binding var showFilterField: Bool
     let onOpenFile: () -> Void
     let onOpenHistoryFile: (String) -> Void
     let onEditMemo: (String, String?) -> Void  // (fileKey, currentMemo)
@@ -1138,7 +1170,7 @@ struct InitialScreenView: View {
             .buttonStyle(.borderedProminent)
 
             // 履歴表示
-            HistoryListView(filterText: $filterText, onOpenHistoryFile: onOpenHistoryFile, onEditMemo: onEditMemo)
+            HistoryListView(filterText: $filterText, showFilterField: $showFilterField, onOpenHistoryFile: onOpenHistoryFile, onEditMemo: onEditMemo)
         }
     }
 }
@@ -1148,6 +1180,7 @@ struct HistoryListView: View {
     @Environment(FileHistoryManager.self) private var historyManager
     @Environment(AppSettings.self) private var appSettings
     @Binding var filterText: String
+    @Binding var showFilterField: Bool
     @FocusState private var isFilterFocused: Bool
 
     let onOpenHistoryFile: (String) -> Void
@@ -1157,10 +1190,7 @@ struct HistoryListView: View {
         let recentHistory = historyManager.getRecentHistory(limit: appSettings.maxHistoryCount)
         let filteredHistory = filterText.isEmpty
             ? recentHistory
-            : recentHistory.filter {
-                $0.fileName.localizedCaseInsensitiveContains(filterText) ||
-                ($0.memo?.localizedCaseInsensitiveContains(filterText) ?? false)
-            }
+            : recentHistory.filter { matchesFilter($0, pattern: filterText) }
 
         if appSettings.showHistoryOnLaunch && !recentHistory.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
@@ -1169,31 +1199,43 @@ struct HistoryListView: View {
                     .font(.headline)
                     .padding(.top, 20)
 
-                // フィルタ入力フィールド
-                HStack {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundColor(.gray)
-                    TextField(L("history_filter_placeholder"), text: $filterText)
-                        .textFieldStyle(.plain)
-                        .foregroundColor(.white)
-                        .focused($isFilterFocused)
-                        .onExitCommand {
-                            filterText = ""
-                            isFilterFocused = false
+                // フィルタ入力フィールド（⌘+Fで表示/非表示）
+                if showFilterField {
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.gray)
+                        TextField(L("history_filter_placeholder"), text: $filterText)
+                            .textFieldStyle(.plain)
+                            .foregroundColor(.white)
+                            .focused($isFilterFocused)
+                            .onExitCommand {
+                                filterText = ""
+                                showFilterField = false
+                            }
+                        if !filterText.isEmpty {
+                            Button(action: { filterText = "" }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.gray)
+                            }
+                            .buttonStyle(.plain)
                         }
-                    if !filterText.isEmpty {
-                        Button(action: { filterText = "" }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.gray)
+                    }
+                    .padding(8)
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(6)
+                    .onAppear {
+                        // フィルタ表示時に自動フォーカス
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            isFilterFocused = true
                         }
-                        .buttonStyle(.plain)
+                    }
+                    .onDisappear {
+                        // フィルタ非表示時にフォーカスをクリア（親ビューがキーイベントを受け取れるように）
+                        isFilterFocused = false
                     }
                 }
-                .padding(8)
-                .background(Color.white.opacity(0.1))
-                .cornerRadius(6)
 
-                CustomScrollView {
+                ScrollView {
                     LazyVStack(spacing: 8) {
                         ForEach(filteredHistory) { entry in
                             HistoryEntryRow(entry: entry, onOpenHistoryFile: onOpenHistoryFile, onEditMemo: onEditMemo)
@@ -1201,6 +1243,7 @@ struct HistoryListView: View {
                     }
                     .padding(.vertical, 4)
                 }
+                .scrollIndicators(.visible)
                 .frame(maxHeight: 300)
 
                 // フィルタ結果の件数表示
@@ -1214,6 +1257,30 @@ struct HistoryListView: View {
             .padding(.horizontal, 20)
         }
     }
+
+    /// フィルタにマッチするかチェック（ワイルドカード対応）
+    private func matchesFilter(_ entry: FileHistoryEntry, pattern: String) -> Bool {
+        // ワイルドカード文字が含まれている場合は正規表現として処理
+        if pattern.contains("*") || pattern.contains("?") {
+            let regexPattern = wildcardToRegex(pattern)
+            if let regex = try? NSRegularExpression(pattern: regexPattern, options: .caseInsensitive) {
+                let fileNameMatch = regex.firstMatch(in: entry.fileName, range: NSRange(entry.fileName.startIndex..., in: entry.fileName)) != nil
+                let memoMatch = entry.memo.map { regex.firstMatch(in: $0, range: NSRange($0.startIndex..., in: $0)) != nil } ?? false
+                return fileNameMatch || memoMatch
+            }
+        }
+        // 通常の部分一致検索
+        return entry.fileName.localizedCaseInsensitiveContains(pattern) ||
+               (entry.memo?.localizedCaseInsensitiveContains(pattern) ?? false)
+    }
+
+    /// ワイルドカードパターンを正規表現に変換
+    private func wildcardToRegex(_ pattern: String) -> String {
+        var result = NSRegularExpression.escapedPattern(for: pattern)
+        result = result.replacingOccurrences(of: "\\*", with: ".*")
+        result = result.replacingOccurrences(of: "\\?", with: ".")
+        return result
+    }
 }
 
 /// 履歴エントリの行
@@ -1224,17 +1291,23 @@ struct HistoryEntryRow: View {
     let onOpenHistoryFile: (String) -> Void
     let onEditMemo: (String, String?) -> Void  // (fileKey, currentMemo)
 
+    // ツールチップ用（一度だけ生成してキャッシュ）
+    @State private var cachedTooltip: String?
+
     var body: some View {
+        // FileHistoryManagerのキャッシュを使用（一度チェックしたらセッション中保持）
+        let isAccessible = historyManager.isAccessible(for: entry)
+
         HStack(spacing: 0) {
             Button(action: {
-                if entry.isAccessible {
+                if isAccessible {
                     onOpenHistoryFile(entry.filePath)
                 }
             }) {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack {
                         Text(entry.fileName)
-                            .foregroundColor(entry.isAccessible ? .white : .gray)
+                            .foregroundColor(isAccessible ? .white : .gray)
                         Spacer()
                         Text(L("access_count_format", entry.accessCount))
                             .foregroundColor(.gray)
@@ -1250,7 +1323,7 @@ struct HistoryEntryRow: View {
                 }
             }
             .buttonStyle(.plain)
-            .disabled(!entry.isAccessible)
+            .disabled(!isAccessible)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
 
@@ -1264,8 +1337,15 @@ struct HistoryEntryRow: View {
             .buttonStyle(.plain)
             .padding(.trailing, 8)
         }
-        .background(Color.white.opacity(entry.isAccessible ? 0.1 : 0.05))
+        .background(Color.white.opacity(isAccessible ? 0.1 : 0.05))
         .cornerRadius(4)
+        .help(Text(cachedTooltip ?? ""))
+        .onAppear {
+            // 表示時に一度だけツールチップを生成してキャッシュ
+            if cachedTooltip == nil {
+                cachedTooltip = generateTooltip()
+            }
+        }
         .contextMenu {
             Button(action: {
                 onEditMemo(entry.fileKey, entry.memo)
@@ -1280,7 +1360,60 @@ struct HistoryEntryRow: View {
             }) {
                 Label(L("menu_reveal_in_finder"), systemImage: "folder")
             }
-            .disabled(!entry.isAccessible)
+            .disabled(!isAccessible)
+        }
+    }
+
+    /// ツールチップ用のテキストを生成（ファイルアクセスなし）
+    private func generateTooltip() -> String {
+        var lines: [String] = []
+
+        // ファイルパス
+        lines.append(entry.filePath)
+
+        // 書庫の種類（拡張子から判断、ファイルアクセス不要）
+        let ext = URL(fileURLWithPath: entry.filePath).pathExtension.lowercased()
+        let archiveType = archiveTypeDescription(for: ext)
+        if !archiveType.isEmpty {
+            lines.append(L("tooltip_archive_type") + ": " + archiveType)
+        }
+
+        // 最終アクセス日時（履歴データから、ファイルアクセス不要）
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        lines.append(L("tooltip_last_access") + ": " + formatter.string(from: entry.lastAccessDate))
+
+        return lines.joined(separator: "\n")
+    }
+
+    /// 拡張子から書庫の種類を取得
+    private func archiveTypeDescription(for ext: String) -> String {
+        switch ext {
+        case "zip":
+            return "ZIP"
+        case "cbz":
+            return "CBZ (Comic Book ZIP)"
+        case "rar":
+            return "RAR"
+        case "cbr":
+            return "CBR (Comic Book RAR)"
+        case "7z":
+            return "7-Zip"
+        case "tar":
+            return "TAR"
+        case "gz", "gzip":
+            return "GZIP"
+        case "jpg", "jpeg":
+            return "JPEG"
+        case "png":
+            return "PNG"
+        case "gif":
+            return "GIF"
+        case "webp":
+            return "WebP"
+        default:
+            return ext.uppercased()
         }
     }
 

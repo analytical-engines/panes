@@ -26,7 +26,6 @@ final class FileHistoryData {
     }
 
     /// FileHistoryEntry に変換（既存のコードとの互換性のため）
-    /// isAccessibleはこの時点でチェックしてキャッシュする
     func toEntry() -> FileHistoryEntry {
         FileHistoryEntry(
             fileKey: fileKey,
@@ -34,8 +33,7 @@ final class FileHistoryData {
             fileName: fileName,
             lastAccessDate: lastAccessDate,
             accessCount: accessCount,
-            memo: memo,
-            isAccessible: FileManager.default.fileExists(atPath: filePath)
+            memo: memo
         )
     }
 
