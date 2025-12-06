@@ -27,6 +27,9 @@ protocol ImageSource {
 
     /// 指定されたインデックスの画像フォーマットを取得
     func imageFormat(at index: Int) -> String?
+
+    /// ファイル識別用のユニークキーを生成
+    func generateFileKey() -> String?
 }
 
 extension ImageSource {
