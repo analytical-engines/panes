@@ -11,6 +11,14 @@ struct FileHistoryEntry: Codable, Identifiable {
     var accessCount: Int
     var memo: String?
 
+    /// ファイルがアクセス可能かどうか（キャッシュ済み）
+    var isAccessible: Bool
+
+    // Codable用のCodingKeys（isAccessibleは永続化しない）
+    private enum CodingKeys: String, CodingKey {
+        case id, fileKey, filePath, fileName, lastAccessDate, accessCount, memo
+    }
+
     init(fileKey: String, filePath: String, fileName: String) {
         self.id = fileKey
         self.fileKey = fileKey
@@ -19,9 +27,10 @@ struct FileHistoryEntry: Codable, Identifiable {
         self.lastAccessDate = Date()
         self.accessCount = 1
         self.memo = nil
+        self.isAccessible = true  // 新規アクセス時は必ずアクセス可能
     }
 
-    init(fileKey: String, filePath: String, fileName: String, lastAccessDate: Date, accessCount: Int, memo: String? = nil) {
+    init(fileKey: String, filePath: String, fileName: String, lastAccessDate: Date, accessCount: Int, memo: String? = nil, isAccessible: Bool? = nil) {
         self.id = fileKey
         self.fileKey = fileKey
         self.filePath = filePath
@@ -29,11 +38,22 @@ struct FileHistoryEntry: Codable, Identifiable {
         self.lastAccessDate = lastAccessDate
         self.accessCount = accessCount
         self.memo = memo
+        // isAccessibleが指定されていなければチェックする
+        self.isAccessible = isAccessible ?? FileManager.default.fileExists(atPath: filePath)
     }
 
-    /// ファイルがアクセス可能かどうか
-    var isAccessible: Bool {
-        FileManager.default.fileExists(atPath: filePath)
+    // Decodable: デコード時にisAccessibleをチェック
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(String.self, forKey: .id)
+        self.fileKey = try container.decode(String.self, forKey: .fileKey)
+        self.filePath = try container.decode(String.self, forKey: .filePath)
+        self.fileName = try container.decode(String.self, forKey: .fileName)
+        self.lastAccessDate = try container.decode(Date.self, forKey: .lastAccessDate)
+        self.accessCount = try container.decode(Int.self, forKey: .accessCount)
+        self.memo = try container.decodeIfPresent(String.self, forKey: .memo)
+        // デコード時にアクセス可能かチェック
+        self.isAccessible = FileManager.default.fileExists(atPath: self.filePath)
     }
 }
 
