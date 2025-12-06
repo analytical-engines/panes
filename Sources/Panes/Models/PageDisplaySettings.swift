@@ -169,6 +169,16 @@ struct PageDisplaySettings: Codable {
         }
     }
 
+    /// 単ページ表示属性を設定（ユーザー手動設定）
+    mutating func setForceSinglePage(at index: Int, forced: Bool) {
+        if forced {
+            userForcedSinglePageIndices.insert(index)
+            autoDetectedLandscapeIndices.remove(index)
+        } else {
+            userForcedSinglePageIndices.remove(index)
+        }
+    }
+
     /// 指定したインデックスまでの単ページ属性の累積が奇数かどうか
     /// （見開きのシフト判定に使用）
     func hasOddSinglePagesUpTo(_ index: Int) -> Bool {

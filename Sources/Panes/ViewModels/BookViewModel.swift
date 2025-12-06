@@ -965,7 +965,12 @@ class BookViewModel {
     }
 
     /// 指定ページの配置を設定
+    /// 配置を設定すると自動的に単ページ表示属性も付与される
     func setAlignment(_ alignment: SinglePageAlignment, at pageIndex: Int) {
+        // 単ページ表示属性がなければ自動的に付与
+        if !pageDisplaySettings.isForcedSinglePage(pageIndex) {
+            pageDisplaySettings.setForceSinglePage(at: pageIndex, forced: true)
+        }
         pageDisplaySettings.setAlignment(alignment, for: pageIndex)
         saveViewState()
         loadCurrentPage()
