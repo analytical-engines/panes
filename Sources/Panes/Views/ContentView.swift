@@ -582,6 +582,16 @@ struct ContentView: View {
                 isWaitingForFile = false
             }
         }
+        .onChange(of: myWindowNumber) { _, newWindowNumber in
+            // WindowNumberGetterでウィンドウ番号が設定されたときにフレームも取得
+            if let windowNumber = newWindowNumber,
+               currentWindowFrame == nil,
+               let window = NSApp.windows.first(where: { $0.windowNumber == windowNumber }) {
+                currentWindowFrame = window.frame
+                DebugLogger.log("🪟 Window frame captured via onChange(myWindowNumber): \(window.frame)", level: .normal)
+                setupWindowFrameObserver(for: window)
+            }
+        }
         .onChange(of: showHistoryFilter) { _, newValue in
             // フィルタが非表示になったらメインビューにフォーカスを戻す
             if !newValue {
@@ -1019,9 +1029,8 @@ struct ContentView: View {
 
     private func openInNewWindow(path: String) {
         let url = URL(fileURLWithPath: path)
-        // 新しいウィンドウを開いてファイルを渡す
-        sessionManager.addFilesToOpen(urls: [url])
-        openWindow(id: "new")
+        // 新しいウィンドウでファイルを開く
+        sessionManager.openInNewWindow(url: url)
     }
 
     private func handleDrop(providers: [NSItemProvider]) -> Bool {

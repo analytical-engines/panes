@@ -60,6 +60,9 @@ class SessionManager {
     /// 最初のウィンドウを使ったかどうか
     private var isFirstWindowUsed: Bool = false
 
+    /// 強制的に新しいウィンドウで開くかどうか（openInNewWindow用）
+    private var forceNewWindow: Bool = false
+
     /// 処理完了したウィンドウ数
     private var processedWindowCount: Int = 0
 
@@ -115,6 +118,15 @@ class SessionManager {
         addToQueue(items)
     }
 
+    /// 新しいウィンドウでファイルを開く（履歴から「新しいウィンドウで開く」用）
+    func openInNewWindow(url: URL) {
+        // 強制的に新しいウィンドウで開くフラグを設定
+        forceNewWindow = true
+        DebugLogger.log("🆕 openInNewWindow called, forceNewWindow set to true", level: .normal)
+        let item = PendingFileOpen(url: url)
+        addToQueue([item])
+    }
+
     /// セッション復元を開始する
     func startRestoration() {
         guard !savedSession.isEmpty else {
@@ -143,6 +155,8 @@ class SessionManager {
                     updateLoadingProgress()
                 }
             }
+            // 同時読み込み制限に余裕があれば次のファイルを処理
+            processNextFile()
         } else {
             // 未処理：処理開始をスケジュール
             scheduleProcessingIfNeeded()
@@ -171,11 +185,13 @@ class SessionManager {
         guard !pendingFileOpens.isEmpty else { return }
 
         isProcessing = true
-        isFirstWindowUsed = false
+        // forceNewWindowが設定されている場合は最初のウィンドウを使用済みとしてマーク
+        isFirstWindowUsed = forceNewWindow
+        forceNewWindow = false  // フラグをリセット
         processedWindowCount = 0
         totalWindowsToProcess = pendingFileOpens.count
 
-        DebugLogger.log("🔄 Starting file open processing: \(totalWindowsToProcess) files", level: .normal)
+        DebugLogger.log("🔄 Starting file open processing: \(totalWindowsToProcess) files, isFirstWindowUsed: \(isFirstWindowUsed)", level: .normal)
 
         // 複数ファイルの場合はローディングパネルを表示
         if totalWindowsToProcess > 1 {
@@ -208,6 +224,7 @@ class SessionManager {
         if !isFirstWindowUsed {
             // 最初のファイル：起動時に作成されたウィンドウを使用
             isFirstWindowUsed = true
+            DebugLogger.log("🆕 Using first window (openFileInFirstWindow)", level: .normal)
             NotificationCenter.default.post(
                 name: .openFileInFirstWindow,
                 object: nil,
@@ -215,6 +232,7 @@ class SessionManager {
             )
         } else {
             // 2つ目以降のファイル：新しいウィンドウを作成
+            DebugLogger.log("🆕 Creating new window (needNewWindow)", level: .normal)
             NotificationCenter.default.post(
                 name: .needNewWindow,
                 object: nil,
