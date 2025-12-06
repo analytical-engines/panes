@@ -124,6 +124,7 @@ struct ContentView: View {
                 showFilterField: $showHistoryFilter,
                 onOpenFile: openFilePicker,
                 onOpenHistoryFile: openHistoryFile,
+                onOpenInNewWindow: openInNewWindow,
                 onEditMemo: { fileKey, currentMemo in
                     editingMemoFileKey = fileKey
                     editingMemoText = currentMemo ?? ""
@@ -1016,6 +1017,13 @@ struct ContentView: View {
         pendingURLs = [url]
     }
 
+    private func openInNewWindow(path: String) {
+        let url = URL(fileURLWithPath: path)
+        // 新しいウィンドウを開いてファイルを渡す
+        sessionManager.addFilesToOpen(urls: [url])
+        openWindow(id: "new")
+    }
+
     private func handleDrop(providers: [NSItemProvider]) -> Bool {
         Task {
             var urls: [URL] = []
@@ -1159,6 +1167,7 @@ struct InitialScreenView: View {
     @Binding var showFilterField: Bool
     let onOpenFile: () -> Void
     let onOpenHistoryFile: (String) -> Void
+    let onOpenInNewWindow: (String) -> Void  // filePath
     let onEditMemo: (String, String?) -> Void  // (fileKey, currentMemo)
 
     var body: some View {
@@ -1182,7 +1191,7 @@ struct InitialScreenView: View {
             .buttonStyle(.borderedProminent)
 
             // 履歴表示
-            HistoryListView(filterText: $filterText, showFilterField: $showFilterField, onOpenHistoryFile: onOpenHistoryFile, onEditMemo: onEditMemo)
+            HistoryListView(filterText: $filterText, showFilterField: $showFilterField, onOpenHistoryFile: onOpenHistoryFile, onOpenInNewWindow: onOpenInNewWindow, onEditMemo: onEditMemo)
         }
     }
 }
@@ -1196,6 +1205,7 @@ struct HistoryListView: View {
     @FocusState private var isFilterFocused: Bool
 
     let onOpenHistoryFile: (String) -> Void
+    let onOpenInNewWindow: (String) -> Void  // filePath
     let onEditMemo: (String, String?) -> Void  // (fileKey, currentMemo)
 
     var body: some View {
@@ -1250,7 +1260,7 @@ struct HistoryListView: View {
                 ScrollView {
                     LazyVStack(spacing: 8) {
                         ForEach(filteredHistory) { entry in
-                            HistoryEntryRow(entry: entry, onOpenHistoryFile: onOpenHistoryFile, onEditMemo: onEditMemo)
+                            HistoryEntryRow(entry: entry, onOpenHistoryFile: onOpenHistoryFile, onOpenInNewWindow: onOpenInNewWindow, onEditMemo: onEditMemo)
                         }
                     }
                     .padding(.vertical, 4)
@@ -1301,6 +1311,7 @@ struct HistoryEntryRow: View {
 
     let entry: FileHistoryEntry
     let onOpenHistoryFile: (String) -> Void
+    let onOpenInNewWindow: (String) -> Void  // filePath
     let onEditMemo: (String, String?) -> Void  // (fileKey, currentMemo)
 
     // ツールチップ用（一度だけ生成してキャッシュ）
@@ -1359,6 +1370,15 @@ struct HistoryEntryRow: View {
             }
         }
         .contextMenu {
+            Button(action: {
+                onOpenInNewWindow(entry.filePath)
+            }) {
+                Label(L("menu_open_in_new_window"), systemImage: "macwindow.badge.plus")
+            }
+            .disabled(!isAccessible)
+
+            Divider()
+
             Button(action: {
                 onEditMemo(entry.fileKey, entry.memo)
             }) {
