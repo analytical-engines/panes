@@ -221,7 +221,13 @@ class BookViewModel {
     /// 画像ソースを開く（zipまたは画像ファイル）
     func openSource(_ source: ImageSource) {
         guard source.imageCount > 0 else {
-            errorMessage = L("error_no_images_found")
+            // 暗号化されたアーカイブかどうかをチェック
+            if let archiveSource = source as? ArchiveImageSource,
+               archiveSource.hasEncryptedEntries {
+                errorMessage = L("error_password_protected")
+            } else {
+                errorMessage = L("error_no_images_found")
+            }
             return
         }
 

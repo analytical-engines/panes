@@ -8,6 +8,9 @@ class ArchiveReader {
     private let archive: Archive
     private(set) var imageEntries: [Entry] = []
 
+    /// 暗号化されたエントリが存在するか（スキップされたエントリがある場合true）
+    private(set) var hasEncryptedEntries: Bool = false
+
     init?(url: URL) {
         let startTime = CFAbsoluteTimeGetCurrent()
         self.archiveURL = url
@@ -28,8 +31,50 @@ class ArchiveReader {
         let extractTime = CFAbsoluteTimeGetCurrent() - extractStart
         print("⏱️ Extract & sort time: \(String(format: "%.3f", extractTime))s")
 
+        // 暗号化エントリのチェック
+        // ZIPFoundationは暗号化されたエントリをスキップするため、
+        // 全エントリ数とアクセス可能なエントリ数を比較
+        if let totalEntries = Self.readTotalEntriesFromZip(url: url) {
+            let accessibleEntries = archive.reduce(0) { count, _ in count + 1 }
+            if totalEntries > accessibleEntries {
+                self.hasEncryptedEntries = true
+                print("⚠️ Encrypted entries detected: \(totalEntries) total, \(accessibleEntries) accessible")
+            }
+        }
+
         let totalTime = CFAbsoluteTimeGetCurrent() - startTime
         print("⏱️ Total init time: \(String(format: "%.3f", totalTime))s")
+    }
+
+    /// ZIPファイルのEnd of Central Directory Recordから全エントリ数を読み取る
+    private static func readTotalEntriesFromZip(url: URL) -> Int? {
+        guard let fileHandle = try? FileHandle(forReadingFrom: url) else {
+            return nil
+        }
+        defer { try? fileHandle.close() }
+
+        // ファイル末尾から検索（EOCDは末尾付近にある）
+        let fileSize = fileHandle.seekToEndOfFile()
+        let searchSize: UInt64 = min(fileSize, 65557) // EOCD最大サイズ + コメント最大長
+        let searchStart = fileSize - searchSize
+        fileHandle.seek(toFileOffset: searchStart)
+
+        guard let data = try? fileHandle.readToEnd() else {
+            return nil
+        }
+
+        // EOCDシグネチャ (0x06054b50) を末尾から検索
+        let signature: [UInt8] = [0x50, 0x4b, 0x05, 0x06]
+        for i in stride(from: data.count - 22, through: 0, by: -1) {
+            if data[i] == signature[0] && data[i+1] == signature[1] &&
+               data[i+2] == signature[2] && data[i+3] == signature[3] {
+                // オフセット10-11: total number of entries (2 bytes, little endian)
+                let totalEntries = Int(data[i + 10]) | (Int(data[i + 11]) << 8)
+                return totalEntries
+            }
+        }
+
+        return nil
     }
 
     /// アーカイブ内の画像ファイルエントリを抽出してファイル名でソート

@@ -22,6 +22,11 @@ class ArchiveImageSource: ImageSource {
         return archiveReader.imageCount
     }
 
+    /// 暗号化されたエントリが存在するか
+    var hasEncryptedEntries: Bool {
+        return archiveReader.hasEncryptedEntries
+    }
+
     var sourceURL: URL? {
         return archiveURL
     }

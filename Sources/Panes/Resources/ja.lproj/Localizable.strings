@@ -108,6 +108,7 @@
 // MARK: - Error Messages
 
 "error_no_images_found" = "画像が見つかりませんでした";
+"error_password_protected" = "パスワードで保護されています";
 "error_cannot_open_zip" = "zipファイルを開けませんでした";
 "error_cannot_open_images" = "画像ファイルを開けませんでした";
 "error_no_file_selected" = "ファイルが選択されていません";
