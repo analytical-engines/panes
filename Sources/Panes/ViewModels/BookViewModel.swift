@@ -507,61 +507,20 @@ class BookViewModel {
     /// 最終ページへ移動
     func goToLastPage() {
         guard let source = imageSource else { return }
-        let lastIndex = source.imageCount - 1
 
         // 単ページモードの場合は常に最後の画像を表示
         if viewMode == .single {
-            currentPage = lastIndex
+            currentPage = source.imageCount - 1
             loadCurrentPage()
             saveViewState()
             return
         }
 
-        // 見開きモードの場合：最後の表示可能なページを探す
-        var lastVisibleIndex = lastIndex
-        while lastVisibleIndex >= 0 && pageDisplaySettings.isHidden(lastVisibleIndex) {
-            lastVisibleIndex -= 1
-        }
-        if lastVisibleIndex < 0 {
-            return // 全ページ非表示の場合は何もしない
-        }
-
-        // 最後の表示可能な画像の横長判定を先に行う
-        let lastIsSingle = checkAndSetLandscapeAttribute(for: lastVisibleIndex)
-
-        // 最後の表示可能な画像が単ページ属性つきなら単ページで表示
-        if lastIsSingle {
-            currentPage = lastVisibleIndex
-            loadCurrentPage()
-            saveViewState()
-            return
-        }
-
-        // ペア候補を探す（非表示ページはスキップ）
-        var prevVisibleIndex = lastVisibleIndex - 1
-        while prevVisibleIndex >= 0 && pageDisplaySettings.isHidden(prevVisibleIndex) {
-            prevVisibleIndex -= 1
-        }
-
-        // ペアが存在しない、またはペアが単ページ属性の場合は単ページ表示
-        if prevVisibleIndex < 0 {
-            currentPage = lastVisibleIndex
-            loadCurrentPage()
-            saveViewState()
-            return
-        }
-
-        let prevIsSingle = checkAndSetLandscapeAttribute(for: prevVisibleIndex)
-        if prevIsSingle {
-            currentPage = lastVisibleIndex
-            loadCurrentPage()
-            saveViewState()
-            return
-        }
-
-        // 両方見開き可能 → ペアで表示
-        currentPage = prevVisibleIndex
-        loadCurrentPage()
+        // 見開きモードの場合：calculateDisplayForLastPageを使用
+        let display = calculateDisplayForLastPage()
+        currentDisplay = display
+        currentPage = display.minIndex
+        loadImages(for: display)
         saveViewState()
     }
 
@@ -768,39 +727,94 @@ class BookViewModel {
 
         // 単ページモード → 見開きモードに切り替える場合、適切な見開き位置に調整
         if previousMode == .single && viewMode == .spread {
+            // adjustCurrentPageForSpreadModeで正しい表示状態を計算し、画像を読み込む
             adjustCurrentPageForSpreadMode()
+            loadImages(for: currentDisplay)
+        } else {
+            loadCurrentPage()
         }
-
-        loadCurrentPage()
 
         // 設定を保存
         saveViewState()
     }
 
-    /// 単ページモードから見開きモードに切り替える際の currentPage 調整
+    /// 単ページモードから見開きモードに切り替える際の正しい表示状態を計算
+    /// 先頭または終端からページめくりをシミュレートして、currentPageを含む正しい表示状態を求める
     private func adjustCurrentPageForSpreadMode() {
         guard let source = imageSource else { return }
 
-        // currentPage が単ページ属性なら調整不要（単ページ表示される）
-        if pageDisplaySettings.isForcedSinglePage(currentPage) {
-            return
+        let targetPage = currentPage
+        let totalPages = source.imageCount
+
+        let isSinglePage: (Int) -> Bool = { [weak self] p in
+            self?.isPageSingle(p) ?? false
         }
 
-        // currentPage+1 が存在しない場合は調整不要（単ページ表示される）
-        if currentPage + 1 >= source.imageCount {
-            return
-        }
-
-        // currentPage+1 が単ページ属性の場合、ペアにできない
-        if pageDisplaySettings.isForcedSinglePage(currentPage + 1) {
-            // currentPage-1 を調べる
-            if currentPage > 0 && !pageDisplaySettings.isForcedSinglePage(currentPage - 1) {
-                // currentPage-1 が単ページ属性でないなら、1つ前にずらして見開き表示
-                currentPage = currentPage - 1
+        // currentPageが先頭寄りか終端寄りかで、より効率的な方向を選択
+        if targetPage <= totalPages / 2 {
+            // 先頭から順方向にシミュレート
+            var display = calculateDisplayForPage(0)
+            while !display.contains(targetPage) && display.maxIndex < targetPage {
+                guard let next = calculateNextDisplay(from: display, isSinglePage: isSinglePage) else {
+                    break
+                }
+                display = next
             }
-            // currentPage-1 が単ページ属性、または存在しない場合は調整不要（currentPage を単ページ表示）
+            currentDisplay = display
+            currentPage = display.minIndex
+        } else {
+            // 終端から逆方向にシミュレート
+            // まず最終ページの表示状態を計算
+            var display = calculateDisplayForLastPage()
+            while !display.contains(targetPage) && display.minIndex > targetPage {
+                guard let prev = calculatePreviousDisplay(from: display, isSinglePage: isSinglePage) else {
+                    break
+                }
+                display = prev
+            }
+            currentDisplay = display
+            currentPage = display.minIndex
         }
-        // currentPage+1 が単ページ属性でない場合は調整不要（currentPage と currentPage+1 で見開き表示）
+    }
+
+    /// 最終ページを起点とした表示状態を計算（逆方向ロジック）
+    private func calculateDisplayForLastPage() -> PageDisplay {
+        guard let source = imageSource else { return .single(0) }
+
+        let lastIndex = source.imageCount - 1
+
+        // 最後の表示可能なページを探す（非表示ページはスキップ）
+        var lastVisibleIndex = lastIndex
+        while lastVisibleIndex >= 0 && pageDisplaySettings.isHidden(lastVisibleIndex) {
+            lastVisibleIndex -= 1
+        }
+        if lastVisibleIndex < 0 {
+            return .single(0)
+        }
+
+        // 最後のページが単ページ属性なら単ページ表示
+        if isPageSingle(lastVisibleIndex) {
+            return .single(lastVisibleIndex)
+        }
+
+        // ペア候補を探す（非表示ページはスキップ）
+        var prevVisibleIndex = lastVisibleIndex - 1
+        while prevVisibleIndex >= 0 && pageDisplaySettings.isHidden(prevVisibleIndex) {
+            prevVisibleIndex -= 1
+        }
+
+        // ペアが存在しない場合は単ページ表示
+        if prevVisibleIndex < 0 {
+            return .single(lastVisibleIndex)
+        }
+
+        // ペアが単ページ属性の場合は単ページ表示
+        if isPageSingle(prevVisibleIndex) {
+            return .single(lastVisibleIndex)
+        }
+
+        // 両方見開き可能 → ペアで表示
+        return .spread(lastVisibleIndex, prevVisibleIndex)
     }
 
     /// 読み方向を切り替え
