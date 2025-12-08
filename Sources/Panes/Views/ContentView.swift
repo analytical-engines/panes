@@ -580,12 +580,20 @@ struct ContentView: View {
             // エラーが発生した場合もローディング状態を解除
             if newValue != nil {
                 isWaitingForFile = false
+                // キュー処理中の場合は完了を通知（エラーでもカウントを進める）
+                if sessionManager.isProcessing {
+                    sessionManager.windowDidFinishLoading(id: windowID)
+                }
             }
         }
         .onChange(of: viewModel.showFileIdentityDialog) { oldValue, newValue in
             // ファイル同一性ダイアログがキャンセルされた場合（ダイアログ閉じ＋ファイル未オープン）
             if oldValue && !newValue && !viewModel.hasOpenFile {
                 isWaitingForFile = false
+                // キュー処理中の場合は完了を通知（キャンセルでもカウントを進める）
+                if sessionManager.isProcessing {
+                    sessionManager.windowDidFinishLoading(id: windowID)
+                }
             }
         }
         .onChange(of: myWindowNumber) { _, newWindowNumber in
