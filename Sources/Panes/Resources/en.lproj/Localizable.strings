@@ -215,6 +215,8 @@
 "history_database_error" = "History database initialization failed";
 "history_database_error_description" = "History and page settings will not be saved, but you can still view images.";
 "history_database_reset" = "Reset Database";
+"history_database_reset_confirm_title" = "Reset History Database";
+"history_database_reset_confirm_message" = "All history and page settings will be permanently deleted. This action cannot be undone.";
 "history_database_continue" = "Continue";
 "history_database_quit" = "Quit";
 "schema_version_mismatch_error" = "This app version is too old to access the newer database (v%d). Please use the latest app version or reset the database. (Current app: v%d)";

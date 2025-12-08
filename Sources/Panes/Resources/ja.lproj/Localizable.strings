@@ -215,6 +215,8 @@
 "history_database_error" = "履歴データベースの初期化に失敗しました";
 "history_database_error_description" = "履歴やページ設定は記録されませんが、画像の表示は可能です。";
 "history_database_reset" = "データベースをリセット";
+"history_database_reset_confirm_title" = "履歴データベースのリセット";
+"history_database_reset_confirm_message" = "すべての履歴とページ設定が完全に削除されます。この操作は取り消せません。";
 "history_database_continue" = "このまま続行";
 "history_database_quit" = "終了";
 "schema_version_mismatch_error" = "このアプリは古いバージョンのため、新しいデータベース（v%d）にアクセスできません。最新版のアプリを使用するか、データベースをリセットしてください。（現在のアプリ: v%d）";

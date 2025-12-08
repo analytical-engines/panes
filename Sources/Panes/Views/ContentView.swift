@@ -1246,139 +1246,163 @@ struct HistoryListView: View {
     let onEditMemo: (String, String?) -> Void  // (fileKey, currentMemo)
 
     var body: some View {
-        // SwiftData初期化エラーの表示
-        if let error = historyManager.initializationError, !dismissedError {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.red)
-                    Text(L("history_database_error"))
-                        .font(.headline)
-                        .foregroundColor(.red)
-                }
-
-                Text(error.localizedDescription)
-                    .font(.caption)
-                    .foregroundColor(.gray)
-                    .textSelection(.enabled)
-
-                Text(L("history_database_error_description"))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
-                HStack(spacing: 12) {
-                    Button(action: {
-                        historyManager.resetDatabase()
-                    }) {
-                        HStack {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                            Text(L("history_database_reset"))
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.orange)
-
-                    Button(action: {
-                        dismissedError = true
-                    }) {
-                        HStack {
-                            Image(systemName: "arrow.right.circle")
-                            Text(L("history_database_continue"))
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                    }
-                    .buttonStyle(.bordered)
-
-                    Button(action: {
-                        NSApplication.shared.terminate(nil)
-                    }) {
-                        HStack {
-                            Image(systemName: "xmark.circle")
-                            Text(L("history_database_quit"))
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                    }
-                    .buttonStyle(.bordered)
-                }
-            }
-            .padding()
-            .background(Color.red.opacity(0.1))
-            .cornerRadius(8)
-            .padding(.top, 20)
-        }
-
-        let recentHistory = historyManager.getRecentHistory(limit: appSettings.maxHistoryCount)
-        let filteredHistory = filterText.isEmpty
-            ? recentHistory
-            : recentHistory.filter { matchesFilter($0, pattern: filterText) }
-
-        if appSettings.showHistoryOnLaunch && !recentHistory.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("\(L("recent_files").dropLast()) [\(recentHistory.count)/\(appSettings.maxHistoryCount)]:")
-                    .foregroundColor(.gray)
-                    .font(.headline)
-                    .padding(.top, 20)
-
-                // フィルタ入力フィールド（⌘+Fで表示/非表示）
-                if showFilterField {
+        Group {
+            // SwiftData初期化エラーの表示
+            if let error = historyManager.initializationError, !dismissedError {
+                VStack(spacing: 12) {
                     HStack {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundColor(.gray)
-                        TextField(L("history_filter_placeholder"), text: $filterText)
-                            .textFieldStyle(.plain)
-                            .foregroundColor(.white)
-                            .focused($isFilterFocused)
-                            .onExitCommand {
-                                filterText = ""
-                                showFilterField = false
-                            }
-                        if !filterText.isEmpty {
-                            Button(action: { filterText = "" }) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(.gray)
-                            }
-                            .buttonStyle(.plain)
-                        }
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.red)
+                        Text(L("history_database_error"))
+                            .font(.headline)
+                            .foregroundColor(.red)
                     }
-                    .padding(8)
-                    .background(Color.white.opacity(0.1))
-                    .cornerRadius(6)
-                    .onAppear {
-                        // フィルタ表示時に自動フォーカス
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            isFilterFocused = true
-                        }
-                    }
-                    .onDisappear {
-                        // フィルタ非表示時にフォーカスをクリア（親ビューがキーイベントを受け取れるように）
-                        isFilterFocused = false
-                    }
-                }
 
-                ScrollView {
-                    LazyVStack(spacing: 8) {
-                        ForEach(filteredHistory) { entry in
-                            HistoryEntryRow(entry: entry, onOpenHistoryFile: onOpenHistoryFile, onOpenInNewWindow: onOpenInNewWindow, onEditMemo: onEditMemo)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-                .scrollIndicators(.visible)
-                .frame(maxHeight: 300)
-
-                // フィルタ結果の件数表示
-                if !filterText.isEmpty {
-                    Text(L("history_filter_result_format", filteredHistory.count, recentHistory.count))
-                        .foregroundColor(.gray)
+                    Text(error.localizedDescription)
                         .font(.caption)
+                        .foregroundColor(.gray)
+                        .textSelection(.enabled)
+                        .multilineTextAlignment(.center)
+
+                    Text(L("history_database_error_description"))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+
+                    HStack(spacing: 12) {
+                        Button(action: {
+                            showResetDatabaseConfirmation()
+                        }) {
+                            HStack {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                                Text(L("history_database_reset"))
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.orange)
+
+                        Button(action: {
+                            dismissedError = true
+                        }) {
+                            HStack {
+                                Image(systemName: "arrow.right.circle")
+                                Text(L("history_database_continue"))
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.gray.opacity(0.3))
+                            .cornerRadius(6)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundColor(.white)
+
+                        Button(action: {
+                            NSApplication.shared.terminate(nil)
+                        }) {
+                            HStack {
+                                Image(systemName: "xmark.circle")
+                                Text(L("history_database_quit"))
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.gray.opacity(0.3))
+                            .cornerRadius(6)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundColor(.white)
+                    }
                 }
+                .padding()
+                .background(Color.red.opacity(0.1))
+                .cornerRadius(8)
+                .padding(.top, 20)
             }
-            .frame(maxWidth: 500)
-            .padding(.horizontal, 20)
+
+            let recentHistory = historyManager.getRecentHistory(limit: appSettings.maxHistoryCount)
+            let filteredHistory = filterText.isEmpty
+                ? recentHistory
+                : recentHistory.filter { matchesFilter($0, pattern: filterText) }
+
+            if appSettings.showHistoryOnLaunch && !recentHistory.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("\(L("recent_files").dropLast()) [\(recentHistory.count)/\(appSettings.maxHistoryCount)]:")
+                        .foregroundColor(.gray)
+                        .font(.headline)
+                        .padding(.top, 20)
+
+                    // フィルタ入力フィールド（⌘+Fで表示/非表示）
+                    if showFilterField {
+                        HStack {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundColor(.gray)
+                            TextField(L("history_filter_placeholder"), text: $filterText)
+                                .textFieldStyle(.plain)
+                                .foregroundColor(.white)
+                                .focused($isFilterFocused)
+                                .onExitCommand {
+                                    filterText = ""
+                                    showFilterField = false
+                                }
+                            if !filterText.isEmpty {
+                                Button(action: { filterText = "" }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.gray)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(8)
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(6)
+                        .onAppear {
+                            // フィルタ表示時に自動フォーカス
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                isFilterFocused = true
+                            }
+                        }
+                        .onDisappear {
+                            // フィルタ非表示時にフォーカスをクリア（親ビューがキーイベントを受け取れるように）
+                            isFilterFocused = false
+                        }
+                    }
+
+                    ScrollView {
+                        LazyVStack(spacing: 8) {
+                            ForEach(filteredHistory) { entry in
+                                HistoryEntryRow(entry: entry, onOpenHistoryFile: onOpenHistoryFile, onOpenInNewWindow: onOpenInNewWindow, onEditMemo: onEditMemo)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    .scrollIndicators(.visible)
+                    .frame(maxHeight: 300)
+
+                    // フィルタ結果の件数表示
+                    if !filterText.isEmpty {
+                        Text(L("history_filter_result_format", filteredHistory.count, recentHistory.count))
+                            .foregroundColor(.gray)
+                            .font(.caption)
+                    }
+                }
+                .frame(maxWidth: 500)
+                .padding(.horizontal, 20)
+            }
+        }
+    }
+
+    /// データベースリセットの確認ダイアログを表示
+    private func showResetDatabaseConfirmation() {
+        let alert = NSAlert()
+        alert.messageText = L("history_database_reset_confirm_title")
+        alert.informativeText = L("history_database_reset_confirm_message")
+        alert.alertStyle = .critical
+        alert.addButton(withTitle: L("history_database_reset"))
+        alert.addButton(withTitle: L("cancel"))
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            historyManager.resetDatabase()
         }
     }
 
@@ -1405,6 +1429,7 @@ struct HistoryListView: View {
         result = result.replacingOccurrences(of: "\\?", with: ".")
         return result
     }
+
 }
 
 /// 履歴エントリの行
