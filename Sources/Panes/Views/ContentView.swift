@@ -582,6 +582,12 @@ struct ContentView: View {
                 isWaitingForFile = false
             }
         }
+        .onChange(of: viewModel.showFileIdentityDialog) { oldValue, newValue in
+            // ファイル同一性ダイアログがキャンセルされた場合（ダイアログ閉じ＋ファイル未オープン）
+            if oldValue && !newValue && !viewModel.hasOpenFile {
+                isWaitingForFile = false
+            }
+        }
         .onChange(of: myWindowNumber) { _, newWindowNumber in
             // WindowNumberGetterでウィンドウ番号が設定されたときにフレームも取得
             if let windowNumber = newWindowNumber,
@@ -641,48 +647,69 @@ struct ContentView: View {
             }
             return .ignored
         }
-        .overlay {
-            // 画像情報モーダル
-            if showImageInfo {
-                Color.black.opacity(0.3)
-                    .ignoresSafeArea()
-                    .onTapGesture { showImageInfo = false }
+        .overlay { modalOverlays }
+    }
 
-                ImageInfoView(
-                    infos: viewModel.getCurrentImageInfos(),
-                    onDismiss: { showImageInfo = false }
-                )
-            }
+    // MARK: - Modal Overlays
 
-            // メモ編集モーダル
-            if showMemoEdit {
-                Color.black.opacity(0.3)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        showMemoEdit = false
-                        editingMemoFileKey = nil
+    @ViewBuilder
+    private var modalOverlays: some View {
+        // 画像情報モーダル
+        if showImageInfo {
+            Color.black.opacity(0.3)
+                .ignoresSafeArea()
+                .onTapGesture { showImageInfo = false }
+
+            ImageInfoView(
+                infos: viewModel.getCurrentImageInfos(),
+                onDismiss: { showImageInfo = false }
+            )
+        }
+
+        // メモ編集モーダル
+        if showMemoEdit {
+            Color.black.opacity(0.3)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    showMemoEdit = false
+                    editingMemoFileKey = nil
+                }
+
+            MemoEditPopover(
+                memo: $editingMemoText,
+                onSave: {
+                    let newMemo = editingMemoText.isEmpty ? nil : editingMemoText
+                    if let fileKey = editingMemoFileKey {
+                        // 履歴エントリのメモを更新
+                        historyManager.updateMemo(for: fileKey, memo: newMemo)
+                    } else {
+                        // 現在開いているファイルのメモを更新
+                        viewModel.updateCurrentMemo(newMemo)
                     }
+                    showMemoEdit = false
+                    editingMemoFileKey = nil
+                },
+                onCancel: {
+                    showMemoEdit = false
+                    editingMemoFileKey = nil
+                }
+            )
+        }
 
-                MemoEditPopover(
-                    memo: $editingMemoText,
-                    onSave: {
-                        let newMemo = editingMemoText.isEmpty ? nil : editingMemoText
-                        if let fileKey = editingMemoFileKey {
-                            // 履歴エントリのメモを更新
-                            historyManager.updateMemo(for: fileKey, memo: newMemo)
-                        } else {
-                            // 現在開いているファイルのメモを更新
-                            viewModel.updateCurrentMemo(newMemo)
-                        }
-                        showMemoEdit = false
-                        editingMemoFileKey = nil
-                    },
-                    onCancel: {
-                        showMemoEdit = false
-                        editingMemoFileKey = nil
-                    }
-                )
-            }
+        // ファイル同一性確認ダイアログ
+        if viewModel.showFileIdentityDialog,
+           let info = viewModel.fileIdentityDialogInfo {
+            Color.black.opacity(0.3)
+                .ignoresSafeArea()
+                .onTapGesture { }  // 背景タップでは閉じない
+
+            FileIdentityDialog(
+                existingFileName: info.existingEntry.fileName,
+                newFileName: info.newFileName,
+                onChoice: { choice in
+                    viewModel.handleFileIdentityChoice(choice)
+                }
+            )
         }
     }
 
@@ -1212,12 +1239,78 @@ struct HistoryListView: View {
     @Binding var filterText: String
     @Binding var showFilterField: Bool
     @FocusState private var isFilterFocused: Bool
+    @State private var dismissedError = false
 
     let onOpenHistoryFile: (String) -> Void
     let onOpenInNewWindow: (String) -> Void  // filePath
     let onEditMemo: (String, String?) -> Void  // (fileKey, currentMemo)
 
     var body: some View {
+        // SwiftData初期化エラーの表示
+        if let error = historyManager.initializationError, !dismissedError {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.red)
+                    Text(L("history_database_error"))
+                        .font(.headline)
+                        .foregroundColor(.red)
+                }
+
+                Text(error.localizedDescription)
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                    .textSelection(.enabled)
+
+                Text(L("history_database_error_description"))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                HStack(spacing: 12) {
+                    Button(action: {
+                        historyManager.resetDatabase()
+                    }) {
+                        HStack {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                            Text(L("history_database_reset"))
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.orange)
+
+                    Button(action: {
+                        dismissedError = true
+                    }) {
+                        HStack {
+                            Image(systemName: "arrow.right.circle")
+                            Text(L("history_database_continue"))
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button(action: {
+                        NSApplication.shared.terminate(nil)
+                    }) {
+                        HStack {
+                            Image(systemName: "xmark.circle")
+                            Text(L("history_database_quit"))
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+            .padding()
+            .background(Color.red.opacity(0.1))
+            .cornerRadius(8)
+            .padding(.top, 20)
+        }
+
         let recentHistory = historyManager.getRecentHistory(limit: appSettings.maxHistoryCount)
         let filteredHistory = filterText.isEmpty
             ? recentHistory
@@ -1389,7 +1482,7 @@ struct HistoryEntryRow: View {
             Divider()
 
             Button(action: {
-                onEditMemo(entry.fileKey, entry.memo)
+                onEditMemo(entry.id, entry.memo)
             }) {
                 Label(L("menu_edit_memo"), systemImage: "square.and.pencil")
             }

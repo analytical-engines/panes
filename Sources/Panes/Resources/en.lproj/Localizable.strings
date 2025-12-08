@@ -196,3 +196,25 @@
 "tooltip_file_size" = "Size";
 "tooltip_archive_type" = "Type";
 "tooltip_last_access" = "Last Access";
+
+// MARK: - File Identity Dialog
+
+"file_identity_title" = "File Verification";
+"file_identity_message" = "A file with the same content was found with a different name.";
+"file_identity_existing_file" = "File in history:";
+"file_identity_new_file" = "File being opened:";
+"file_identity_treat_as_same" = "Treat as same file";
+"file_identity_treat_as_same_description" = "Updates history and shares page settings";
+"file_identity_copy_settings" = "Copy page settings";
+"file_identity_copy_settings_description" = "Creates new history entry with copied page settings";
+"file_identity_treat_as_different" = "Treat as different file";
+"file_identity_treat_as_different_description" = "Creates new history entry";
+
+// MARK: - Database Error
+
+"history_database_error" = "History database initialization failed";
+"history_database_error_description" = "History and page settings will not be saved, but you can still view images.";
+"history_database_reset" = "Reset Database";
+"history_database_continue" = "Continue";
+"history_database_quit" = "Quit";
+"schema_version_mismatch_error" = "This app version is too old to access the newer database (v%d). Please use the latest app version or reset the database. (Current app: v%d)";

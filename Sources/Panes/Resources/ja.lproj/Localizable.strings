@@ -196,3 +196,25 @@
 "tooltip_file_size" = "サイズ";
 "tooltip_archive_type" = "種類";
 "tooltip_last_access" = "最終アクセス";
+
+// MARK: - File Identity Dialog
+
+"file_identity_title" = "ファイルの確認";
+"file_identity_message" = "同じ内容のファイルが異なる名前で見つかりました。";
+"file_identity_existing_file" = "履歴のファイル:";
+"file_identity_new_file" = "開こうとしているファイル:";
+"file_identity_treat_as_same" = "同じファイルとして扱う";
+"file_identity_treat_as_same_description" = "履歴を更新し、ページ設定を共有します";
+"file_identity_copy_settings" = "ページ設定を引き継ぐ";
+"file_identity_copy_settings_description" = "新しい履歴を作成し、既存のページ設定をコピーします";
+"file_identity_treat_as_different" = "別のファイルとして扱う";
+"file_identity_treat_as_different_description" = "新しい履歴を作成します";
+
+// MARK: - Database Error
+
+"history_database_error" = "履歴データベースの初期化に失敗しました";
+"history_database_error_description" = "履歴やページ設定は記録されませんが、画像の表示は可能です。";
+"history_database_reset" = "データベースをリセット";
+"history_database_continue" = "このまま続行";
+"history_database_quit" = "終了";
+"schema_version_mismatch_error" = "このアプリは古いバージョンのため、新しいデータベース（v%d）にアクセスできません。最新版のアプリを使用するか、データベースをリセットしてください。（現在のアプリ: v%d）";

@@ -128,6 +128,23 @@ class BookViewModel {
     // 現在開いているファイルのパス
     private(set) var currentFilePath: String?
 
+    // MARK: - File Identity Dialog
+
+    /// ファイル同一性確認ダイアログを表示するかどうか
+    var showFileIdentityDialog: Bool = false
+
+    /// ファイル同一性確認ダイアログ用の情報
+    struct FileIdentityDialogInfo {
+        let newFileName: String
+        let existingEntry: FileHistoryEntry
+        let fileKey: String
+        let filePath: String
+        let pendingSource: ImageSource
+    }
+
+    /// ダイアログに表示する情報（ダイアログ表示中のみ有効）
+    var fileIdentityDialogInfo: FileIdentityDialogInfo?
+
     /// 現在開いているファイルのキー（セッション保存用）
     var currentFileKey: String? {
         imageSource?.generateFileKey()
@@ -231,6 +248,76 @@ class BookViewModel {
             return
         }
 
+        // ファイル同一性チェック
+        if let fileKey = source.generateFileKey(),
+           let url = source.sourceURL,
+           let manager = historyManager {
+            let checkResult = manager.checkFileIdentity(fileKey: fileKey, fileName: source.sourceName)
+
+            switch checkResult {
+            case .exactMatch, .newFile:
+                // 完全一致または新規ファイル: そのまま開く
+                completeOpenSource(source, recordAccess: true)
+
+            case .differentName(let existingEntry):
+                // ファイル名が異なる: ダイアログを表示
+                fileIdentityDialogInfo = FileIdentityDialogInfo(
+                    newFileName: source.sourceName,
+                    existingEntry: existingEntry,
+                    fileKey: fileKey,
+                    filePath: url.path,
+                    pendingSource: source
+                )
+                showFileIdentityDialog = true
+            }
+        } else {
+            // 履歴マネージャーがない場合やfileKeyが取得できない場合はそのまま開く
+            completeOpenSource(source, recordAccess: false)
+        }
+    }
+
+    /// ファイル同一性ダイアログでユーザーが選択した後に呼ばれる
+    /// - Parameter choice: ユーザーの選択（nil = キャンセル）
+    func handleFileIdentityChoice(_ choice: FileIdentityChoice?) {
+        // ダイアログを閉じる
+        showFileIdentityDialog = false
+
+        guard let info = fileIdentityDialogInfo else { return }
+
+        if let choice = choice {
+            // 選択に基づいて履歴を記録
+            historyManager?.recordAccessWithChoice(
+                fileKey: info.fileKey,
+                filePath: info.filePath,
+                fileName: info.newFileName,
+                existingEntry: info.existingEntry,
+                choice: choice
+            )
+
+            // 「別のファイルとして扱う」の場合、デフォルト設定を保存してフォールバックを防ぐ
+            if choice == .treatAsDifferent {
+                let entryId = FileHistoryEntry.generateId(fileName: info.newFileName, fileKey: info.fileKey)
+                // デフォルト値でマーカーを保存（restoreViewStateでのフォールバックを防ぐ）
+                let defaultMode = appSettings?.defaultViewMode ?? .spread
+                let modeString = defaultMode == .spread ? "spread" : "single"
+                UserDefaults.standard.set(modeString, forKey: "\(viewModeKey)-\(entryId)")
+                UserDefaults.standard.set(0, forKey: "\(currentPageKey)-\(entryId)")
+                let defaultDirection = appSettings?.defaultReadingDirection ?? .rightToLeft
+                let directionString = defaultDirection == .rightToLeft ? "rightToLeft" : "leftToRight"
+                UserDefaults.standard.set(directionString, forKey: "\(readingDirectionKey)-\(entryId)")
+            }
+
+            // ソースを開く（履歴は既に記録済み）
+            completeOpenSource(info.pendingSource, recordAccess: false)
+        }
+        // キャンセルの場合は何もしない（ファイルを開かない）
+
+        // 情報をクリア
+        fileIdentityDialogInfo = nil
+    }
+
+    /// ソースを開く処理の完了（共通部分）
+    private func completeOpenSource(_ source: ImageSource, recordAccess: Bool) {
         self.imageSource = source
         self.sourceName = source.sourceName
         self.totalPages = source.imageCount
@@ -238,8 +325,9 @@ class BookViewModel {
         self.errorMessage = nil
         self.currentFilePath = source.sourceURL?.path
 
-        // 履歴に記録
-        if let fileKey = source.generateFileKey(),
+        // 履歴に記録（必要な場合のみ）
+        if recordAccess,
+           let fileKey = source.generateFileKey(),
            let url = source.sourceURL {
             historyManager?.recordAccess(
                 fileKey: fileKey,
@@ -1057,19 +1145,27 @@ class BookViewModel {
             return
         }
 
-        // 表示モードを保存
+        // エントリIDを取得（contentKey互換性のため、実際のエントリを検索）
+        let entryId: String
+        if let entry = historyManager?.findEntry(fileName: source.sourceName, fileKey: fileKey) {
+            entryId = entry.id
+        } else {
+            entryId = FileHistoryEntry.generateId(fileName: source.sourceName, fileKey: fileKey)
+        }
+
+        // 表示モードを保存（エントリIDベース）
         let modeString = viewMode == .spread ? "spread" : "single"
-        UserDefaults.standard.set(modeString, forKey: "\(viewModeKey)-\(fileKey)")
+        UserDefaults.standard.set(modeString, forKey: "\(viewModeKey)-\(entryId)")
 
-        // 現在のページ番号を保存
-        UserDefaults.standard.set(currentPage, forKey: "\(currentPageKey)-\(fileKey)")
+        // 現在のページ番号を保存（エントリIDベース）
+        UserDefaults.standard.set(currentPage, forKey: "\(currentPageKey)-\(entryId)")
 
-        // 読み方向を保存
+        // 読み方向を保存（エントリIDベース）
         let directionString = readingDirection == .rightToLeft ? "rightToLeft" : "leftToRight"
-        UserDefaults.standard.set(directionString, forKey: "\(readingDirectionKey)-\(fileKey)")
+        UserDefaults.standard.set(directionString, forKey: "\(readingDirectionKey)-\(entryId)")
 
-        // ページ表示設定を保存
-        historyManager?.savePageDisplaySettings(pageDisplaySettings, for: fileKey)
+        // ページ表示設定を保存（ファイル名も考慮してエントリを特定）
+        historyManager?.savePageDisplaySettings(pageDisplaySettings, forFileName: source.sourceName, fileKey: fileKey)
     }
 
     /// 表示状態を復元（モード、ページ番号、読み方向、ページ表示設定）
@@ -1079,24 +1175,37 @@ class BookViewModel {
             return
         }
 
-        // 表示モードを復元
-        if let modeString = UserDefaults.standard.string(forKey: "\(viewModeKey)-\(fileKey)") {
-            viewMode = modeString == "spread" ? .spread : .single
+        // エントリIDを取得（contentKey互換性のため、実際のエントリを検索）
+        // 旧フォーマットのfileKeyで保存されたエントリにも対応
+        let entryId: String
+        if let entry = historyManager?.findEntry(fileName: source.sourceName, fileKey: fileKey) {
+            entryId = entry.id
+        } else {
+            // エントリが見つからない場合は新規生成
+            entryId = FileHistoryEntry.generateId(fileName: source.sourceName, fileKey: fileKey)
         }
 
-        // ページ番号を復元
-        let savedPage = UserDefaults.standard.integer(forKey: "\(currentPageKey)-\(fileKey)")
+        // 表示モードを復元（エントリIDベースのみ）
+        if let modeString = UserDefaults.standard.string(forKey: "\(viewModeKey)-\(entryId)") {
+            viewMode = modeString == "spread" ? .spread : .single
+        }
+        // なければデフォルトのまま
+
+        // ページ番号を復元（エントリIDベースのみ）
+        let savedPage = UserDefaults.standard.integer(forKey: "\(currentPageKey)-\(entryId)")
         if savedPage > 0 && savedPage < totalPages {
             currentPage = savedPage
         }
+        // なければ0（先頭）のまま
 
-        // 読み方向を復元
-        if let directionString = UserDefaults.standard.string(forKey: "\(readingDirectionKey)-\(fileKey)") {
+        // 読み方向を復元（エントリIDベースのみ）
+        if let directionString = UserDefaults.standard.string(forKey: "\(readingDirectionKey)-\(entryId)") {
             readingDirection = directionString == "rightToLeft" ? .rightToLeft : .leftToRight
         }
+        // なければデフォルトのまま
 
-        // ページ表示設定を復元
-        if let settings = historyManager?.loadPageDisplaySettings(for: fileKey) {
+        // ページ表示設定を復元（ファイル名も考慮してエントリを特定）
+        if let settings = historyManager?.loadPageDisplaySettings(forFileName: source.sourceName, fileKey: fileKey) {
             pageDisplaySettings = settings
         } else {
             // 設定が存在しない場合は空の設定で初期化

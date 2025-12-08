@@ -34,11 +34,9 @@ protocol ImageSource {
 
 extension ImageSource {
     /// ファイル識別用のユニークキーを生成
-    /// ファイル名 + サイズ + 先頭32KBのハッシュ値
+    /// サイズ + 先頭32KBのハッシュ値（ファイル名は含めない）
     func generateFileKey() -> String? {
         guard let url = sourceURL else { return nil }
-
-        let fileName = url.lastPathComponent
 
         // ファイルサイズを取得
         guard let fileSize = try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64 else {
@@ -59,7 +57,33 @@ extension ImageSource {
         let hash = SHA256.hash(data: data)
         let hashString = hash.compactMap { String(format: "%02x", $0) }.joined()
 
-        // ファイル名-サイズ-ハッシュ の形式
-        return "\(fileName)-\(fileSize)-\(hashString.prefix(16))"
+        // サイズ-ハッシュ の形式（ファイル名を含めないことでリネームしても同一ファイルと認識）
+        return "\(fileSize)-\(hashString.prefix(16))"
+    }
+
+    /// fileKeyからサイズ-ハッシュ部分を抽出（旧フォーマット対応）
+    /// 旧: "ファイル名-12345-abcdef1234567890"
+    /// 新: "12345-abcdef1234567890"
+    static func extractContentKey(from fileKey: String) -> String {
+        // ハッシュは16文字固定、その前にハイフン、さらにその前にサイズ（数字のみ）
+        // 末尾から: ハッシュ16文字 + ハイフン1文字 + サイズ部分
+        let components = fileKey.split(separator: "-")
+        guard components.count >= 2 else { return fileKey }
+
+        // 最後の要素がハッシュ（16文字の16進数）
+        let lastComponent = String(components.last!)
+        guard lastComponent.count == 16,
+              lastComponent.allSatisfy({ $0.isHexDigit }) else {
+            return fileKey
+        }
+
+        // 最後から2番目がサイズ（数字のみ）
+        let secondLast = String(components[components.count - 2])
+        guard secondLast.allSatisfy({ $0.isNumber }) else {
+            return fileKey
+        }
+
+        // サイズ-ハッシュ の形式で返す
+        return "\(secondLast)-\(lastComponent)"
     }
 }
