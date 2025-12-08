@@ -231,8 +231,9 @@ class BookViewModel {
 
     /// 現在のファイルのメモを更新
     func updateCurrentMemo(_ memo: String?) {
-        guard let fileKey = currentFileKey else { return }
-        historyManager?.updateMemo(for: fileKey, memo: memo)
+        guard let fileKey = currentFileKey,
+              let entry = historyManager?.history.first(where: { $0.fileKey == fileKey }) else { return }
+        historyManager?.updateMemo(for: entry.id, memo: memo)
     }
 
     /// 画像ソースを開く（zipまたは画像ファイル）
