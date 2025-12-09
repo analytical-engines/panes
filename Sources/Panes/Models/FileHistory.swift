@@ -113,7 +113,7 @@ class FileHistoryManager {
     private let schemaVersionKey = "historySchemaVersion"
 
     /// 現在のスキーマバージョン（スキーマ変更時にインクリメント）
-    private static let currentSchemaVersion = 2
+    private static let currentSchemaVersion = 3
 
     // SwiftData用
     private var modelContainer: ModelContainer?
@@ -182,7 +182,7 @@ class FileHistoryManager {
         }
 
         do {
-            let schema = Schema([FileHistoryData.self])
+            let schema = Schema([FileHistoryData.self, ImageCatalogData.self])
             let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
             modelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])
             modelContext = ModelContext(modelContainer!)

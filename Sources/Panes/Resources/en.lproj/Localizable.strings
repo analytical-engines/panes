@@ -220,3 +220,12 @@
 "history_database_continue" = "Continue";
 "history_database_quit" = "Quit";
 "schema_version_mismatch_error" = "This app version is too old to access the newer database (v%d). Please use the latest app version or reset the database. (Current app: v%d)";
+
+// MARK: - Image Catalog
+
+"tab_archives" = "Archives";
+"tab_images" = "Images";
+"image_catalog_empty" = "No images recorded";
+"image_catalog_empty_hint" = "Images viewed with this app will be recorded here";
+"image_catalog_count_format" = "%d images";
+"image_catalog_filter_placeholder" = "Filter by filename";

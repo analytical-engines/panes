@@ -8,9 +8,16 @@ extension UTType {
     static let cbz = UTType(filenameExtension: "cbz")!
 }
 
+/// タブの種類
+enum HistoryTab: String, CaseIterable {
+    case archives
+    case images
+}
+
 struct ContentView: View {
     @State private var viewModel = BookViewModel()
     @Environment(FileHistoryManager.self) private var historyManager
+    @Environment(ImageCatalogManager.self) private var imageCatalogManager
     @Environment(AppSettings.self) private var appSettings
     @Environment(SessionManager.self) private var sessionManager
     @Environment(\.openWindow) private var openWindow
@@ -47,11 +54,13 @@ struct ContentView: View {
     // 履歴フィルタ（ファイルを閉じても維持）
     @State private var historyFilterText: String = ""
     @State private var showHistoryFilter: Bool = false
+    @State private var historySelectedTab: HistoryTab = .archives
 
     // メモ編集用
     @State private var showMemoEdit = false
     @State private var editingMemoText = ""
     @State private var editingMemoFileKey: String?  // 履歴エントリ編集時に使用
+    @State private var editingImageCatalogId: String?  // 画像カタログエントリ編集時に使用
 
     // メインビューのフォーカス管理
     @FocusState private var isMainViewFocused: Bool
@@ -122,11 +131,17 @@ struct ContentView: View {
                 errorMessage: viewModel.errorMessage,
                 filterText: $historyFilterText,
                 showFilterField: $showHistoryFilter,
+                selectedTab: $historySelectedTab,
                 onOpenFile: openFilePicker,
                 onOpenHistoryFile: openHistoryFile,
                 onOpenInNewWindow: openInNewWindow,
                 onEditMemo: { fileKey, currentMemo in
                     editingMemoFileKey = fileKey
+                    editingMemoText = currentMemo ?? ""
+                    showMemoEdit = true
+                },
+                onEditImageMemo: { id, currentMemo in
+                    editingImageCatalogId = id
                     editingMemoText = currentMemo ?? ""
                     showMemoEdit = true
                 }
@@ -681,6 +696,7 @@ struct ContentView: View {
                 .onTapGesture {
                     showMemoEdit = false
                     editingMemoFileKey = nil
+                    editingImageCatalogId = nil
                 }
 
             MemoEditPopover(
@@ -690,16 +706,21 @@ struct ContentView: View {
                     if let fileKey = editingMemoFileKey {
                         // 履歴エントリのメモを更新
                         historyManager.updateMemo(for: fileKey, memo: newMemo)
+                    } else if let catalogId = editingImageCatalogId {
+                        // 画像カタログエントリのメモを更新
+                        imageCatalogManager.updateMemo(for: catalogId, memo: newMemo)
                     } else {
                         // 現在開いているファイルのメモを更新
                         viewModel.updateCurrentMemo(newMemo)
                     }
                     showMemoEdit = false
                     editingMemoFileKey = nil
+                    editingImageCatalogId = nil
                 },
                 onCancel: {
                     showMemoEdit = false
                     editingMemoFileKey = nil
+                    editingImageCatalogId = nil
                 }
             )
         }
@@ -738,8 +759,9 @@ struct ContentView: View {
             }
         }
 
-        // viewModelに履歴マネージャーとアプリ設定を設定
+        // viewModelに履歴マネージャー、画像カタログマネージャー、アプリ設定を設定
         viewModel.historyManager = historyManager
+        viewModel.imageCatalogManager = imageCatalogManager
         viewModel.appSettings = appSettings
 
         // 履歴マネージャーにもアプリ設定を設定
@@ -1209,10 +1231,12 @@ struct InitialScreenView: View {
     let errorMessage: String?
     @Binding var filterText: String
     @Binding var showFilterField: Bool
+    @Binding var selectedTab: HistoryTab
     let onOpenFile: () -> Void
     let onOpenHistoryFile: (String) -> Void
     let onOpenInNewWindow: (String) -> Void  // filePath
-    let onEditMemo: (String, String?) -> Void  // (fileKey, currentMemo)
+    let onEditMemo: (String, String?) -> Void  // (fileKey, currentMemo) for archives
+    let onEditImageMemo: (String, String?) -> Void  // (id, currentMemo) for image catalog
 
     var body: some View {
         VStack(spacing: 20) {
@@ -1235,7 +1259,7 @@ struct InitialScreenView: View {
             .buttonStyle(.borderedProminent)
 
             // 履歴表示
-            HistoryListView(filterText: $filterText, showFilterField: $showFilterField, onOpenHistoryFile: onOpenHistoryFile, onOpenInNewWindow: onOpenInNewWindow, onEditMemo: onEditMemo)
+            HistoryListView(filterText: $filterText, showFilterField: $showFilterField, selectedTab: $selectedTab, onOpenHistoryFile: onOpenHistoryFile, onOpenInNewWindow: onOpenInNewWindow, onEditMemo: onEditMemo, onEditImageMemo: onEditImageMemo, onOpenImageFile: onOpenHistoryFile)
         }
     }
 }
@@ -1243,15 +1267,19 @@ struct InitialScreenView: View {
 /// 履歴リスト
 struct HistoryListView: View {
     @Environment(FileHistoryManager.self) private var historyManager
+    @Environment(ImageCatalogManager.self) private var imageCatalogManager
     @Environment(AppSettings.self) private var appSettings
     @Binding var filterText: String
     @Binding var showFilterField: Bool
+    @Binding var selectedTab: HistoryTab
     @FocusState private var isFilterFocused: Bool
     @State private var dismissedError = false
 
     let onOpenHistoryFile: (String) -> Void
     let onOpenInNewWindow: (String) -> Void  // filePath
-    let onEditMemo: (String, String?) -> Void  // (fileKey, currentMemo)
+    let onEditMemo: (String, String?) -> Void  // (fileKey, currentMemo) for archives
+    let onEditImageMemo: (String, String?) -> Void  // (id, currentMemo) for image catalog
+    let onOpenImageFile: (String) -> Void  // 画像ファイルを開く
 
     var body: some View {
         Group {
@@ -1329,30 +1357,65 @@ struct HistoryListView: View {
             }
 
             let recentHistory = historyManager.getRecentHistory(limit: appSettings.maxHistoryCount)
-            let filteredHistory = filterText.isEmpty
-                ? recentHistory
-                : recentHistory.filter { matchesFilter($0, pattern: filterText) }
+            let imageCatalog = imageCatalogManager.catalog
 
-            if appSettings.showHistoryOnLaunch && !recentHistory.isEmpty {
+            // 履歴表示が有効で、書庫または画像がある場合
+            if appSettings.showHistoryOnLaunch && (!recentHistory.isEmpty || !imageCatalog.isEmpty) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("\(L("recent_files").dropLast()) [\(recentHistory.count)/\(appSettings.maxHistoryCount)]:")
-                        .foregroundColor(.gray)
-                        .font(.headline)
-                        .padding(.top, 20)
+                    // タブ選択と件数表示
+                    HStack {
+                        Spacer()
+
+                        HStack(spacing: 0) {
+                            ForEach(HistoryTab.allCases, id: \.self) { tab in
+                                Button(action: {
+                                    selectedTab = tab
+                                }) {
+                                    Text(tab == .archives ? L("tab_archives") : L("tab_images"))
+                                        .font(.subheadline)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 6)
+                                        .background(selectedTab == tab ? Color.accentColor : Color.gray.opacity(0.3))
+                                        .foregroundColor(selectedTab == tab ? .white : .gray)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .cornerRadius(6)
+
+                        Spacer()
+                    }
+                    .overlay(alignment: .trailing) {
+                        // 件数表示（0件の場合は非表示）
+                        let count = selectedTab == .archives ? recentHistory.count : imageCatalog.count
+                        if count > 0 {
+                            Text(selectedTab == .archives
+                                ? "[\(recentHistory.count)/\(appSettings.maxHistoryCount)]"
+                                : "[\(imageCatalog.count)]")
+                                .foregroundColor(.gray)
+                                .font(.caption)
+                        }
+                    }
+                    .padding(.top, 20)
 
                     // フィルタ入力フィールド（⌘+Fで表示/非表示）
                     if showFilterField {
                         HStack {
                             Image(systemName: "magnifyingglass")
                                 .foregroundColor(.gray)
-                            TextField(L("history_filter_placeholder"), text: $filterText)
-                                .textFieldStyle(.plain)
-                                .foregroundColor(.white)
-                                .focused($isFilterFocused)
-                                .onExitCommand {
-                                    filterText = ""
-                                    showFilterField = false
-                                }
+                            TextField(
+                                selectedTab == .archives
+                                    ? L("history_filter_placeholder")
+                                    : L("image_catalog_filter_placeholder"),
+                                text: $filterText
+                            )
+                            .textFieldStyle(.plain)
+                            .foregroundColor(.white)
+                            .focused($isFilterFocused)
+                            .onExitCommand {
+                                filterText = ""
+                                showFilterField = false
+                            }
                             if !filterText.isEmpty {
                                 Button(action: { filterText = "" }) {
                                     Image(systemName: "xmark.circle.fill")
@@ -1365,37 +1428,92 @@ struct HistoryListView: View {
                         .background(Color.white.opacity(0.1))
                         .cornerRadius(6)
                         .onAppear {
-                            // フィルタ表示時に自動フォーカス
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                 isFilterFocused = true
                             }
                         }
                         .onDisappear {
-                            // フィルタ非表示時にフォーカスをクリア（親ビューがキーイベントを受け取れるように）
                             isFilterFocused = false
                         }
                     }
 
-                    ScrollView {
-                        LazyVStack(spacing: 8) {
-                            ForEach(filteredHistory) { entry in
-                                HistoryEntryRow(entry: entry, onOpenHistoryFile: onOpenHistoryFile, onOpenInNewWindow: onOpenInNewWindow, onEditMemo: onEditMemo)
-                            }
-                        }
-                        .padding(.vertical, 4)
-                    }
-                    .scrollIndicators(.visible)
-                    .frame(maxHeight: 300)
-
-                    // フィルタ結果の件数表示
-                    if !filterText.isEmpty {
-                        Text(L("history_filter_result_format", filteredHistory.count, recentHistory.count))
-                            .foregroundColor(.gray)
-                            .font(.caption)
+                    // タブに応じたコンテンツ
+                    if selectedTab == .archives {
+                        archivesListView(recentHistory: recentHistory)
+                    } else {
+                        imagesCatalogView(catalog: imageCatalog)
                     }
                 }
                 .frame(maxWidth: 500)
                 .padding(.horizontal, 20)
+            }
+        }
+    }
+
+    /// 書庫リストビュー
+    @ViewBuilder
+    private func archivesListView(recentHistory: [FileHistoryEntry]) -> some View {
+        let filteredHistory = filterText.isEmpty
+            ? recentHistory
+            : recentHistory.filter { matchesFilter($0, pattern: filterText) }
+
+        if recentHistory.isEmpty {
+            Text(L("image_catalog_empty"))
+                .foregroundColor(.gray)
+                .padding(.vertical, 20)
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 8) {
+                    ForEach(filteredHistory) { entry in
+                        HistoryEntryRow(entry: entry, onOpenHistoryFile: onOpenHistoryFile, onOpenInNewWindow: onOpenInNewWindow, onEditMemo: onEditMemo)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            .scrollIndicators(.visible)
+            .frame(maxHeight: 300)
+
+            if !filterText.isEmpty {
+                Text(L("history_filter_result_format", filteredHistory.count, recentHistory.count))
+                    .foregroundColor(.gray)
+                    .font(.caption)
+            }
+        }
+    }
+
+    /// 画像カタログビュー
+    @ViewBuilder
+    private func imagesCatalogView(catalog: [ImageCatalogEntry]) -> some View {
+        let filteredCatalog = filterText.isEmpty
+            ? catalog
+            : catalog.filter { matchesImageFilter($0, pattern: filterText) }
+
+        if catalog.isEmpty {
+            VStack(spacing: 8) {
+                Text(L("image_catalog_empty"))
+                    .foregroundColor(.gray)
+                Text(L("image_catalog_empty_hint"))
+                    .foregroundColor(.gray.opacity(0.7))
+                    .font(.caption)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 20)
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 8) {
+                    ForEach(filteredCatalog) { entry in
+                        ImageCatalogEntryRow(entry: entry, onOpenImageFile: onOpenImageFile, onEditMemo: onEditImageMemo)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            .scrollIndicators(.visible)
+            .frame(maxHeight: 300)
+
+            if !filterText.isEmpty {
+                Text(L("history_filter_result_format", filteredCatalog.count, catalog.count))
+                    .foregroundColor(.gray)
+                    .font(.caption)
             }
         }
     }
@@ -1438,6 +1556,103 @@ struct HistoryListView: View {
         return result
     }
 
+    /// 画像カタログエントリがフィルタにマッチするかチェック
+    private func matchesImageFilter(_ entry: ImageCatalogEntry, pattern: String) -> Bool {
+        if pattern.contains("*") || pattern.contains("?") {
+            let regexPattern = wildcardToRegex(pattern)
+            if let regex = try? NSRegularExpression(pattern: regexPattern, options: .caseInsensitive) {
+                let fileNameMatch = regex.firstMatch(in: entry.fileName, range: NSRange(entry.fileName.startIndex..., in: entry.fileName)) != nil
+                let memoMatch = entry.memo.map { regex.firstMatch(in: $0, range: NSRange($0.startIndex..., in: $0)) != nil } ?? false
+                return fileNameMatch || memoMatch
+            }
+        }
+        return entry.fileName.localizedCaseInsensitiveContains(pattern) ||
+               (entry.memo?.localizedCaseInsensitiveContains(pattern) ?? false)
+    }
+}
+
+/// 画像カタログエントリの行
+struct ImageCatalogEntryRow: View {
+    @Environment(ImageCatalogManager.self) private var catalogManager
+
+    let entry: ImageCatalogEntry
+    let onOpenImageFile: (String) -> Void
+    let onEditMemo: (String, String?) -> Void  // (id, currentMemo)
+
+    var body: some View {
+        let isAccessible = catalogManager.isAccessible(for: entry)
+
+        HStack(spacing: 0) {
+            Button(action: {
+                if isAccessible {
+                    onOpenImageFile(entry.filePath)
+                }
+            }) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack {
+                        Text(entry.fileName)
+                            .foregroundColor(isAccessible ? .white : .gray)
+                        Spacer()
+                        // 解像度があれば表示
+                        if let resolution = entry.resolutionString {
+                            Text(resolution)
+                                .foregroundColor(.gray)
+                                .font(.caption)
+                        }
+                    }
+                    // メモがある場合は表示
+                    if let memo = entry.memo, !memo.isEmpty {
+                        Text(memo)
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                            .lineLimit(1)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(!isAccessible)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+
+            // 削除ボタン
+            Button(action: {
+                catalogManager.removeEntry(withId: entry.id)
+            }) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundColor(.gray)
+                    .opacity(0.6)
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, 8)
+        }
+        .background(Color.white.opacity(isAccessible ? 0.1 : 0.05))
+        .cornerRadius(4)
+        .contextMenu {
+            Button(action: {
+                onOpenImageFile(entry.filePath)
+            }) {
+                Label(L("menu_open_in_new_window"), systemImage: "rectangle.badge.plus")
+            }
+            .disabled(!isAccessible)
+
+            Divider()
+
+            Button(action: {
+                onEditMemo(entry.id, entry.memo)
+            }) {
+                Label(L("menu_edit_memo"), systemImage: "square.and.pencil")
+            }
+
+            Divider()
+
+            Button(action: {
+                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: entry.filePath)])
+            }) {
+                Label(L("menu_reveal_in_finder"), systemImage: "folder")
+            }
+            .disabled(!isAccessible)
+        }
+    }
 }
 
 /// 履歴エントリの行

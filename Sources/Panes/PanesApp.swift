@@ -41,6 +41,7 @@ struct ImageViewerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @FocusedValue(\.bookViewModel) private var focusedViewModel: BookViewModel?
     @State private var historyManager = FileHistoryManager()
+    @State private var imageCatalogManager = ImageCatalogManager()
     @State private var appSettings = AppSettings()
     @State private var sessionManager = SessionManager()
     @Environment(\.openWindow) private var openWindow
@@ -49,6 +50,7 @@ struct ImageViewerApp: App {
         WindowGroup {
             ContentView()
                 .environment(historyManager)
+                .environment(imageCatalogManager)
                 .environment(appSettings)
                 .environment(sessionManager)
                 .onAppear {
@@ -253,6 +255,7 @@ struct ImageViewerApp: App {
         WindowGroup(id: "new") {
             ContentView()
                 .environment(historyManager)
+                .environment(imageCatalogManager)
                 .environment(appSettings)
                 .environment(sessionManager)
         }
@@ -263,6 +266,7 @@ struct ImageViewerApp: App {
         WindowGroup(id: "restore") {
             ContentView()
                 .environment(historyManager)
+                .environment(imageCatalogManager)
                 .environment(appSettings)
                 .environment(sessionManager)
         }

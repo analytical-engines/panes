@@ -84,6 +84,9 @@ class BookViewModel {
     // 履歴管理（外部から注入される）
     var historyManager: FileHistoryManager?
 
+    // 画像カタログ管理（外部から注入される）
+    var imageCatalogManager: ImageCatalogManager?
+
     // ページ表示設定
     private var pageDisplaySettings: PageDisplaySettings = PageDisplaySettings()
 
@@ -326,8 +329,9 @@ class BookViewModel {
         self.errorMessage = nil
         self.currentFilePath = source.sourceURL?.path
 
-        // 履歴に記録（必要な場合のみ）
+        // 履歴に記録（必要な場合のみ、FileImageSourceは画像カタログに記録するので除外）
         if recordAccess,
+           !(source is FileImageSource),
            let fileKey = source.generateFileKey(),
            let url = source.sourceURL {
             historyManager?.recordAccess(
@@ -787,14 +791,44 @@ class BookViewModel {
                 self.firstPageImage = source.loadImage(at: page)
                 self.secondPageImage = nil
             }
+            // 画像カタログに記録（FileImageSourceの場合のみ）
+            recordImageToCatalog(at: page)
 
         case .spread(let left, let right):
             // RTL: first=right側（小さいindex）, second=left側（大きいindex）
             self.firstPageImage = source.loadImage(at: right)
             self.secondPageImage = source.loadImage(at: left)
+            // 画像カタログに記録（FileImageSourceの場合のみ）
+            recordImageToCatalog(at: right)
+            recordImageToCatalog(at: left)
         }
 
         self.errorMessage = nil
+    }
+
+    /// 画像をカタログに記録（FileImageSourceの場合のみ）
+    private func recordImageToCatalog(at index: Int) {
+        guard let fileSource = imageSource as? FileImageSource,
+              let catalogManager = imageCatalogManager,
+              let url = fileSource.imageURL(at: index),
+              let fileKey = fileSource.generateImageFileKey(at: index) else {
+            return
+        }
+
+        let fileName = fileSource.fileName(at: index) ?? url.lastPathComponent
+        let size = fileSource.imageSize(at: index)
+        let fileSize = fileSource.fileSize(at: index)
+        let format = fileSource.imageFormat(at: index)
+
+        catalogManager.recordImageAccess(
+            fileKey: fileKey,
+            filePath: url.path,
+            fileName: fileName,
+            width: size.map { Int($0.width) },
+            height: size.map { Int($0.height) },
+            fileSize: fileSize,
+            format: format
+        )
     }
 
     /// 表示状態からcurrentPageを更新

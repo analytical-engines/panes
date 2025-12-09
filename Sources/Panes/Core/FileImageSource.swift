@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import CryptoKit
 
 /// 通常の画像ファイルから読み込むImageSource実装
 class FileImageSource: ImageSource {
@@ -176,5 +177,39 @@ class FileImageSource: ImageSource {
         default:
             return ext.uppercased()
         }
+    }
+
+    /// 指定されたインデックスの画像ファイルのURLを取得
+    func imageURL(at index: Int) -> URL? {
+        guard index >= 0 && index < imageURLs.count else {
+            return nil
+        }
+        return imageURLs[index]
+    }
+
+    /// 個別画像ファイル用のfileKeyを生成（サイズ+ハッシュ形式）
+    func generateImageFileKey(at index: Int) -> String? {
+        guard let url = imageURL(at: index) else { return nil }
+
+        // ファイルサイズを取得
+        guard let fileSize = try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64 else {
+            return nil
+        }
+
+        // 先頭32KBのハッシュ値を計算
+        guard let fileHandle = try? FileHandle(forReadingFrom: url) else {
+            return nil
+        }
+        defer { try? fileHandle.close() }
+
+        let chunkSize = 32 * 1024 // 32KB
+        guard let data = try? fileHandle.read(upToCount: chunkSize) else {
+            return nil
+        }
+
+        let hash = SHA256.hash(data: data)
+        let hashString = hash.compactMap { String(format: "%02x", $0) }.joined()
+
+        return "\(fileSize)-\(hashString.prefix(16))"
     }
 }

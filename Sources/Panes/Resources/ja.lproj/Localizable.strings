@@ -220,3 +220,12 @@
 "history_database_continue" = "このまま続行";
 "history_database_quit" = "終了";
 "schema_version_mismatch_error" = "このアプリは古いバージョンのため、新しいデータベース（v%d）にアクセスできません。最新版のアプリを使用するか、データベースをリセットしてください。（現在のアプリ: v%d）";
+
+// MARK: - Image Catalog
+
+"tab_archives" = "書庫";
+"tab_images" = "画像";
+"image_catalog_empty" = "画像が記録されていません";
+"image_catalog_empty_hint" = "このアプリで表示した画像がここに記録されます";
+"image_catalog_count_format" = "%d枚";
+"image_catalog_filter_placeholder" = "ファイル名で絞り込み";
