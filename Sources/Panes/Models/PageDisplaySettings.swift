@@ -1,5 +1,12 @@
 import Foundation
 
+/// 表示順序におけるページデータ
+/// ソースインデックスと表示位置のマッピングを管理
+struct PageData {
+    /// このページのソース画像インデックス（ImageSource内での位置）
+    let sourceIndex: Int
+}
+
 /// 見開きモード中の単ページ表示時の配置
 enum SinglePageAlignment: String, Codable {
     case right      // 右側表示

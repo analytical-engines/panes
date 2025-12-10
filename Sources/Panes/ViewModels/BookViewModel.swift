@@ -76,48 +76,49 @@ class BookViewModel {
     // 画像ソース
     private var imageSource: ImageSource?
 
-    // 表示順序（displayPage -> sourceIndex のマッピング）
-    // 例: [2, 0, 1] なら表示0ページ目はソース2番目の画像
-    private var displayOrder: [Int] = []
+    // ページデータ配列（表示順に並んでいる）
+    // 例: pages[0].sourceIndex == 2 なら表示0ページ目はソース2番目の画像
+    private var pages: [PageData] = []
 
     // 現在のソート方法
     var sortMethod: ImageSortMethod = .name
 
     /// 表示ページ番号からソースインデックスに変換
     private func sourceIndex(for displayPage: Int) -> Int {
-        guard displayPage >= 0 && displayPage < displayOrder.count else {
+        guard displayPage >= 0 && displayPage < pages.count else {
             return displayPage // フォールバック
         }
-        return displayOrder[displayPage]
+        return pages[displayPage].sourceIndex
     }
 
     /// ソースインデックスから表示ページ番号に変換
     private func displayPage(for sourceIndex: Int) -> Int? {
-        return displayOrder.firstIndex(of: sourceIndex)
+        return pages.firstIndex { $0.sourceIndex == sourceIndex }
     }
 
-    /// 表示順序を初期化（ソートなし = identity mapping）
-    private func initializeDisplayOrder(count: Int) {
-        displayOrder = Array(0..<count)
+    /// ページ配列を初期化（ソートなし = identity mapping）
+    private func initializePages(count: Int) {
+        pages = (0..<count).map { PageData(sourceIndex: $0) }
         sortMethod = .name  // デフォルトのソート方法にリセット
-        debugLog("Display order initialized: \(displayOrder.count) pages, sortMethod reset to .name", level: .verbose)
+        debugLog("Pages initialized: \(pages.count) pages, sortMethod reset to .name", level: .verbose)
     }
 
     /// ソートを適用して表示順序を更新
     func applySort(_ method: ImageSortMethod) {
-        guard let source = imageSource, !displayOrder.isEmpty else { return }
+        guard let source = imageSource, !pages.isEmpty else { return }
 
         // 現在表示中の画像のソースインデックスを記憶
         let currentSourceIndex = sourceIndex(for: currentPage)
 
-        // ソート方法に応じて displayOrder を再生成
+        // ソート方法に応じて pages を再生成
         sortMethod = method
         let indices = Array(0..<source.imageCount)
 
+        let sortedIndices: [Int]
         switch method {
         case .name:
             // 名前順（localizedStandardCompare）
-            displayOrder = indices.sorted { i1, i2 in
+            sortedIndices = indices.sorted { i1, i2 in
                 let name1 = source.fileName(at: i1) ?? ""
                 let name2 = source.fileName(at: i2) ?? ""
                 return name1.localizedStandardCompare(name2) == .orderedAscending
@@ -125,7 +126,7 @@ class BookViewModel {
 
         case .nameReverse:
             // 名前逆順
-            displayOrder = indices.sorted { i1, i2 in
+            sortedIndices = indices.sorted { i1, i2 in
                 let name1 = source.fileName(at: i1) ?? ""
                 let name2 = source.fileName(at: i2) ?? ""
                 return name1.localizedStandardCompare(name2) == .orderedDescending
@@ -133,7 +134,7 @@ class BookViewModel {
 
         case .natural:
             // 自然順（数字を数値として比較）- 後で実装
-            displayOrder = indices.sorted { i1, i2 in
+            sortedIndices = indices.sorted { i1, i2 in
                 let name1 = source.fileName(at: i1) ?? ""
                 let name2 = source.fileName(at: i2) ?? ""
                 return name1.localizedStandardCompare(name2) == .orderedAscending
@@ -141,7 +142,7 @@ class BookViewModel {
 
         case .dateAscending:
             // 日付順（古い順）
-            displayOrder = indices.sorted { i1, i2 in
+            sortedIndices = indices.sorted { i1, i2 in
                 let date1 = source.fileDate(at: i1) ?? Date.distantPast
                 let date2 = source.fileDate(at: i2) ?? Date.distantPast
                 return date1 < date2
@@ -149,7 +150,7 @@ class BookViewModel {
 
         case .dateDescending:
             // 日付順（新しい順）
-            displayOrder = indices.sorted { i1, i2 in
+            sortedIndices = indices.sorted { i1, i2 in
                 let date1 = source.fileDate(at: i1) ?? Date.distantPast
                 let date2 = source.fileDate(at: i2) ?? Date.distantPast
                 return date1 > date2
@@ -157,10 +158,13 @@ class BookViewModel {
 
         case .random:
             // ランダム順
-            displayOrder = indices.shuffled()
+            sortedIndices = indices.shuffled()
         }
 
-        debugLog("Sort applied: \(method.rawValue), displayOrder: \(displayOrder.prefix(10))...", level: .normal)
+        // ソート結果をpages配列に変換
+        pages = sortedIndices.map { PageData(sourceIndex: $0) }
+
+        debugLog("Sort applied: \(method.rawValue), pages: \(pages.prefix(10).map { $0.sourceIndex })...", level: .normal)
 
         // 元の画像を表示し続けるようにcurrentPageを更新
         if let newDisplayPage = displayPage(for: currentSourceIndex) {
@@ -446,7 +450,7 @@ class BookViewModel {
         self.currentFilePath = source.sourceURL?.path
 
         // 表示順序を初期化
-        initializeDisplayOrder(count: source.imageCount)
+        initializePages(count: source.imageCount)
 
         // 書庫履歴に記録（書庫/フォルダの場合のみ、個別画像ファイルは画像カタログのみに記録）
         if recordAccess,
@@ -1055,7 +1059,7 @@ class BookViewModel {
         guard imageSource != nil else { return }
 
         let targetPage = currentPage
-        let pageCount = totalPages  // displayOrderの件数 = 表示ページ数
+        let pageCount = totalPages  // pages配列の件数 = 表示ページ数
 
         let isSinglePage: (Int) -> Bool = { [weak self] p in
             self?.isPageSingle(p) ?? false
@@ -1453,46 +1457,48 @@ class BookViewModel {
         }
         // なければデフォルトのまま
 
-        // ソート方法を復元（displayOrderを先に更新する必要があるため、ページ復元より先に行う）
+        // ソート方法を復元（pages配列を先に更新する必要があるため、ページ復元より先に行う）
         if let sortString = UserDefaults.standard.string(forKey: "\(sortMethodKey)-\(entryId)"),
            let savedSortMethod = ImageSortMethod(rawValue: sortString) {
-            // ソートを適用（displayOrderを更新、ただしページ読み込みはスキップ）
+            // ソートを適用（pages配列を更新、ただしページ読み込みはスキップ）
             sortMethod = savedSortMethod
             let indices = Array(0..<totalPages)
+            let sortedIndices: [Int]
             switch savedSortMethod {
             case .name:
-                displayOrder = indices.sorted { i1, i2 in
+                sortedIndices = indices.sorted { i1, i2 in
                     let name1 = imageSource?.fileName(at: i1) ?? ""
                     let name2 = imageSource?.fileName(at: i2) ?? ""
                     return name1.localizedStandardCompare(name2) == .orderedAscending
                 }
             case .nameReverse:
-                displayOrder = indices.sorted { i1, i2 in
+                sortedIndices = indices.sorted { i1, i2 in
                     let name1 = imageSource?.fileName(at: i1) ?? ""
                     let name2 = imageSource?.fileName(at: i2) ?? ""
                     return name1.localizedStandardCompare(name2) == .orderedDescending
                 }
             case .natural:
-                displayOrder = indices.sorted { i1, i2 in
+                sortedIndices = indices.sorted { i1, i2 in
                     let name1 = imageSource?.fileName(at: i1) ?? ""
                     let name2 = imageSource?.fileName(at: i2) ?? ""
                     return name1.localizedStandardCompare(name2) == .orderedAscending
                 }
             case .dateAscending:
-                displayOrder = indices.sorted { i1, i2 in
+                sortedIndices = indices.sorted { i1, i2 in
                     let date1 = imageSource?.fileDate(at: i1) ?? Date.distantPast
                     let date2 = imageSource?.fileDate(at: i2) ?? Date.distantPast
                     return date1 < date2
                 }
             case .dateDescending:
-                displayOrder = indices.sorted { i1, i2 in
+                sortedIndices = indices.sorted { i1, i2 in
                     let date1 = imageSource?.fileDate(at: i1) ?? Date.distantPast
                     let date2 = imageSource?.fileDate(at: i2) ?? Date.distantPast
                     return date1 > date2
                 }
             case .random:
-                displayOrder = indices.shuffled()
+                sortedIndices = indices.shuffled()
             }
+            pages = sortedIndices.map { PageData(sourceIndex: $0) }
         }
         // なければデフォルト（.name）のまま
 
