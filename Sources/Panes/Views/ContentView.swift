@@ -55,6 +55,11 @@ struct ContentView: View {
     @State private var historyFilterText: String = ""
     @State private var showHistoryFilter: Bool = false
     @State private var historySelectedTab: HistoryTab = .archives
+    // スクロール位置復元用（最後に開いたエントリのID）
+    @State private var lastOpenedArchiveId: String?
+    @State private var lastOpenedImageId: String?
+    // スクロールトリガー（初期画面に戻るたびにインクリメント）
+    @State private var scrollTrigger: Int = 0
 
     // メモ編集用
     @State private var showMemoEdit = false
@@ -135,6 +140,9 @@ struct ContentView: View {
                 filterText: $historyFilterText,
                 showFilterField: $showHistoryFilter,
                 selectedTab: $historySelectedTab,
+                lastOpenedArchiveId: $lastOpenedArchiveId,
+                lastOpenedImageId: $lastOpenedImageId,
+                scrollTrigger: scrollTrigger,
                 onOpenFile: openFilePicker,
                 onOpenHistoryFile: openHistoryFile,
                 onOpenInNewWindow: openInNewWindow,
@@ -619,6 +627,9 @@ struct ContentView: View {
                 sessionManager.removeWindow(id: windowID)
                 // D&D中でなければローディング状態をリセット（D&D中はisWaitingForFileを維持）
                 // Note: isWaitingForFileはファイル読み込み完了時にfalseになる
+
+                // 初期画面に戻ったのでスクロール位置復元をトリガー
+                scrollTrigger += 1
             }
         }
         .onChange(of: viewModel.currentPage) { _, newPage in
@@ -1275,6 +1286,9 @@ struct InitialScreenView: View {
     @Binding var filterText: String
     @Binding var showFilterField: Bool
     @Binding var selectedTab: HistoryTab
+    @Binding var lastOpenedArchiveId: String?
+    @Binding var lastOpenedImageId: String?
+    let scrollTrigger: Int
     let onOpenFile: () -> Void
     let onOpenHistoryFile: (String) -> Void
     let onOpenInNewWindow: (String) -> Void  // filePath
@@ -1303,7 +1317,7 @@ struct InitialScreenView: View {
             .buttonStyle(.borderedProminent)
 
             // 履歴表示
-            HistoryListView(filterText: $filterText, showFilterField: $showFilterField, selectedTab: $selectedTab, onOpenHistoryFile: onOpenHistoryFile, onOpenInNewWindow: onOpenInNewWindow, onEditMemo: onEditMemo, onEditImageMemo: onEditImageMemo, onOpenImageFile: onOpenImageCatalogFile)
+            HistoryListView(filterText: $filterText, showFilterField: $showFilterField, selectedTab: $selectedTab, lastOpenedArchiveId: $lastOpenedArchiveId, lastOpenedImageId: $lastOpenedImageId, scrollTrigger: scrollTrigger, onOpenHistoryFile: onOpenHistoryFile, onOpenInNewWindow: onOpenInNewWindow, onEditMemo: onEditMemo, onEditImageMemo: onEditImageMemo, onOpenImageFile: onOpenImageCatalogFile)
         }
     }
 }
@@ -1316,6 +1330,9 @@ struct HistoryListView: View {
     @Binding var filterText: String
     @Binding var showFilterField: Bool
     @Binding var selectedTab: HistoryTab
+    @Binding var lastOpenedArchiveId: String?
+    @Binding var lastOpenedImageId: String?
+    let scrollTrigger: Int
     @FocusState private var isFilterFocused: Bool
     @State private var dismissedError = false
 
@@ -1515,16 +1532,41 @@ struct HistoryListView: View {
                 .foregroundColor(.gray)
                 .padding(.vertical, 20)
         } else {
-            ScrollView {
-                LazyVStack(spacing: 8) {
-                    ForEach(filteredHistory) { entry in
-                        HistoryEntryRow(entry: entry, onOpenHistoryFile: onOpenHistoryFile, onOpenInNewWindow: onOpenInNewWindow, onEditMemo: onEditMemo)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 8) {
+                        ForEach(Array(filteredHistory.enumerated()), id: \.element.id) { index, entry in
+                            HistoryEntryRow(
+                                entry: entry,
+                                onOpenHistoryFile: { filePath in
+                                    // クリックした項目の前（または後）の項目のIDを保存
+                                    // （クリックした項目は先頭に移動し、前の項目がその位置に来るため）
+                                    if index > 0 {
+                                        lastOpenedArchiveId = filteredHistory[index - 1].id
+                                    } else if index + 1 < filteredHistory.count {
+                                        lastOpenedArchiveId = filteredHistory[index + 1].id
+                                    } else {
+                                        lastOpenedArchiveId = nil
+                                    }
+                                    onOpenHistoryFile(filePath)
+                                },
+                                onOpenInNewWindow: onOpenInNewWindow,
+                                onEditMemo: onEditMemo
+                            )
+                            .id(entry.id)
+                        }
                     }
+                    .padding(.vertical, 4)
                 }
-                .padding(.vertical, 4)
+                .scrollIndicators(.visible)
+                .frame(maxHeight: 300)
+                .task(id: scrollTrigger) {
+                    guard scrollTrigger > 0 else { return }
+                    guard let targetId = lastOpenedArchiveId else { return }
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    proxy.scrollTo(targetId, anchor: .center)
+                }
             }
-            .scrollIndicators(.visible)
-            .frame(maxHeight: 300)
 
             if !filterText.isEmpty {
                 Text(L("history_filter_result_format", filteredHistory.count, recentHistory.count))
@@ -1573,16 +1615,39 @@ struct HistoryListView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 20)
         } else {
-            ScrollView {
-                LazyVStack(spacing: 8) {
-                    ForEach(filteredCatalog) { entry in
-                        ImageCatalogEntryRow(entry: entry, onOpenImageFile: onOpenImageFile, onEditMemo: onEditImageMemo)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 8) {
+                        ForEach(Array(filteredCatalog.enumerated()), id: \.element.id) { index, entry in
+                            ImageCatalogEntryRow(
+                                entry: entry,
+                                onOpenImageFile: { filePath, relativePath in
+                                    // クリックした項目の前（または後）の項目のIDを保存
+                                    if index > 0 {
+                                        lastOpenedImageId = filteredCatalog[index - 1].id
+                                    } else if index + 1 < filteredCatalog.count {
+                                        lastOpenedImageId = filteredCatalog[index + 1].id
+                                    } else {
+                                        lastOpenedImageId = nil
+                                    }
+                                    onOpenImageFile(filePath, relativePath)
+                                },
+                                onEditMemo: onEditImageMemo
+                            )
+                            .id(entry.id)
+                        }
                     }
+                    .padding(.vertical, 4)
                 }
-                .padding(.vertical, 4)
+                .scrollIndicators(.visible)
+                .frame(maxHeight: 300)
+                .task(id: scrollTrigger) {
+                    guard scrollTrigger > 0 else { return }
+                    guard let targetId = lastOpenedImageId else { return }
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    proxy.scrollTo(targetId, anchor: .center)
+                }
             }
-            .scrollIndicators(.visible)
-            .frame(maxHeight: 300)
 
             if !filterText.isEmpty {
                 Text(L("history_filter_result_format", filteredCatalog.count, catalog.count))

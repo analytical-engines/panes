@@ -285,17 +285,16 @@ struct ImageViewerApp: App {
         savePanel.title = L("export_panel_title")
         savePanel.prompt = L("export_panel_prompt")
 
-        savePanel.begin { response in
-            if response == .OK, let url = savePanel.url {
-                do {
-                    try data.write(to: url)
-                } catch {
-                    let alert = NSAlert()
-                    alert.messageText = L("export_error_title")
-                    alert.informativeText = error.localizedDescription
-                    alert.alertStyle = .critical
-                    alert.runModal()
-                }
+        let response = savePanel.runModal()
+        if response == .OK, let url = savePanel.url {
+            do {
+                try data.write(to: url)
+            } catch {
+                let alert = NSAlert()
+                alert.messageText = L("export_error_title")
+                alert.informativeText = error.localizedDescription
+                alert.alertStyle = .critical
+                alert.runModal()
             }
         }
     }
@@ -310,24 +309,23 @@ struct ImageViewerApp: App {
         openPanel.title = L("import_panel_title")
         openPanel.prompt = L("import_panel_prompt")
 
-        openPanel.begin { response in
-            if response == .OK, let url = openPanel.url {
-                do {
-                    let data = try Data(contentsOf: url)
-                    let result = viewModel.importPageSettings(from: data)
+        let response = openPanel.runModal()
+        if response == .OK, let url = openPanel.url {
+            do {
+                let data = try Data(contentsOf: url)
+                let result = viewModel.importPageSettings(from: data)
 
-                    let alert = NSAlert()
-                    alert.messageText = result.success ? L("import_success_title") : L("import_error_title")
-                    alert.informativeText = result.message
-                    alert.alertStyle = result.success ? .informational : .critical
-                    alert.runModal()
-                } catch {
-                    let alert = NSAlert()
-                    alert.messageText = L("import_error_title")
-                    alert.informativeText = error.localizedDescription
-                    alert.alertStyle = .critical
-                    alert.runModal()
-                }
+                let alert = NSAlert()
+                alert.messageText = result.success ? L("import_success_title") : L("import_error_title")
+                alert.informativeText = result.message
+                alert.alertStyle = result.success ? .informational : .critical
+                alert.runModal()
+            } catch {
+                let alert = NSAlert()
+                alert.messageText = L("import_error_title")
+                alert.informativeText = error.localizedDescription
+                alert.alertStyle = .critical
+                alert.runModal()
             }
         }
     }
@@ -358,17 +356,16 @@ struct ImageViewerApp: App {
         savePanel.title = L("export_history_panel_title")
         savePanel.prompt = L("export_panel_prompt")
 
-        savePanel.begin { response in
-            if response == .OK, let url = savePanel.url {
-                do {
-                    try data.write(to: url)
-                } catch {
-                    let alert = NSAlert()
-                    alert.messageText = L("export_error_title")
-                    alert.informativeText = error.localizedDescription
-                    alert.alertStyle = .critical
-                    alert.runModal()
-                }
+        let response = savePanel.runModal()
+        if response == .OK, let url = savePanel.url {
+            do {
+                try data.write(to: url)
+            } catch {
+                let alert = NSAlert()
+                alert.messageText = L("export_error_title")
+                alert.informativeText = error.localizedDescription
+                alert.alertStyle = .critical
+                alert.runModal()
             }
         }
     }
@@ -405,31 +402,30 @@ struct ImageViewerApp: App {
         openPanel.title = L("import_history_panel_title")
         openPanel.prompt = L("import_panel_prompt")
 
-        openPanel.begin { response in
-            if response == .OK, let url = openPanel.url {
-                do {
-                    let data = try Data(contentsOf: url)
-                    let result = historyManager.importHistory(from: data, merge: merge)
+        let response = openPanel.runModal()
+        if response == .OK, let url = openPanel.url {
+            do {
+                let data = try Data(contentsOf: url)
+                let result = historyManager.importHistory(from: data, merge: merge)
 
-                    let alert = NSAlert()
-                    if result.success {
-                        alert.messageText = L("import_success_title")
-                        let modeText = merge ? L("import_history_merged") : L("import_history_replaced")
-                        alert.informativeText = String(format: L("import_history_success_format"), result.importedCount, modeText)
-                        alert.alertStyle = .informational
-                    } else {
-                        alert.messageText = L("import_error_title")
-                        alert.informativeText = L("import_error_invalid_format")
-                        alert.alertStyle = .critical
-                    }
-                    alert.runModal()
-                } catch {
-                    let alert = NSAlert()
+                let alert = NSAlert()
+                if result.success {
+                    alert.messageText = L("import_success_title")
+                    let modeText = merge ? L("import_history_merged") : L("import_history_replaced")
+                    alert.informativeText = String(format: L("import_history_success_format"), result.importedCount, modeText)
+                    alert.alertStyle = .informational
+                } else {
                     alert.messageText = L("import_error_title")
-                    alert.informativeText = error.localizedDescription
+                    alert.informativeText = L("import_error_invalid_format")
                     alert.alertStyle = .critical
-                    alert.runModal()
                 }
+                alert.runModal()
+            } catch {
+                let alert = NSAlert()
+                alert.messageText = L("import_error_title")
+                alert.informativeText = error.localizedDescription
+                alert.alertStyle = .critical
+                alert.runModal()
             }
         }
     }
