@@ -207,6 +207,17 @@
 "sort_date_ascending" = "日付（古→新）";
 "sort_date_descending" = "日付（新→古）";
 "sort_random" = "ランダム";
+"sort_custom" = "カスタム";
+
+// MARK: - Display Order
+
+"menu_display_order" = "表示順序";
+"menu_mark_for_move" = "移動元としてマーク";
+"menu_page_marked" = "マーク済み";
+"menu_insert_before" = "この画像の前に挿入";
+"menu_insert_after" = "この画像の後に挿入";
+"menu_clear_mark" = "マークを解除";
+"menu_reset_custom_order" = "カスタム順序をリセット";
 
 // MARK: - File Identity Dialog
 

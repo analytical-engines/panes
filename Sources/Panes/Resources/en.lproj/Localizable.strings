@@ -207,6 +207,17 @@
 "sort_date_ascending" = "Date (Old→New)";
 "sort_date_descending" = "Date (New→Old)";
 "sort_random" = "Random";
+"sort_custom" = "Custom";
+
+// MARK: - Display Order
+
+"menu_display_order" = "Display Order";
+"menu_mark_for_move" = "Mark for Move";
+"menu_page_marked" = "Marked";
+"menu_insert_before" = "Insert Before This Image";
+"menu_insert_after" = "Insert After This Image";
+"menu_clear_mark" = "Clear Mark";
+"menu_reset_custom_order" = "Reset Custom Order";
 
 // MARK: - File Identity Dialog
 

@@ -70,6 +70,9 @@ struct ContentView: View {
     // 画像カタログからのファイルオープン時に使用する相対パス
     @State private var pendingRelativePath: String?
 
+    // 表示順序変更用（コピー/ペースト方式）
+    @State private var copiedPageIndex: Int?
+
     // メインビューのフォーカス管理
     @FocusState private var isMainViewFocused: Bool
 
@@ -370,6 +373,68 @@ struct ContentView: View {
             }
         } label: {
             Label(L("menu_sort"), systemImage: "arrow.up.arrow.down")
+        }
+
+        // 表示順序変更メニュー（常に表示、操作時に自動でカスタムモードに切り替え）
+        Menu {
+            // 移動元としてマーク
+            Button(action: {
+                viewModel.ensureCustomSortMode()
+                copiedPageIndex = pageIndex
+            }) {
+                Label(
+                    copiedPageIndex == pageIndex
+                        ? L("menu_page_marked")
+                        : L("menu_mark_for_move"),
+                    systemImage: copiedPageIndex == pageIndex
+                        ? "checkmark.circle.fill"
+                        : "circle"
+                )
+            }
+
+            // ペースト操作（マークされたページがある場合のみ）
+            if let copiedIndex = copiedPageIndex, copiedIndex != pageIndex {
+                Divider()
+
+                Button(action: {
+                    viewModel.movePageBefore(sourceDisplayPage: copiedIndex, targetDisplayPage: pageIndex)
+                    copiedPageIndex = nil
+                }) {
+                    Label(L("menu_insert_before"), systemImage: "arrow.left.to.line")
+                }
+
+                Button(action: {
+                    viewModel.movePageAfter(sourceDisplayPage: copiedIndex, targetDisplayPage: pageIndex)
+                    copiedPageIndex = nil
+                }) {
+                    Label(L("menu_insert_after"), systemImage: "arrow.right.to.line")
+                }
+            }
+
+            // マーク解除
+            if copiedPageIndex != nil {
+                Divider()
+
+                Button(action: {
+                    copiedPageIndex = nil
+                }) {
+                    Label(L("menu_clear_mark"), systemImage: "xmark.circle")
+                }
+            }
+
+            // カスタム順序をリセット（カスタムモード時のみ表示）
+            if viewModel.sortMethod == .custom {
+                Divider()
+
+                Button(action: {
+                    copiedPageIndex = nil
+                    viewModel.resetCustomDisplayOrder()
+                }) {
+                    Label(L("menu_reset_custom_order"), systemImage: "arrow.counterclockwise")
+                }
+            }
+        } label: {
+            Label(L("menu_display_order"), systemImage: "arrow.up.arrow.down.circle")
         }
 
         Divider()

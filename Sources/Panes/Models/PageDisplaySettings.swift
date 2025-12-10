@@ -78,6 +78,9 @@ struct PageDisplaySettings: Codable {
     /// ページごとの反転設定
     var pageFlips: [Int: ImageFlip] = [:]
 
+    /// カスタム表示順序（ソースインデックスの配列、空の場合はデフォルト順序）
+    var customDisplayOrder: [Int] = []
+
     // MARK: - 後方互換性のためのCodable対応
 
     enum CodingKeys: String, CodingKey {
@@ -88,6 +91,7 @@ struct PageDisplaySettings: Codable {
         case pageAlignments
         case pageRotations
         case pageFlips
+        case customDisplayOrder
         // 旧キー
         case forceSinglePageIndices
     }
@@ -112,6 +116,7 @@ struct PageDisplaySettings: Codable {
         pageAlignments = (try? container.decode([Int: SinglePageAlignment].self, forKey: .pageAlignments)) ?? [:]
         pageRotations = (try? container.decode([Int: ImageRotation].self, forKey: .pageRotations)) ?? [:]
         pageFlips = (try? container.decode([Int: ImageFlip].self, forKey: .pageFlips)) ?? [:]
+        customDisplayOrder = (try? container.decode([Int].self, forKey: .customDisplayOrder)) ?? []
     }
 
     func encode(to encoder: Encoder) throws {
@@ -123,6 +128,7 @@ struct PageDisplaySettings: Codable {
         try container.encode(pageAlignments, forKey: .pageAlignments)
         try container.encode(pageRotations, forKey: .pageRotations)
         try container.encode(pageFlips, forKey: .pageFlips)
+        try container.encode(customDisplayOrder, forKey: .customDisplayOrder)
     }
 
     // MARK: - 単ページ判定
@@ -304,5 +310,22 @@ struct PageDisplaySettings: Codable {
     /// 非表示ページ数
     var hiddenPageCount: Int {
         return hiddenPageIndices.count
+    }
+
+    // MARK: - カスタム表示順序
+
+    /// カスタム表示順序が設定されているかどうか
+    var hasCustomDisplayOrder: Bool {
+        return !customDisplayOrder.isEmpty
+    }
+
+    /// カスタム表示順序を設定
+    mutating func setCustomDisplayOrder(_ order: [Int]) {
+        customDisplayOrder = order
+    }
+
+    /// カスタム表示順序をクリア
+    mutating func clearCustomDisplayOrder() {
+        customDisplayOrder = []
     }
 }

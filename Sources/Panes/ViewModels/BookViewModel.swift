@@ -159,6 +159,16 @@ class BookViewModel {
         case .random:
             // ランダム順
             sortedIndices = indices.shuffled()
+
+        case .custom:
+            // カスタム順: 保存された順序があればそれを使用、なければ現在の順序を維持
+            if pageDisplaySettings.hasCustomDisplayOrder {
+                sortedIndices = pageDisplaySettings.customDisplayOrder
+            } else {
+                // 現在の表示順序をカスタム順序として保存
+                sortedIndices = pages.map { $0.sourceIndex }
+                pageDisplaySettings.setCustomDisplayOrder(sortedIndices)
+            }
         }
 
         // ソート結果をpages配列に変換
@@ -175,6 +185,97 @@ class BookViewModel {
 
         // 表示を更新
         loadCurrentPage()
+    }
+
+    // MARK: - カスタム表示順序の操作
+
+    /// 指定した表示ページを別の表示ページの次（後ろ）に移動
+    func movePageAfter(sourceDisplayPage: Int, targetDisplayPage: Int) {
+        guard sourceDisplayPage >= 0 && sourceDisplayPage < pages.count else { return }
+        guard targetDisplayPage >= 0 && targetDisplayPage < pages.count else { return }
+        guard sourceDisplayPage != targetDisplayPage else { return }
+
+        // 対象ページを取り出し
+        let targetPage = pages.remove(at: sourceDisplayPage)
+
+        // 挿入位置を計算（removeにより位置がずれる可能性を考慮）
+        let insertIndex: Int
+        if sourceDisplayPage < targetDisplayPage {
+            // 元の位置より後に移動する場合、removeによりtargetDisplayPageは1つ前にずれている
+            insertIndex = targetDisplayPage
+        } else {
+            // 元の位置より前に移動する場合、targetDisplayPageはそのまま
+            insertIndex = targetDisplayPage + 1
+        }
+
+        pages.insert(targetPage, at: insertIndex)
+
+        // カスタム順序を保存
+        updateCustomDisplayOrder()
+
+        // 表示ページを更新（移動先の位置へ）
+        currentPage = insertIndex
+        loadCurrentPage()
+        saveViewState()
+
+        debugLog("Moved page \(sourceDisplayPage) after \(targetDisplayPage) (now at \(insertIndex))", level: .normal)
+    }
+
+    /// 指定した表示ページを別の表示ページの前に移動
+    func movePageBefore(sourceDisplayPage: Int, targetDisplayPage: Int) {
+        guard sourceDisplayPage >= 0 && sourceDisplayPage < pages.count else { return }
+        guard targetDisplayPage >= 0 && targetDisplayPage < pages.count else { return }
+        guard sourceDisplayPage != targetDisplayPage else { return }
+
+        // 対象ページを取り出し
+        let targetPage = pages.remove(at: sourceDisplayPage)
+
+        // 挿入位置を計算（removeにより位置がずれる可能性を考慮）
+        let insertIndex: Int
+        if sourceDisplayPage < targetDisplayPage {
+            // 元の位置より後に移動する場合、removeによりtargetDisplayPageは1つ前にずれている
+            insertIndex = targetDisplayPage - 1
+        } else {
+            // 元の位置より前に移動する場合、targetDisplayPageはそのまま
+            insertIndex = targetDisplayPage
+        }
+
+        pages.insert(targetPage, at: insertIndex)
+
+        // カスタム順序を保存
+        updateCustomDisplayOrder()
+
+        // 表示ページを更新（移動先の位置へ）
+        currentPage = insertIndex
+        loadCurrentPage()
+        saveViewState()
+
+        debugLog("Moved page \(sourceDisplayPage) before \(targetDisplayPage) (now at \(insertIndex))", level: .normal)
+    }
+
+    /// pages配列からカスタム表示順序を更新
+    private func updateCustomDisplayOrder() {
+        pageDisplaySettings.setCustomDisplayOrder(pages.map { $0.sourceIndex })
+    }
+
+    /// カスタムソートモードに切り替え（現在の表示順序を保持）
+    func ensureCustomSortMode() {
+        if sortMethod != .custom {
+            // 現在の表示順序をカスタム順序として保存してカスタムモードに切り替え
+            pageDisplaySettings.setCustomDisplayOrder(pages.map { $0.sourceIndex })
+            sortMethod = .custom
+            saveViewState()
+        }
+    }
+
+    /// カスタム表示順序をリセットして名前順に戻す
+    func resetCustomDisplayOrder() {
+        // カスタム順序をクリア
+        pageDisplaySettings.clearCustomDisplayOrder()
+
+        // 名前順に戻す
+        sortMethod = .name
+        applySort(.name)
     }
 
     // UserDefaultsのキー
@@ -1445,6 +1546,14 @@ class BookViewModel {
             entryId = FileHistoryEntry.generateId(fileName: source.sourceName, fileKey: fileKey)
         }
 
+        // ページ表示設定を復元（カスタムソート順序もここに含まれるため、ソート復元より先に行う）
+        if let settings = historyManager?.loadPageDisplaySettings(forFileName: source.sourceName, fileKey: fileKey) {
+            pageDisplaySettings = settings
+        } else {
+            // 設定が存在しない場合は空の設定で初期化
+            pageDisplaySettings = PageDisplaySettings()
+        }
+
         // 表示モードを復元（エントリIDベースのみ）
         if let modeString = UserDefaults.standard.string(forKey: "\(viewModeKey)-\(entryId)") {
             viewMode = modeString == "spread" ? .spread : .single
@@ -1497,6 +1606,18 @@ class BookViewModel {
                 }
             case .random:
                 sortedIndices = indices.shuffled()
+            case .custom:
+                // カスタム順: 保存された順序を使用
+                if pageDisplaySettings.hasCustomDisplayOrder {
+                    sortedIndices = pageDisplaySettings.customDisplayOrder
+                } else {
+                    // 保存順序がない場合は現在のまま（name順）
+                    sortedIndices = indices.sorted { i1, i2 in
+                        let name1 = imageSource?.fileName(at: i1) ?? ""
+                        let name2 = imageSource?.fileName(at: i2) ?? ""
+                        return name1.localizedStandardCompare(name2) == .orderedAscending
+                    }
+                }
             }
             pages = sortedIndices.map { PageData(sourceIndex: $0) }
         }
@@ -1513,14 +1634,6 @@ class BookViewModel {
             }
         }
         // なければ0（先頭）のまま
-
-        // ページ表示設定を復元（ファイル名も考慮してエントリを特定）
-        if let settings = historyManager?.loadPageDisplaySettings(forFileName: source.sourceName, fileKey: fileKey) {
-            pageDisplaySettings = settings
-        } else {
-            // 設定が存在しない場合は空の設定で初期化
-            pageDisplaySettings = PageDisplaySettings()
-        }
     }
 
     /// 単ページ表示属性インジケーター（表示用）

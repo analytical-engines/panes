@@ -10,6 +10,7 @@ enum ImageSortMethod: String, CaseIterable, Codable {
     case dateAscending = "dateAscending"    // 日付順（古い順）
     case dateDescending = "dateDescending"  // 日付順（新しい順）
     case random = "random"                  // ランダム順
+    case custom = "custom"                  // カスタム順（ユーザー定義）
 
     var displayName: String {
         switch self {
@@ -19,6 +20,7 @@ enum ImageSortMethod: String, CaseIterable, Codable {
         case .dateAscending: return L("sort_date_ascending")
         case .dateDescending: return L("sort_date_descending")
         case .random: return L("sort_random")
+        case .custom: return L("sort_custom")
         }
     }
 }
