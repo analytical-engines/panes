@@ -111,9 +111,29 @@ class FileHistoryManager {
     private let migrationCompletedKey = "historyMigrationToSwiftDataCompleted"
     private let pageSettingsMigrationCompletedKey = "pageSettingsMigrationToSwiftDataCompleted"
     private let schemaVersionKey = "historySchemaVersion"
+    private let storeLocationMigrationKey = "storeLocationMigrationCompleted"
 
     /// 現在のスキーマバージョン（スキーマ変更時にインクリメント）
-    private static let currentSchemaVersion = 3
+    /// v4: ImageCatalogDataにcatalogTypeRaw, relativePathフィールドを追加
+    private static let currentSchemaVersion = 4
+
+    /// アプリ専用ディレクトリ
+    private static var appSupportDirectory: URL {
+        let fileManager = FileManager.default
+        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let appDir = appSupport.appendingPathComponent("com.panes.imageviewer")
+
+        // ディレクトリが存在しなければ作成
+        if !fileManager.fileExists(atPath: appDir.path) {
+            try? fileManager.createDirectory(at: appDir, withIntermediateDirectories: true)
+        }
+        return appDir
+    }
+
+    /// SwiftDataストアファイルのURL
+    private static var storeURL: URL {
+        appSupportDirectory.appendingPathComponent("default.store")
+    }
 
     // SwiftData用
     private var modelContainer: ModelContainer?
@@ -157,6 +177,7 @@ class FileHistoryManager {
     }
 
     init() {
+        migrateStoreLocationIfNeeded()
         setupSwiftData()
         if isInitialized {
             migrateFromUserDefaultsIfNeeded()
@@ -165,6 +186,52 @@ class FileHistoryManager {
         }
         // エラー時はフォールバックせず、空の履歴のまま
         // UIでエラーを表示する
+    }
+
+    /// ストアファイルを旧ロケーションから新ロケーションに移動
+    private func migrateStoreLocationIfNeeded() {
+        guard !UserDefaults.standard.bool(forKey: storeLocationMigrationKey) else {
+            return
+        }
+
+        let fileManager = FileManager.default
+        let oldAppSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let oldStoreFiles = [
+            oldAppSupport.appendingPathComponent("default.store"),
+            oldAppSupport.appendingPathComponent("default.store-shm"),
+            oldAppSupport.appendingPathComponent("default.store-wal")
+        ]
+
+        // 旧ロケーションにファイルが存在するかチェック
+        let oldStoreExists = fileManager.fileExists(atPath: oldStoreFiles[0].path)
+
+        if oldStoreExists {
+            DebugLogger.log("📦 Migrating store files to app-specific directory...", level: .normal)
+
+            // 新ディレクトリを確保
+            let newDir = Self.appSupportDirectory
+            let newStoreFiles = [
+                newDir.appendingPathComponent("default.store"),
+                newDir.appendingPathComponent("default.store-shm"),
+                newDir.appendingPathComponent("default.store-wal")
+            ]
+
+            // ファイルを移動
+            for (oldFile, newFile) in zip(oldStoreFiles, newStoreFiles) {
+                if fileManager.fileExists(atPath: oldFile.path) {
+                    do {
+                        try fileManager.moveItem(at: oldFile, to: newFile)
+                        DebugLogger.log("📦 Moved: \(oldFile.lastPathComponent)", level: .normal)
+                    } catch {
+                        DebugLogger.log("⚠️ Failed to move \(oldFile.lastPathComponent): \(error)", level: .minimal)
+                    }
+                }
+            }
+        }
+
+        // マイグレーション完了をマーク
+        UserDefaults.standard.set(true, forKey: storeLocationMigrationKey)
+        DebugLogger.log("📦 Store location migration completed", level: .normal)
     }
 
     /// SwiftDataのセットアップ
@@ -181,12 +248,21 @@ class FileHistoryManager {
             return
         }
 
+        let needsMigration = storedVersion < Self.currentSchemaVersion && storedVersion > 0
+
         do {
             let schema = Schema([FileHistoryData.self, ImageCatalogData.self])
-            let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+            let modelConfiguration = ModelConfiguration(schema: schema, url: Self.storeURL, allowsSave: true)
             modelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])
             modelContext = ModelContext(modelContainer!)
             initializationError = nil
+            DebugLogger.log("📦 Store location: \(Self.storeURL.path)", level: .verbose)
+
+            // マイグレーション処理
+            if needsMigration {
+                DebugLogger.log("📦 Migrating schema from v\(storedVersion) to v\(Self.currentSchemaVersion)...", level: .normal)
+                performMigration(from: storedVersion)
+            }
 
             // 成功したらスキーマバージョンを更新
             UserDefaults.standard.set(Self.currentSchemaVersion, forKey: schemaVersionKey)
@@ -194,6 +270,25 @@ class FileHistoryManager {
         } catch {
             initializationError = error
             DebugLogger.log("❌ SwiftData initialization failed: \(error)", level: .minimal)
+        }
+    }
+
+    /// スキーママイグレーションを実行
+    private func performMigration(from oldVersion: Int) {
+        guard let context = modelContext else { return }
+
+        // v3 -> v4: ImageCatalogDataにcatalogTypeRaw, relativePathフィールド追加
+        // SwiftDataの軽量マイグレーションでデフォルト値が自動適用されるが、
+        // 明示的に既存データを確認してログ出力
+        if oldVersion < 4 {
+            do {
+                let descriptor = FetchDescriptor<ImageCatalogData>()
+                let existingData = try context.fetch(descriptor)
+                DebugLogger.log("📦 Migration v3→v4: Found \(existingData.count) existing ImageCatalogData entries (will be treated as standalone)", level: .normal)
+                // 既存データはデフォルト値(catalogTypeRaw=0, relativePath=nil)が適用済み
+            } catch {
+                DebugLogger.log("⚠️ Migration check failed: \(error)", level: .minimal)
+            }
         }
     }
 
@@ -206,13 +301,13 @@ class FileHistoryManager {
         modelContext = nil
         modelContainer = nil
 
-        // ストアファイルを削除
+        // ストアファイルを削除（アプリ専用ディレクトリから）
         let fileManager = FileManager.default
-        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let appDir = Self.appSupportDirectory
         let storeFiles = [
-            appSupport.appendingPathComponent("default.store"),
-            appSupport.appendingPathComponent("default.store-shm"),
-            appSupport.appendingPathComponent("default.store-wal")
+            appDir.appendingPathComponent("default.store"),
+            appDir.appendingPathComponent("default.store-shm"),
+            appDir.appendingPathComponent("default.store-wal")
         ]
 
         for file in storeFiles {

@@ -149,6 +149,25 @@ class ArchiveReader {
         }
     }
 
+    /// 指定されたインデックスの画像データを取得
+    func imageData(at index: Int) -> Data? {
+        guard index >= 0 && index < imageEntries.count else {
+            return nil
+        }
+
+        let entry = imageEntries[index]
+        var imageData = Data()
+
+        do {
+            _ = try archive.extract(entry) { data in
+                imageData.append(data)
+            }
+            return imageData
+        } catch {
+            return nil
+        }
+    }
+
     /// 画像の総数
     var imageCount: Int {
         return imageEntries.count

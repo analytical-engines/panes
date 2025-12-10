@@ -196,6 +196,7 @@
 "tooltip_file_size" = "Size";
 "tooltip_archive_type" = "Type";
 "tooltip_last_access" = "Last Access";
+"tooltip_resolution" = "Resolution";
 
 // MARK: - File Identity Dialog
 
@@ -229,3 +230,11 @@
 "image_catalog_empty_hint" = "Images viewed with this app will be recorded here";
 "image_catalog_count_format" = "%d images";
 "image_catalog_filter_placeholder" = "Filter by filename";
+
+// MARK: - Image Catalog Settings
+
+"section_image_catalog" = "Image Catalog";
+"image_catalog_filter" = "Show images";
+"image_catalog_filter_all" = "All";
+"image_catalog_filter_standalone" = "Standalone only";
+"image_catalog_filter_archive" = "Archive/Folder content only";

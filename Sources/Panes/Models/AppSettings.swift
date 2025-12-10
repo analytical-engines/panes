@@ -6,6 +6,13 @@ enum WindowSizeMode: String, CaseIterable {
     case lastUsed = "lastUsed"     // 最後のサイズに追従
 }
 
+/// 画像カタログ表示フィルタ
+enum ImageCatalogFilter: String, CaseIterable {
+    case all = "all"                    // すべて表示
+    case standaloneOnly = "standalone"  // 個別画像ファイルのみ
+    case archiveOnly = "archive"        // 書庫/フォルダ内画像のみ
+}
+
 /// アプリ全体の設定を管理
 @MainActor
 @Observable
@@ -29,6 +36,7 @@ class AppSettings {
         static let lastWindowWidth = "lastWindowWidth"
         static let lastWindowHeight = "lastWindowHeight"
         static let quitOnLastWindowClosed = "quitOnLastWindowClosed"
+        static let imageCatalogFilter = "imageCatalogFilter"
     }
 
     // MARK: - 表示設定
@@ -72,6 +80,11 @@ class AppSettings {
     /// 起動時に履歴を表示するか
     var showHistoryOnLaunch: Bool {
         didSet { defaults.set(showHistoryOnLaunch, forKey: Keys.showHistoryOnLaunch) }
+    }
+
+    /// 画像カタログ表示フィルタ
+    var imageCatalogFilter: ImageCatalogFilter {
+        didSet { saveImageCatalogFilter() }
     }
 
     // MARK: - セッション設定
@@ -188,6 +201,14 @@ class AppSettings {
             showHistoryOnLaunch = true  // デフォルト: 表示する
         }
 
+        // 画像カタログ表示フィルタの読み込み
+        if let filterString = defaults.string(forKey: Keys.imageCatalogFilter),
+           let filter = ImageCatalogFilter(rawValue: filterString) {
+            imageCatalogFilter = filter
+        } else {
+            imageCatalogFilter = .all  // デフォルト: すべて表示
+        }
+
         // セッション復元の読み込み
         if defaults.object(forKey: Keys.sessionRestoreEnabled) != nil {
             sessionRestoreEnabled = defaults.bool(forKey: Keys.sessionRestoreEnabled)
@@ -256,6 +277,10 @@ class AppSettings {
 
     private func saveWindowSizeMode() {
         defaults.set(windowSizeMode.rawValue, forKey: Keys.windowSizeMode)
+    }
+
+    private func saveImageCatalogFilter() {
+        defaults.set(imageCatalogFilter.rawValue, forKey: Keys.imageCatalogFilter)
     }
 }
 

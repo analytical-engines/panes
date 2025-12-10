@@ -197,6 +197,7 @@ struct HistorySettingsTab: View {
                     .disabled(historyManager.history.isEmpty)
                 }
             }
+
         }
         .formStyle(.grouped)
         .padding()

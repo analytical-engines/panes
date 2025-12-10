@@ -78,9 +78,42 @@ class FileImageSource: ImageSource {
         return folderURL ?? imageURLs.first?.deletingLastPathComponent()
     }
 
-    /// フォルダ用のファイルキー生成（inodeベース）
-    /// フォルダの中身が変わっても同じフォルダとして識別する
+    var isStandaloneImageSource: Bool {
+        // フォルダが指定されておらず、単一の画像ファイルの場合はstandalone
+        return folderURL == nil && imageURLs.count == 1
+    }
+
+    /// ファイルキー生成
+    /// - 個別画像ファイル: ファイルサイズ＋先頭32KBのハッシュ（書庫ファイルと同じ方式）
+    /// - フォルダ: inodeベース（フォルダの中身が変わっても同じフォルダとして識別）
     func generateFileKey() -> String? {
+        // 個別画像ファイルの場合は、画像ファイル自体のサイズとハッシュでキーを生成
+        if isStandaloneImageSource, let imageURL = imageURLs.first {
+            guard let fileSize = try? FileManager.default.attributesOfItem(atPath: imageURL.path)[.size] as? Int64 else {
+                DebugLogger.log("⚠️ generateFileKey: failed to get file size for \(imageURL.path)", level: .minimal)
+                return nil
+            }
+
+            guard let fileHandle = try? FileHandle(forReadingFrom: imageURL) else {
+                DebugLogger.log("⚠️ generateFileKey: failed to open file \(imageURL.path)", level: .minimal)
+                return nil
+            }
+            defer { try? fileHandle.close() }
+
+            let chunkSize = 32 * 1024 // 32KB
+            guard let data = try? fileHandle.read(upToCount: chunkSize) else {
+                DebugLogger.log("⚠️ generateFileKey: failed to read file \(imageURL.path)", level: .minimal)
+                return nil
+            }
+
+            let hash = SHA256.hash(data: data)
+            let hashString = hash.compactMap { String(format: "%02x", $0) }.joined()
+            let key = "\(fileSize)-\(hashString.prefix(16))"
+            DebugLogger.log("🖼️ generateFileKey (standalone): key = \(key)", level: .verbose)
+            return key
+        }
+
+        // フォルダの場合はinodeベース
         guard let url = sourceURL else {
             DebugLogger.log("⚠️ generateFileKey: sourceURL is nil", level: .minimal)
             return nil
@@ -211,5 +244,29 @@ class FileImageSource: ImageSource {
         let hashString = hash.compactMap { String(format: "%02x", $0) }.joined()
 
         return "\(fileSize)-\(hashString.prefix(16))"
+    }
+
+    /// 指定されたインデックスの画像の相対パス（フォルダ内でのパス）
+    func imageRelativePath(at index: Int) -> String? {
+        guard let imageURL = imageURL(at: index),
+              let parentURL = sourceURL else {
+            return nil
+        }
+
+        // フォルダからの相対パスを計算
+        let imagePath = imageURL.path
+        let parentPath = parentURL.path
+
+        if imagePath.hasPrefix(parentPath) {
+            var relativePath = String(imagePath.dropFirst(parentPath.count))
+            // 先頭のスラッシュを除去
+            if relativePath.hasPrefix("/") {
+                relativePath = String(relativePath.dropFirst())
+            }
+            return relativePath
+        }
+
+        // 相対パスが計算できない場合はファイル名を返す
+        return imageURL.lastPathComponent
     }
 }

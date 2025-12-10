@@ -5,8 +5,10 @@ import SwiftData
 struct ImageCatalogEntry: Codable, Identifiable {
     let id: String
     let fileKey: String
-    let filePath: String
+    let filePath: String      // 個別画像: 絶対パス、書庫内画像: 親（書庫/フォルダ）のパス
     let fileName: String
+    let catalogType: ImageCatalogType
+    let relativePath: String? // 書庫/フォルダ内画像の場合の相対パス
     var lastAccessDate: Date
     var accessCount: Int
     var memo: String?
@@ -18,7 +20,18 @@ struct ImageCatalogEntry: Codable, Identifiable {
 
     /// ファイルがアクセス可能かどうか
     var isAccessible: Bool {
-        FileManager.default.fileExists(atPath: filePath)
+        switch catalogType {
+        case .standalone:
+            return FileManager.default.fileExists(atPath: filePath)
+        case .archiveContent:
+            // 親（書庫/フォルダ）が存在すればアクセス可能
+            return FileManager.default.fileExists(atPath: filePath)
+        }
+    }
+
+    /// 書庫/フォルダ内画像かどうか
+    var isArchiveContent: Bool {
+        catalogType == .archiveContent
     }
 
     /// 解像度の表示用文字列
@@ -35,7 +48,14 @@ struct ImageCatalogEntry: Codable, Identifiable {
         return formatter.string(fromByteCount: size)
     }
 
+    /// 親（書庫/フォルダ）の名前
+    var parentName: String? {
+        guard catalogType == .archiveContent else { return nil }
+        return URL(fileURLWithPath: filePath).lastPathComponent
+    }
+
     init(id: String, fileKey: String, filePath: String, fileName: String,
+         catalogType: ImageCatalogType = .standalone, relativePath: String? = nil,
          lastAccessDate: Date, accessCount: Int, memo: String?,
          imageWidth: Int?, imageHeight: Int?, fileSize: Int64?,
          imageFormat: String?, tags: [String]) {
@@ -43,6 +63,8 @@ struct ImageCatalogEntry: Codable, Identifiable {
         self.fileKey = fileKey
         self.filePath = filePath
         self.fileName = fileName
+        self.catalogType = catalogType
+        self.relativePath = relativePath
         self.lastAccessDate = lastAccessDate
         self.accessCount = accessCount
         self.memo = memo
@@ -60,6 +82,24 @@ struct ImageCatalogEntry: Codable, Identifiable {
 class ImageCatalogManager {
     private var modelContainer: ModelContainer?
     private var modelContext: ModelContext?
+
+    /// アプリ専用ディレクトリ（FileHistoryManagerと同じ場所）
+    private static var appSupportDirectory: URL {
+        let fileManager = FileManager.default
+        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let appDir = appSupport.appendingPathComponent("com.panes.imageviewer")
+
+        // ディレクトリが存在しなければ作成
+        if !fileManager.fileExists(atPath: appDir.path) {
+            try? fileManager.createDirectory(at: appDir, withIntermediateDirectories: true)
+        }
+        return appDir
+    }
+
+    /// SwiftDataストアファイルのURL
+    private static var storeURL: URL {
+        appSupportDirectory.appendingPathComponent("default.store")
+    }
 
     /// カタログの全エントリ（最終アクセス日時順）
     var catalog: [ImageCatalogEntry] = []
@@ -107,11 +147,11 @@ class ImageCatalogManager {
     private func setupSwiftData() {
         do {
             let schema = Schema([FileHistoryData.self, ImageCatalogData.self])
-            let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+            let modelConfiguration = ModelConfiguration(schema: schema, url: Self.storeURL, allowsSave: true)
             modelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])
             modelContext = ModelContext(modelContainer!)
             initializationError = nil
-            DebugLogger.log("📦 SwiftData initialized for ImageCatalog", level: .normal)
+            DebugLogger.log("📦 SwiftData initialized for ImageCatalog at \(Self.storeURL.path)", level: .normal)
         } catch {
             initializationError = error
             DebugLogger.log("❌ ImageCatalog SwiftData initialization failed: \(error)", level: .minimal)
@@ -129,6 +169,9 @@ class ImageCatalogManager {
             let catalogData = try context.fetch(descriptor)
             catalog = catalogData.map { $0.toEntry() }
             DebugLogger.log("📦 Loaded \(catalog.count) image catalog entries", level: .normal)
+            if let first = catalog.first {
+                DebugLogger.log("📦 First entry: \(first.fileName), date: \(first.lastAccessDate)", level: .verbose)
+            }
         } catch {
             DebugLogger.log("❌ Failed to load image catalog: \(error)", level: .minimal)
         }
@@ -136,10 +179,41 @@ class ImageCatalogManager {
 
     // MARK: - Record Access
 
-    /// 画像アクセスを記録
-    func recordImageAccess(fileKey: String, filePath: String, fileName: String,
-                           width: Int? = nil, height: Int? = nil,
-                           fileSize: Int64? = nil, format: String? = nil) {
+    /// 個別画像ファイルのアクセスを記録
+    func recordStandaloneImageAccess(fileKey: String, filePath: String, fileName: String,
+                                     width: Int? = nil, height: Int? = nil,
+                                     fileSize: Int64? = nil, format: String? = nil) {
+        recordImageAccessInternal(
+            fileKey: fileKey,
+            filePath: filePath,
+            fileName: fileName,
+            catalogType: .standalone,
+            relativePath: nil,
+            width: width, height: height,
+            fileSize: fileSize, format: format
+        )
+    }
+
+    /// 書庫/フォルダ内画像のアクセスを記録
+    func recordArchiveContentAccess(fileKey: String, parentPath: String, relativePath: String, fileName: String,
+                                    width: Int? = nil, height: Int? = nil,
+                                    fileSize: Int64? = nil, format: String? = nil) {
+        recordImageAccessInternal(
+            fileKey: fileKey,
+            filePath: parentPath,
+            fileName: fileName,
+            catalogType: .archiveContent,
+            relativePath: relativePath,
+            width: width, height: height,
+            fileSize: fileSize, format: format
+        )
+    }
+
+    /// 画像アクセスを記録（内部実装）
+    private func recordImageAccessInternal(fileKey: String, filePath: String, fileName: String,
+                                           catalogType: ImageCatalogType, relativePath: String?,
+                                           width: Int? = nil, height: Int? = nil,
+                                           fileSize: Int64? = nil, format: String? = nil) {
         guard isInitialized, let context = modelContext else {
             DebugLogger.log("⚠️ recordImageAccess skipped: not initialized", level: .normal)
             return
@@ -155,10 +229,14 @@ class ImageCatalogManager {
 
             if let catalogData = existing.first {
                 // 既存エントリを更新
-                catalogData.lastAccessDate = Date()
+                let newDate = Date()
+                DebugLogger.log("📸 Updating existing entry: \(fileName), old date: \(catalogData.lastAccessDate), new date: \(newDate)", level: .verbose)
+                catalogData.lastAccessDate = newDate
                 catalogData.accessCount += 1
                 catalogData.filePath = filePath
                 catalogData.fileName = fileName
+                catalogData.catalogType = catalogType
+                catalogData.relativePath = relativePath
                 // メタデータがあれば更新
                 if let w = width { catalogData.imageWidth = w }
                 if let h = height { catalogData.imageHeight = h }
@@ -166,7 +244,12 @@ class ImageCatalogManager {
                 if let f = format { catalogData.imageFormat = f }
             } else {
                 // 新規エントリを作成
-                let newData = ImageCatalogData(fileKey: fileKey, filePath: filePath, fileName: fileName)
+                let newData: ImageCatalogData
+                if catalogType == .archiveContent, let relPath = relativePath {
+                    newData = ImageCatalogData(fileKey: fileKey, parentPath: filePath, relativePath: relPath, fileName: fileName)
+                } else {
+                    newData = ImageCatalogData(fileKey: fileKey, filePath: filePath, fileName: fileName)
+                }
                 newData.imageWidth = width
                 newData.imageHeight = height
                 newData.fileSize = fileSize
@@ -178,12 +261,20 @@ class ImageCatalogManager {
             }
 
             try context.save()
+            DebugLogger.log("📸 Recorded image: \(fileName) (\(catalogType)), reloading catalog...", level: .verbose)
             loadCatalog()
-
-            DebugLogger.log("📸 Recorded image: \(fileName)", level: .verbose)
+            DebugLogger.log("📸 Catalog reloaded, count: \(catalog.count)", level: .verbose)
         } catch {
             DebugLogger.log("❌ Failed to record image access: \(error)", level: .minimal)
         }
+    }
+
+    /// 画像アクセスを記録（後方互換性のため残す）
+    func recordImageAccess(fileKey: String, filePath: String, fileName: String,
+                           width: Int? = nil, height: Int? = nil,
+                           fileSize: Int64? = nil, format: String? = nil) {
+        recordStandaloneImageAccess(fileKey: fileKey, filePath: filePath, fileName: fileName,
+                                    width: width, height: height, fileSize: fileSize, format: format)
     }
 
     /// カタログの上限をチェックし、超過分を削除

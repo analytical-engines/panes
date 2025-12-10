@@ -13,6 +13,9 @@ protocol ImageSource {
     /// ソースの元となるURL（設定保存用の識別に使用）
     var sourceURL: URL? { get }
 
+    /// 個別画像ソースかどうか（true: 単一の画像ファイル、false: 書庫/フォルダ）
+    var isStandaloneImageSource: Bool { get }
+
     /// 指定されたインデックスの画像を読み込む
     func loadImage(at index: Int) -> NSImage?
 
@@ -30,6 +33,12 @@ protocol ImageSource {
 
     /// ファイル識別用のユニークキーを生成
     func generateFileKey() -> String?
+
+    /// 指定されたインデックスの画像用fileKeyを生成（画像カタログ用）
+    func generateImageFileKey(at index: Int) -> String?
+
+    /// 指定されたインデックスの画像の相対パス（書庫/フォルダ内でのパス）
+    func imageRelativePath(at index: Int) -> String?
 }
 
 extension ImageSource {

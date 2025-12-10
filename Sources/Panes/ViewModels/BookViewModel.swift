@@ -240,7 +240,10 @@ class BookViewModel {
     }
 
     /// 画像ソースを開く（zipまたは画像ファイル）
-    func openSource(_ source: ImageSource) {
+    /// - Parameters:
+    ///   - source: 画像ソース
+    ///   - recordToHistory: 書庫履歴に記録するかどうか（デフォルト: true）
+    func openSource(_ source: ImageSource, recordToHistory: Bool = true) {
         guard source.imageCount > 0 else {
             // 暗号化されたアーカイブかどうかをチェック
             if let archiveSource = source as? ArchiveImageSource,
@@ -252,7 +255,19 @@ class BookViewModel {
             return
         }
 
-        // ファイル同一性チェック
+        // 個別画像ファイルの場合はファイル同一性チェックをスキップ（書庫履歴に記録しないため）
+        if source.isStandaloneImageSource {
+            completeOpenSource(source, recordAccess: true)
+            return
+        }
+
+        // 書庫履歴に記録しない場合はファイル同一性チェックもスキップ
+        if !recordToHistory {
+            completeOpenSource(source, recordAccess: false)
+            return
+        }
+
+        // ファイル同一性チェック（書庫/フォルダのみ）
         if let fileKey = source.generateFileKey(),
            let url = source.sourceURL,
            let manager = historyManager {
@@ -329,9 +344,9 @@ class BookViewModel {
         self.errorMessage = nil
         self.currentFilePath = source.sourceURL?.path
 
-        // 履歴に記録（必要な場合のみ、FileImageSourceは画像カタログに記録するので除外）
+        // 書庫履歴に記録（書庫/フォルダの場合のみ、個別画像ファイルは画像カタログのみに記録）
         if recordAccess,
-           !(source is FileImageSource),
+           !source.isStandaloneImageSource,
            let fileKey = source.generateFileKey(),
            let url = source.sourceURL {
             historyManager?.recordAccess(
@@ -367,7 +382,7 @@ class BookViewModel {
     }
 
     /// URLから適切なソースを自動判定して開く（バックグラウンドで読み込み）
-    func openFiles(urls: [URL]) {
+    func openFiles(urls: [URL], recordToHistory: Bool = true) {
         guard !urls.isEmpty else {
             errorMessage = L("error_no_file_selected")
             return
@@ -377,7 +392,7 @@ class BookViewModel {
         Task {
             let source = await Self.loadImageSource(from: urls)
             if let source = source {
-                self.openSource(source)
+                self.openSource(source, recordToHistory: recordToHistory)
             } else {
                 self.errorMessage = L("error_cannot_open_file")
             }
@@ -572,6 +587,34 @@ class BookViewModel {
             loadImages(for: display)
             saveViewState()
         }
+    }
+
+    /// 相対パスでページに移動（画像カタログから開く際に使用）
+    func goToPageByRelativePath(_ relativePath: String) {
+        guard let source = imageSource else { return }
+
+        // 相対パスに一致するページを探す
+        for index in 0..<source.imageCount {
+            if let pageRelativePath = source.imageRelativePath(at: index),
+               pageRelativePath == relativePath {
+                DebugLogger.log("📖 Found page by relativePath: \(relativePath) -> index \(index)", level: .normal)
+                goToPage(index)
+                return
+            }
+        }
+
+        // 完全一致しない場合はファイル名で検索
+        let targetFileName = URL(fileURLWithPath: relativePath).lastPathComponent
+        for index in 0..<source.imageCount {
+            if let fileName = source.fileName(at: index),
+               fileName == targetFileName {
+                DebugLogger.log("📖 Found page by fileName: \(targetFileName) -> index \(index)", level: .normal)
+                goToPage(index)
+                return
+            }
+        }
+
+        DebugLogger.log("⚠️ Page not found for relativePath: \(relativePath)", level: .normal)
     }
 
     /// 1ページシフト（見開きのズレ調整用）
@@ -806,29 +849,57 @@ class BookViewModel {
         self.errorMessage = nil
     }
 
-    /// 画像をカタログに記録（FileImageSourceの場合のみ）
+    /// 画像をカタログに記録（すべてのImageSourceに対応）
     private func recordImageToCatalog(at index: Int) {
-        guard let fileSource = imageSource as? FileImageSource,
-              let catalogManager = imageCatalogManager,
-              let url = fileSource.imageURL(at: index),
-              let fileKey = fileSource.generateImageFileKey(at: index) else {
+        guard let source = imageSource,
+              let catalogManager = imageCatalogManager else {
+            DebugLogger.log("⚠️ recordImageToCatalog skipped: source or catalogManager is nil", level: .normal)
+            return
+        }
+        guard let fileKey = source.generateImageFileKey(at: index) else {
+            DebugLogger.log("⚠️ recordImageToCatalog skipped: could not get fileKey for index \(index)", level: .normal)
             return
         }
 
-        let fileName = fileSource.fileName(at: index) ?? url.lastPathComponent
-        let size = fileSource.imageSize(at: index)
-        let fileSize = fileSource.fileSize(at: index)
-        let format = fileSource.imageFormat(at: index)
+        let fileName = source.fileName(at: index) ?? "unknown"
+        let size = source.imageSize(at: index)
+        let fileSize = source.fileSize(at: index)
+        let format = source.imageFormat(at: index)
 
-        catalogManager.recordImageAccess(
-            fileKey: fileKey,
-            filePath: url.path,
-            fileName: fileName,
-            width: size.map { Int($0.width) },
-            height: size.map { Int($0.height) },
-            fileSize: fileSize,
-            format: format
-        )
+        if source.isStandaloneImageSource {
+            // 個別画像ファイルとして記録
+            guard let fileSource = source as? FileImageSource,
+                  let imageURL = fileSource.imageURL(at: index) else {
+                DebugLogger.log("⚠️ recordImageToCatalog skipped: could not get imageURL for standalone", level: .normal)
+                return
+            }
+            catalogManager.recordStandaloneImageAccess(
+                fileKey: fileKey,
+                filePath: imageURL.path,
+                fileName: fileName,
+                width: size.map { Int($0.width) },
+                height: size.map { Int($0.height) },
+                fileSize: fileSize,
+                format: format
+            )
+        } else {
+            // 書庫/フォルダ内画像として記録
+            guard let parentPath = source.sourceURL?.path,
+                  let relativePath = source.imageRelativePath(at: index) else {
+                DebugLogger.log("⚠️ recordImageToCatalog skipped: could not get paths for index \(index)", level: .normal)
+                return
+            }
+            catalogManager.recordArchiveContentAccess(
+                fileKey: fileKey,
+                parentPath: parentPath,
+                relativePath: relativePath,
+                fileName: fileName,
+                width: size.map { Int($0.width) },
+                height: size.map { Int($0.height) },
+                fileSize: fileSize,
+                format: format
+            )
+        }
     }
 
     /// 表示状態からcurrentPageを更新

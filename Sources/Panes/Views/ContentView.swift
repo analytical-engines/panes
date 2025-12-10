@@ -62,6 +62,9 @@ struct ContentView: View {
     @State private var editingMemoFileKey: String?  // 履歴エントリ編集時に使用
     @State private var editingImageCatalogId: String?  // 画像カタログエントリ編集時に使用
 
+    // 画像カタログからのファイルオープン時に使用する相対パス
+    @State private var pendingRelativePath: String?
+
     // メインビューのフォーカス管理
     @FocusState private var isMainViewFocused: Bool
 
@@ -144,7 +147,8 @@ struct ContentView: View {
                     editingImageCatalogId = id
                     editingMemoText = currentMemo ?? ""
                     showMemoEdit = true
-                }
+                },
+                onOpenImageCatalogFile: openImageCatalogFile
             )
             .contextMenu { initialScreenContextMenu }
         }
@@ -532,14 +536,25 @@ struct ContentView: View {
             if newValue && !pendingURLs.isEmpty {
                 let urls = pendingURLs
                 pendingURLs = []
+                // 画像カタログから開く場合（pendingRelativePathが設定されている場合）は書庫履歴に記録しない
+                let shouldRecordToHistory = pendingRelativePath == nil
                 DebugLogger.log("📬 Opening file via onChange(isWaitingForFile): \(urls.first?.lastPathComponent ?? "unknown")", level: .normal)
-                DispatchQueue.main.async { viewModel.openFiles(urls: urls) }
+                DispatchQueue.main.async {
+                    viewModel.imageCatalogManager = imageCatalogManager
+                    viewModel.openFiles(urls: urls, recordToHistory: shouldRecordToHistory)
+                }
             }
         }
         .onChange(of: viewModel.hasOpenFile) { _, hasFile in
             if hasFile {
                 // ファイルが開かれたらローディング状態を解除
                 isWaitingForFile = false
+
+                // 画像カタログからの相対パス指定があれば、該当ページにジャンプ
+                if let relativePath = pendingRelativePath {
+                    pendingRelativePath = nil
+                    viewModel.goToPageByRelativePath(relativePath)
+                }
 
                 // セッション復元モードの場合はフレームを設定して完了通知
                 if let frame = pendingFrame {
@@ -1090,6 +1105,14 @@ struct ContentView: View {
         sessionManager.openInNewWindow(url: url)
     }
 
+    /// 画像カタログからファイルを開く（書庫/フォルダ内の特定画像にジャンプ）
+    private func openImageCatalogFile(path: String, relativePath: String?) {
+        let url = URL(fileURLWithPath: path)
+        // 相対パスを保存しておく（ファイルが開かれた後にページジャンプに使う）
+        pendingRelativePath = relativePath
+        pendingURLs = [url]
+    }
+
     private func handleDrop(providers: [NSItemProvider]) -> Bool {
         Task {
             var urls: [URL] = []
@@ -1120,6 +1143,7 @@ struct ContentView: View {
                     if viewModel.hasOpenFile {
                         viewModel.closeFile()
                     }
+                    viewModel.imageCatalogManager = imageCatalogManager
                     viewModel.openFiles(urls: urls)
                 }
             }
@@ -1237,6 +1261,7 @@ struct InitialScreenView: View {
     let onOpenInNewWindow: (String) -> Void  // filePath
     let onEditMemo: (String, String?) -> Void  // (fileKey, currentMemo) for archives
     let onEditImageMemo: (String, String?) -> Void  // (id, currentMemo) for image catalog
+    let onOpenImageCatalogFile: (String, String?) -> Void  // (filePath, relativePath) for image catalog
 
     var body: some View {
         VStack(spacing: 20) {
@@ -1259,7 +1284,7 @@ struct InitialScreenView: View {
             .buttonStyle(.borderedProminent)
 
             // 履歴表示
-            HistoryListView(filterText: $filterText, showFilterField: $showFilterField, selectedTab: $selectedTab, onOpenHistoryFile: onOpenHistoryFile, onOpenInNewWindow: onOpenInNewWindow, onEditMemo: onEditMemo, onEditImageMemo: onEditImageMemo, onOpenImageFile: onOpenHistoryFile)
+            HistoryListView(filterText: $filterText, showFilterField: $showFilterField, selectedTab: $selectedTab, onOpenHistoryFile: onOpenHistoryFile, onOpenInNewWindow: onOpenInNewWindow, onEditMemo: onEditMemo, onEditImageMemo: onEditImageMemo, onOpenImageFile: onOpenImageCatalogFile)
         }
     }
 }
@@ -1279,7 +1304,7 @@ struct HistoryListView: View {
     let onOpenInNewWindow: (String) -> Void  // filePath
     let onEditMemo: (String, String?) -> Void  // (fileKey, currentMemo) for archives
     let onEditImageMemo: (String, String?) -> Void  // (id, currentMemo) for image catalog
-    let onOpenImageFile: (String) -> Void  // 画像ファイルを開く
+    let onOpenImageFile: (String, String?) -> Void  // (filePath, relativePath) - 画像ファイルを開く
 
     var body: some View {
         Group {
@@ -1357,7 +1382,16 @@ struct HistoryListView: View {
             }
 
             let recentHistory = historyManager.getRecentHistory(limit: appSettings.maxHistoryCount)
-            let imageCatalog = imageCatalogManager.catalog
+            let imageCatalog = imageCatalogManager.catalog.filter { entry in
+                switch appSettings.imageCatalogFilter {
+                case .all:
+                    return true
+                case .standaloneOnly:
+                    return entry.catalogType == .standalone
+                case .archiveOnly:
+                    return entry.catalogType == .archiveContent
+                }
+            }
 
             // 履歴表示が有効で、書庫または画像がある場合
             if appSettings.showHistoryOnLaunch && (!recentHistory.isEmpty || !imageCatalog.isEmpty) {
@@ -1484,9 +1518,30 @@ struct HistoryListView: View {
     /// 画像カタログビュー
     @ViewBuilder
     private func imagesCatalogView(catalog: [ImageCatalogEntry]) -> some View {
+        @Bindable var settings = appSettings
+
         let filteredCatalog = filterText.isEmpty
             ? catalog
             : catalog.filter { matchesImageFilter($0, pattern: filterText) }
+
+        // フィルタ切り替え（すべて/個別のみ/書庫内のみ）
+        HStack(spacing: 0) {
+            ForEach(ImageCatalogFilter.allCases, id: \.self) { filter in
+                Button(action: {
+                    settings.imageCatalogFilter = filter
+                }) {
+                    Text(filterLabel(for: filter))
+                        .font(.caption)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(settings.imageCatalogFilter == filter ? Color.accentColor.opacity(0.8) : Color.gray.opacity(0.3))
+                        .foregroundColor(settings.imageCatalogFilter == filter ? .white : .gray)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .cornerRadius(4)
+        .frame(maxWidth: .infinity)
 
         if catalog.isEmpty {
             VStack(spacing: 8) {
@@ -1569,6 +1624,18 @@ struct HistoryListView: View {
         return entry.fileName.localizedCaseInsensitiveContains(pattern) ||
                (entry.memo?.localizedCaseInsensitiveContains(pattern) ?? false)
     }
+
+    /// フィルタ種別のラベルを取得
+    private func filterLabel(for filter: ImageCatalogFilter) -> String {
+        switch filter {
+        case .all:
+            return L("image_catalog_filter_all")
+        case .standaloneOnly:
+            return L("image_catalog_filter_standalone")
+        case .archiveOnly:
+            return L("image_catalog_filter_archive")
+        }
+    }
 }
 
 /// 画像カタログエントリの行
@@ -1576,8 +1643,11 @@ struct ImageCatalogEntryRow: View {
     @Environment(ImageCatalogManager.self) private var catalogManager
 
     let entry: ImageCatalogEntry
-    let onOpenImageFile: (String) -> Void
+    let onOpenImageFile: (String, String?) -> Void  // (filePath, relativePath)
     let onEditMemo: (String, String?) -> Void  // (id, currentMemo)
+
+    // ツールチップ用（一度だけ生成してキャッシュ）
+    @State private var cachedTooltip: String?
 
     var body: some View {
         let isAccessible = catalogManager.isAccessible(for: entry)
@@ -1585,7 +1655,7 @@ struct ImageCatalogEntryRow: View {
         HStack(spacing: 0) {
             Button(action: {
                 if isAccessible {
-                    onOpenImageFile(entry.filePath)
+                    onOpenImageFile(entry.filePath, entry.relativePath)
                 }
             }) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -1599,6 +1669,13 @@ struct ImageCatalogEntryRow: View {
                                 .foregroundColor(.gray)
                                 .font(.caption)
                         }
+                    }
+                    // 親（書庫/フォルダ）名を表示
+                    if let parentName = entry.parentName {
+                        Text(parentName)
+                            .font(.caption)
+                            .foregroundColor(.gray.opacity(0.8))
+                            .lineLimit(1)
                     }
                     // メモがある場合は表示
                     if let memo = entry.memo, !memo.isEmpty {
@@ -1627,9 +1704,16 @@ struct ImageCatalogEntryRow: View {
         }
         .background(Color.white.opacity(isAccessible ? 0.1 : 0.05))
         .cornerRadius(4)
+        .help(Text(cachedTooltip ?? ""))
+        .onAppear {
+            // 表示時に一度だけツールチップを生成してキャッシュ
+            if cachedTooltip == nil {
+                cachedTooltip = generateTooltip()
+            }
+        }
         .contextMenu {
             Button(action: {
-                onOpenImageFile(entry.filePath)
+                onOpenImageFile(entry.filePath, entry.relativePath)
             }) {
                 Label(L("menu_open_in_new_window"), systemImage: "rectangle.badge.plus")
             }
@@ -1652,6 +1736,42 @@ struct ImageCatalogEntryRow: View {
             }
             .disabled(!isAccessible)
         }
+    }
+
+    /// ツールチップ用のテキストを生成
+    private func generateTooltip() -> String {
+        var lines: [String] = []
+
+        // ファイルパス（書庫/フォルダ内の場合は親パス + 相対パス）
+        if entry.catalogType == .archiveContent, let relativePath = entry.relativePath {
+            lines.append(entry.filePath)
+            lines.append("  → " + relativePath)
+        } else {
+            lines.append(entry.filePath)
+        }
+
+        // 画像フォーマット
+        if let format = entry.imageFormat {
+            lines.append(L("tooltip_archive_type") + ": " + format)
+        }
+
+        // 解像度
+        if let resolution = entry.resolutionString {
+            lines.append(L("tooltip_resolution") + ": " + resolution)
+        }
+
+        // ファイルサイズ
+        if let sizeStr = entry.fileSizeString {
+            lines.append(L("tooltip_file_size") + ": " + sizeStr)
+        }
+
+        // 最終アクセス日時
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        lines.append(L("tooltip_last_access") + ": " + formatter.string(from: entry.lastAccessDate))
+
+        return lines.joined(separator: "\n")
     }
 }
 
