@@ -1479,18 +1479,32 @@ class BookViewModel {
 
     /// 指定ページの水平反転を切り替え
     /// @param pageIndex 表示上のページ番号
+    /// ±90°回転時は垂直反転として操作（画面表示に対する反転として動作させるため）
     func toggleHorizontalFlip(at pageIndex: Int) {
         let srcIndex = sourceIndex(for: pageIndex)
-        pageDisplaySettings.toggleHorizontalFlip(at: srcIndex)
+        let rotation = pageDisplaySettings.rotation(for: srcIndex)
+        if rotation.swapsAspectRatio {
+            // ±90°回転時は左右反転の操作を上下反転として適用
+            pageDisplaySettings.toggleVerticalFlip(at: srcIndex)
+        } else {
+            pageDisplaySettings.toggleHorizontalFlip(at: srcIndex)
+        }
         saveViewState()
         loadCurrentPage()
     }
 
     /// 指定ページの垂直反転を切り替え
     /// @param pageIndex 表示上のページ番号
+    /// ±90°回転時は水平反転として操作（画面表示に対する反転として動作させるため）
     func toggleVerticalFlip(at pageIndex: Int) {
         let srcIndex = sourceIndex(for: pageIndex)
-        pageDisplaySettings.toggleVerticalFlip(at: srcIndex)
+        let rotation = pageDisplaySettings.rotation(for: srcIndex)
+        if rotation.swapsAspectRatio {
+            // ±90°回転時は上下反転の操作を左右反転として適用
+            pageDisplaySettings.toggleHorizontalFlip(at: srcIndex)
+        } else {
+            pageDisplaySettings.toggleVerticalFlip(at: srcIndex)
+        }
         saveViewState()
         loadCurrentPage()
     }
