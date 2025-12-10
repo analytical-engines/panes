@@ -56,6 +56,11 @@ class ArchiveImageSource: ImageSource {
         return archiveReader.imageFormat(at: index)
     }
 
+    func fileDate(at index: Int) -> Date? {
+        // TODO: アーカイブエントリの更新日時を取得（将来実装）
+        return nil
+    }
+
     /// 指定されたインデックスの画像の相対パス（書庫内でのパス）
     func imageRelativePath(at index: Int) -> String? {
         return archiveReader.fileName(at: index)

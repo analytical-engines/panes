@@ -98,6 +98,7 @@
 "menu_reveal_in_finder" = "Reveal in Finder";
 "menu_open_in_new_window" = "Open in New Window";
 "menu_edit_memo" = "Edit Memo";
+"menu_sort" = "Sort Order";
 
 // MARK: - Memo
 
@@ -197,6 +198,15 @@
 "tooltip_archive_type" = "Type";
 "tooltip_last_access" = "Last Access";
 "tooltip_resolution" = "Resolution";
+
+// MARK: - Sort Methods
+
+"sort_name" = "Name";
+"sort_name_reverse" = "Name (Reverse)";
+"sort_natural" = "Natural";
+"sort_date_ascending" = "Date (Old→New)";
+"sort_date_descending" = "Date (New→Old)";
+"sort_random" = "Random";
 
 // MARK: - File Identity Dialog
 

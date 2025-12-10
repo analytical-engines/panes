@@ -345,6 +345,25 @@ struct ContentView: View {
             )
         }
 
+        // ソート順
+        Menu {
+            ForEach(ImageSortMethod.allCases, id: \.self) { method in
+                Button(action: {
+                    viewModel.applySort(method)
+                }) {
+                    HStack {
+                        Text(method.displayName)
+                        Spacer()
+                        if viewModel.sortMethod == method {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            Label(L("menu_sort"), systemImage: "arrow.up.arrow.down")
+        }
+
         Divider()
 
         // メモ編集

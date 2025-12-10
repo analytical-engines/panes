@@ -98,6 +98,7 @@
 "menu_reveal_in_finder" = "Finderで表示";
 "menu_open_in_new_window" = "新しいウィンドウで開く";
 "menu_edit_memo" = "メモを編集";
+"menu_sort" = "ソート順";
 
 // MARK: - Memo
 
@@ -197,6 +198,15 @@
 "tooltip_archive_type" = "種類";
 "tooltip_last_access" = "最終アクセス";
 "tooltip_resolution" = "解像度";
+
+// MARK: - Sort Methods
+
+"sort_name" = "名前順";
+"sort_name_reverse" = "名前逆順";
+"sort_natural" = "自然順";
+"sort_date_ascending" = "日付（古→新）";
+"sort_date_descending" = "日付（新→古）";
+"sort_random" = "ランダム";
 
 // MARK: - File Identity Dialog
 

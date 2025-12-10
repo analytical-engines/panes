@@ -76,10 +76,108 @@ class BookViewModel {
     // 画像ソース
     private var imageSource: ImageSource?
 
+    // 表示順序（displayPage -> sourceIndex のマッピング）
+    // 例: [2, 0, 1] なら表示0ページ目はソース2番目の画像
+    private var displayOrder: [Int] = []
+
+    // 現在のソート方法
+    var sortMethod: ImageSortMethod = .name
+
+    /// 表示ページ番号からソースインデックスに変換
+    private func sourceIndex(for displayPage: Int) -> Int {
+        guard displayPage >= 0 && displayPage < displayOrder.count else {
+            return displayPage // フォールバック
+        }
+        return displayOrder[displayPage]
+    }
+
+    /// ソースインデックスから表示ページ番号に変換
+    private func displayPage(for sourceIndex: Int) -> Int? {
+        return displayOrder.firstIndex(of: sourceIndex)
+    }
+
+    /// 表示順序を初期化（ソートなし = identity mapping）
+    private func initializeDisplayOrder(count: Int) {
+        displayOrder = Array(0..<count)
+        sortMethod = .name  // デフォルトのソート方法にリセット
+        debugLog("Display order initialized: \(displayOrder.count) pages, sortMethod reset to .name", level: .verbose)
+    }
+
+    /// ソートを適用して表示順序を更新
+    func applySort(_ method: ImageSortMethod) {
+        guard let source = imageSource, !displayOrder.isEmpty else { return }
+
+        // 現在表示中の画像のソースインデックスを記憶
+        let currentSourceIndex = sourceIndex(for: currentPage)
+
+        // ソート方法に応じて displayOrder を再生成
+        sortMethod = method
+        let indices = Array(0..<source.imageCount)
+
+        switch method {
+        case .name:
+            // 名前順（localizedStandardCompare）
+            displayOrder = indices.sorted { i1, i2 in
+                let name1 = source.fileName(at: i1) ?? ""
+                let name2 = source.fileName(at: i2) ?? ""
+                return name1.localizedStandardCompare(name2) == .orderedAscending
+            }
+
+        case .nameReverse:
+            // 名前逆順
+            displayOrder = indices.sorted { i1, i2 in
+                let name1 = source.fileName(at: i1) ?? ""
+                let name2 = source.fileName(at: i2) ?? ""
+                return name1.localizedStandardCompare(name2) == .orderedDescending
+            }
+
+        case .natural:
+            // 自然順（数字を数値として比較）- 後で実装
+            displayOrder = indices.sorted { i1, i2 in
+                let name1 = source.fileName(at: i1) ?? ""
+                let name2 = source.fileName(at: i2) ?? ""
+                return name1.localizedStandardCompare(name2) == .orderedAscending
+            }
+
+        case .dateAscending:
+            // 日付順（古い順）
+            displayOrder = indices.sorted { i1, i2 in
+                let date1 = source.fileDate(at: i1) ?? Date.distantPast
+                let date2 = source.fileDate(at: i2) ?? Date.distantPast
+                return date1 < date2
+            }
+
+        case .dateDescending:
+            // 日付順（新しい順）
+            displayOrder = indices.sorted { i1, i2 in
+                let date1 = source.fileDate(at: i1) ?? Date.distantPast
+                let date2 = source.fileDate(at: i2) ?? Date.distantPast
+                return date1 > date2
+            }
+
+        case .random:
+            // ランダム順
+            displayOrder = indices.shuffled()
+        }
+
+        debugLog("Sort applied: \(method.rawValue), displayOrder: \(displayOrder.prefix(10))...", level: .normal)
+
+        // 元の画像を表示し続けるようにcurrentPageを更新
+        if let newDisplayPage = displayPage(for: currentSourceIndex) {
+            currentPage = newDisplayPage
+        } else {
+            currentPage = 0
+        }
+
+        // 表示を更新
+        loadCurrentPage()
+    }
+
     // UserDefaultsのキー
     private let viewModeKey = "viewMode"
     private let currentPageKey = "currentPage"
     private let readingDirectionKey = "readingDirection"
+    private let sortMethodKey = "sortMethod"
 
     // 履歴管理（外部から注入される）
     var historyManager: FileHistoryManager?
@@ -159,21 +257,24 @@ class BookViewModel {
     }
 
     /// 指定されたページが横長かどうかを判定して、必要なら単ページ属性を設定
+    /// @param displayPage 表示上のページ番号
     /// @return 判定した結果、単ページ属性を持つかどうか
-    private func checkAndSetLandscapeAttribute(for index: Int) -> Bool {
+    private func checkAndSetLandscapeAttribute(for displayPage: Int) -> Bool {
         guard let source = imageSource else { return false }
 
+        let srcIndex = sourceIndex(for: displayPage)
+
         // ユーザーが手動で設定している場合はそれを優先
-        if pageDisplaySettings.isUserForcedSinglePage(index) {
+        if pageDisplaySettings.isUserForcedSinglePage(srcIndex) {
             return true
         }
 
         // まだ判定していないページなら判定する（回転を考慮）
-        if !pageDisplaySettings.isPageChecked(index) {
-            debugLog("Checking page \(index) for landscape aspect ratio", level: .verbose)
-            if let size = source.imageSize(at: index) {
+        if !pageDisplaySettings.isPageChecked(srcIndex) {
+            debugLog("Checking display page \(displayPage) (source: \(srcIndex)) for landscape aspect ratio", level: .verbose)
+            if let size = source.imageSize(at: srcIndex) {
                 // 回転を考慮した実効アスペクト比を計算
-                let rotation = pageDisplaySettings.rotation(for: index)
+                let rotation = pageDisplaySettings.rotation(for: srcIndex)
                 let effectiveWidth: CGFloat
                 let effectiveHeight: CGFloat
 
@@ -187,20 +288,20 @@ class BookViewModel {
                 }
 
                 let aspectRatio = effectiveWidth / effectiveHeight
-                debugLog("Page \(index) size: \(size.width)x\(size.height), rotation: \(rotation.rawValue)°, effective aspect ratio: \(String(format: "%.2f", aspectRatio))", level: .verbose)
+                debugLog("Display page \(displayPage) (source: \(srcIndex)) size: \(size.width)x\(size.height), rotation: \(rotation.rawValue)°, effective aspect ratio: \(String(format: "%.2f", aspectRatio))", level: .verbose)
 
                 if aspectRatio >= landscapeAspectRatioThreshold {
-                    pageDisplaySettings.setAutoDetectedLandscape(index)
-                    debugLog("Page \(index) auto-detected as landscape", level: .verbose)
+                    pageDisplaySettings.setAutoDetectedLandscape(srcIndex)
+                    debugLog("Display page \(displayPage) (source: \(srcIndex)) auto-detected as landscape", level: .verbose)
                 }
             } else {
-                debugLog("Failed to get image size for page \(index)", level: .verbose)
+                debugLog("Failed to get image size for display page \(displayPage) (source: \(srcIndex))", level: .verbose)
             }
             // 判定済みとしてマーク
-            pageDisplaySettings.markAsChecked(index)
+            pageDisplaySettings.markAsChecked(srcIndex)
         }
 
-        return pageDisplaySettings.isForcedSinglePage(index)
+        return pageDisplaySettings.isForcedSinglePage(srcIndex)
     }
 
     /// ファイルを閉じて初期画面に戻る
@@ -344,6 +445,9 @@ class BookViewModel {
         self.errorMessage = nil
         self.currentFilePath = source.sourceURL?.path
 
+        // 表示順序を初期化
+        initializeDisplayOrder(count: source.imageCount)
+
         // 書庫履歴に記録（書庫/フォルダの場合のみ、個別画像ファイルは画像カタログのみに記録）
         if recordAccess,
            !source.isStandaloneImageSource,
@@ -450,7 +554,7 @@ class BookViewModel {
 
         // ペア候補を探す（非表示ページはスキップ）
         var pairPage = page + 1
-        while pairPage < totalPages && pageDisplaySettings.isHidden(pairPage) {
+        while pairPage < totalPages && pageDisplaySettings.isHidden(sourceIndex(for: pairPage)) {
             pairPage += 1
         }
 
@@ -511,7 +615,7 @@ class BookViewModel {
         // 見開きモードの場合は最初の表示可能なページを探す
         var firstVisiblePage = 0
         if viewMode == .spread {
-            while firstVisiblePage < totalPages && pageDisplaySettings.isHidden(firstVisiblePage) {
+            while firstVisiblePage < totalPages && pageDisplaySettings.isHidden(sourceIndex(for: firstVisiblePage)) {
                 firstVisiblePage += 1
             }
             if firstVisiblePage >= totalPages {
@@ -525,15 +629,16 @@ class BookViewModel {
     }
 
     /// 指定ページへ移動（単ページ属性を考慮して正しい表示状態に到達）
+    /// @param page 表示上のページ番号
     func goToPage(_ page: Int) {
-        guard let source = imageSource else { return }
-        var targetPage = max(0, min(page, source.imageCount - 1))
+        guard imageSource != nil else { return }
+        var targetPage = max(0, min(page, totalPages - 1))
 
         // 見開きモードで非表示ページを指定した場合は次の表示可能なページを探す
-        if viewMode == .spread && pageDisplaySettings.isHidden(targetPage) {
+        if viewMode == .spread && pageDisplaySettings.isHidden(sourceIndex(for: targetPage)) {
             // 前方に表示可能なページを探す
             var nextVisible = targetPage + 1
-            while nextVisible < totalPages && pageDisplaySettings.isHidden(nextVisible) {
+            while nextVisible < totalPages && pageDisplaySettings.isHidden(sourceIndex(for: nextVisible)) {
                 nextVisible += 1
             }
             if nextVisible < totalPages {
@@ -541,7 +646,7 @@ class BookViewModel {
             } else {
                 // 前方にない場合は後方を探す
                 var prevVisible = targetPage - 1
-                while prevVisible >= 0 && pageDisplaySettings.isHidden(prevVisible) {
+                while prevVisible >= 0 && pageDisplaySettings.isHidden(sourceIndex(for: prevVisible)) {
                     prevVisible -= 1
                 }
                 if prevVisible >= 0 {
@@ -593,24 +698,30 @@ class BookViewModel {
     func goToPageByRelativePath(_ relativePath: String) {
         guard let source = imageSource else { return }
 
-        // 相対パスに一致するページを探す
-        for index in 0..<source.imageCount {
-            if let pageRelativePath = source.imageRelativePath(at: index),
+        // 相対パスに一致するページを探す（ソースインデックスで検索）
+        for srcIndex in 0..<source.imageCount {
+            if let pageRelativePath = source.imageRelativePath(at: srcIndex),
                pageRelativePath == relativePath {
-                DebugLogger.log("📖 Found page by relativePath: \(relativePath) -> index \(index)", level: .normal)
-                goToPage(index)
-                return
+                // ソースインデックスから表示ページに変換
+                if let displayPageNum = displayPage(for: srcIndex) {
+                    DebugLogger.log("📖 Found page by relativePath: \(relativePath) -> srcIndex \(srcIndex) -> displayPage \(displayPageNum)", level: .normal)
+                    goToPage(displayPageNum)
+                    return
+                }
             }
         }
 
         // 完全一致しない場合はファイル名で検索
         let targetFileName = URL(fileURLWithPath: relativePath).lastPathComponent
-        for index in 0..<source.imageCount {
-            if let fileName = source.fileName(at: index),
+        for srcIndex in 0..<source.imageCount {
+            if let fileName = source.fileName(at: srcIndex),
                fileName == targetFileName {
-                DebugLogger.log("📖 Found page by fileName: \(targetFileName) -> index \(index)", level: .normal)
-                goToPage(index)
-                return
+                // ソースインデックスから表示ページに変換
+                if let displayPageNum = displayPage(for: srcIndex) {
+                    DebugLogger.log("📖 Found page by fileName: \(targetFileName) -> srcIndex \(srcIndex) -> displayPage \(displayPageNum)", level: .normal)
+                    goToPage(displayPageNum)
+                    return
+                }
             }
         }
 
@@ -624,11 +735,11 @@ class BookViewModel {
         // 非表示ページをスキップして次/前の表示可能なページを探す
         var newPage = forward ? currentPage + 1 : currentPage - 1
         if forward {
-            while newPage < source.imageCount && pageDisplaySettings.isHidden(newPage) {
+            while newPage < source.imageCount && pageDisplaySettings.isHidden(sourceIndex(for: newPage)) {
                 newPage += 1
             }
         } else {
-            while newPage >= 0 && pageDisplaySettings.isHidden(newPage) {
+            while newPage >= 0 && pageDisplaySettings.isHidden(sourceIndex(for: newPage)) {
                 newPage -= 1
             }
         }
@@ -733,7 +844,7 @@ class BookViewModel {
         // 見開きモードの場合（非表示ページはスキップ）
         // m = 現在表示の最大Index + 1 (非表示ページはスキップ)
         var m = current.maxIndex + 1
-        while m < totalPages && pageDisplaySettings.isHidden(m) {
+        while m < totalPages && pageDisplaySettings.isHidden(sourceIndex(for: m)) {
             m += 1
         }
 
@@ -749,7 +860,7 @@ class BookViewModel {
 
         // m+1を探す（非表示ページはスキップ）
         var m1 = m + 1
-        while m1 < totalPages && pageDisplaySettings.isHidden(m1) {
+        while m1 < totalPages && pageDisplaySettings.isHidden(sourceIndex(for: m1)) {
             m1 += 1
         }
 
@@ -788,7 +899,7 @@ class BookViewModel {
         // 見開きモードの場合（非表示ページはスキップ）
         // m = 現在表示の最小Index - 1 (非表示ページはスキップ)
         var m = current.minIndex - 1
-        while m >= 0 && pageDisplaySettings.isHidden(m) {
+        while m >= 0 && pageDisplaySettings.isHidden(sourceIndex(for: m)) {
             m -= 1
         }
 
@@ -804,7 +915,7 @@ class BookViewModel {
 
         // m-1を探す（非表示ページはスキップ）
         var m1 = m - 1
-        while m1 >= 0 && pageDisplaySettings.isHidden(m1) {
+        while m1 >= 0 && pageDisplaySettings.isHidden(sourceIndex(for: m1)) {
             m1 -= 1
         }
 
@@ -823,27 +934,31 @@ class BookViewModel {
     }
 
     /// 表示状態に基づいて画像をロード
+    /// displayにはdisplayPage（表示上のページ番号）が含まれる
     private func loadImages(for display: PageDisplay) {
         guard let source = imageSource else { return }
 
         switch display {
-        case .single(let page):
+        case .single(let displayPage):
+            let srcIndex = sourceIndex(for: displayPage)
             if viewMode == .single {
-                self.currentImage = source.loadImage(at: page)
+                self.currentImage = source.loadImage(at: srcIndex)
             } else {
-                self.firstPageImage = source.loadImage(at: page)
+                self.firstPageImage = source.loadImage(at: srcIndex)
                 self.secondPageImage = nil
             }
-            // 画像カタログに記録（FileImageSourceの場合のみ）
-            recordImageToCatalog(at: page)
+            // 画像カタログに記録
+            recordImageToCatalog(at: srcIndex)
 
-        case .spread(let left, let right):
-            // RTL: first=right側（小さいindex）, second=left側（大きいindex）
-            self.firstPageImage = source.loadImage(at: right)
-            self.secondPageImage = source.loadImage(at: left)
-            // 画像カタログに記録（FileImageSourceの場合のみ）
-            recordImageToCatalog(at: right)
-            recordImageToCatalog(at: left)
+        case .spread(let leftDisplay, let rightDisplay):
+            // RTL: first=right側（小さいdisplayPage）, second=left側（大きいdisplayPage）
+            let rightSrcIndex = sourceIndex(for: rightDisplay)
+            let leftSrcIndex = sourceIndex(for: leftDisplay)
+            self.firstPageImage = source.loadImage(at: rightSrcIndex)
+            self.secondPageImage = source.loadImage(at: leftSrcIndex)
+            // 画像カタログに記録
+            recordImageToCatalog(at: rightSrcIndex)
+            recordImageToCatalog(at: leftSrcIndex)
         }
 
         self.errorMessage = nil
@@ -909,9 +1024,11 @@ class BookViewModel {
     }
 
     /// ページが単ページ属性かをチェック（統合版）
+    /// @param page 表示上のページ番号
     private func isPageSingle(_ page: Int) -> Bool {
+        let srcIndex = sourceIndex(for: page)
         return checkAndSetLandscapeAttribute(for: page) ||
-               pageDisplaySettings.isForcedSinglePage(page)
+               pageDisplaySettings.isForcedSinglePage(srcIndex)
     }
 
     /// 表示モードを切り替え
@@ -935,17 +1052,17 @@ class BookViewModel {
     /// 単ページモードから見開きモードに切り替える際の正しい表示状態を計算
     /// 先頭または終端からページめくりをシミュレートして、currentPageを含む正しい表示状態を求める
     private func adjustCurrentPageForSpreadMode() {
-        guard let source = imageSource else { return }
+        guard imageSource != nil else { return }
 
         let targetPage = currentPage
-        let totalPages = source.imageCount
+        let pageCount = totalPages  // displayOrderの件数 = 表示ページ数
 
         let isSinglePage: (Int) -> Bool = { [weak self] p in
             self?.isPageSingle(p) ?? false
         }
 
         // currentPageが先頭寄りか終端寄りかで、より効率的な方向を選択
-        if targetPage <= totalPages / 2 {
+        if targetPage <= pageCount / 2 {
             // 先頭から順方向にシミュレート
             var display = calculateDisplayForPage(0)
             while !display.contains(targetPage) && display.maxIndex < targetPage {
@@ -973,13 +1090,13 @@ class BookViewModel {
 
     /// 最終ページを起点とした表示状態を計算（逆方向ロジック）
     private func calculateDisplayForLastPage() -> PageDisplay {
-        guard let source = imageSource else { return .single(0) }
+        guard imageSource != nil else { return .single(0) }
 
-        let lastIndex = source.imageCount - 1
+        let lastIndex = totalPages - 1
 
         // 最後の表示可能なページを探す（非表示ページはスキップ）
         var lastVisibleIndex = lastIndex
-        while lastVisibleIndex >= 0 && pageDisplaySettings.isHidden(lastVisibleIndex) {
+        while lastVisibleIndex >= 0 && pageDisplaySettings.isHidden(sourceIndex(for: lastVisibleIndex)) {
             lastVisibleIndex -= 1
         }
         if lastVisibleIndex < 0 {
@@ -993,7 +1110,7 @@ class BookViewModel {
 
         // ペア候補を探す（非表示ページはスキップ）
         var prevVisibleIndex = lastVisibleIndex - 1
-        while prevVisibleIndex >= 0 && pageDisplaySettings.isHidden(prevVisibleIndex) {
+        while prevVisibleIndex >= 0 && pageDisplaySettings.isHidden(sourceIndex(for: prevVisibleIndex)) {
             prevVisibleIndex -= 1
         }
 
@@ -1033,8 +1150,10 @@ class BookViewModel {
     }
 
     /// 指定ページの単ページ表示属性を切り替え
+    /// @param pageIndex 表示上のページ番号
     func toggleSingleDisplay(at pageIndex: Int) {
-        pageDisplaySettings.toggleForceSinglePage(at: pageIndex)
+        let srcIndex = sourceIndex(for: pageIndex)
+        pageDisplaySettings.toggleForceSinglePage(at: srcIndex)
         // 設定を保存
         saveViewState()
         // 画像を再読み込み（表示を更新）
@@ -1048,12 +1167,15 @@ class BookViewModel {
 
     /// 現在のページがユーザーによって単ページ表示に設定されているか（自動検出は含まない）
     var isCurrentPageUserForcedSingle: Bool {
-        return pageDisplaySettings.isUserForcedSinglePage(currentPage)
+        let srcIndex = sourceIndex(for: currentPage)
+        return pageDisplaySettings.isUserForcedSinglePage(srcIndex)
     }
 
     /// 指定ページが単ページ表示属性を持つか（ユーザー設定または自動検出）
+    /// @param pageIndex 表示上のページ番号
     func isForcedSingle(at pageIndex: Int) -> Bool {
-        return pageDisplaySettings.isForcedSinglePage(pageIndex)
+        let srcIndex = sourceIndex(for: pageIndex)
+        return pageDisplaySettings.isForcedSinglePage(srcIndex)
     }
 
     // MARK: - 非表示設定
@@ -1064,11 +1186,13 @@ class BookViewModel {
     }
 
     /// 指定ページの非表示設定を切り替え
+    /// @param pageIndex 表示上のページ番号
     func toggleHidden(at pageIndex: Int) {
-        pageDisplaySettings.toggleHidden(at: pageIndex)
+        let srcIndex = sourceIndex(for: pageIndex)
+        pageDisplaySettings.toggleHidden(at: srcIndex)
         saveViewState()
         // 非表示にした場合は表示を再計算
-        if pageDisplaySettings.isHidden(pageIndex) && viewMode == .spread {
+        if pageDisplaySettings.isHidden(srcIndex) && viewMode == .spread {
             // 現在の表示のもう一方のページがあればそこを起点にする
             let otherPage: Int?
             switch currentDisplay {
@@ -1084,14 +1208,14 @@ class BookViewModel {
                 }
             }
 
-            if let other = otherPage, !pageDisplaySettings.isHidden(other) {
+            if let other = otherPage, !pageDisplaySettings.isHidden(sourceIndex(for: other)) {
                 // 相方が表示可能ならそこを起点に再計算
                 currentPage = other
                 loadCurrentPage()
             } else {
                 // 相方がいないか非表示の場合、次の表示可能なページを探す
                 var nextVisiblePage = pageIndex + 1
-                while nextVisiblePage < totalPages && pageDisplaySettings.isHidden(nextVisiblePage) {
+                while nextVisiblePage < totalPages && pageDisplaySettings.isHidden(sourceIndex(for: nextVisiblePage)) {
                     nextVisiblePage += 1
                 }
                 if nextVisiblePage < totalPages {
@@ -1100,7 +1224,7 @@ class BookViewModel {
                 } else {
                     // 後ろにない場合は前を探す
                     var prevVisiblePage = pageIndex - 1
-                    while prevVisiblePage >= 0 && pageDisplaySettings.isHidden(prevVisiblePage) {
+                    while prevVisiblePage >= 0 && pageDisplaySettings.isHidden(sourceIndex(for: prevVisiblePage)) {
                         prevVisiblePage -= 1
                     }
                     if prevVisiblePage >= 0 {
@@ -1114,12 +1238,15 @@ class BookViewModel {
 
     /// 現在のページが非表示かどうか
     var isCurrentPageHidden: Bool {
-        return pageDisplaySettings.isHidden(currentPage)
+        let srcIndex = sourceIndex(for: currentPage)
+        return pageDisplaySettings.isHidden(srcIndex)
     }
 
     /// 指定ページが非表示かどうか
+    /// @param pageIndex 表示上のページ番号
     func isHidden(at pageIndex: Int) -> Bool {
-        return pageDisplaySettings.isHidden(pageIndex)
+        let srcIndex = sourceIndex(for: pageIndex)
+        return pageDisplaySettings.isHidden(srcIndex)
     }
 
     /// 現在のページの配置を取得（デフォルトロジックを含む）
@@ -1128,9 +1255,12 @@ class BookViewModel {
     }
 
     /// 指定ページの配置を取得（デフォルトロジックを含む）
+    /// @param pageIndex 表示上のページ番号
     func getAlignment(at pageIndex: Int) -> SinglePageAlignment {
+        let srcIndex = sourceIndex(for: pageIndex)
+
         // 既に設定されている場合はそれを返す
-        if let savedAlignment = pageDisplaySettings.alignment(for: pageIndex) {
+        if let savedAlignment = pageDisplaySettings.alignment(for: srcIndex) {
             return savedAlignment
         }
 
@@ -1140,12 +1270,12 @@ class BookViewModel {
         //   - 右→左表示: 右側
         //   - 左→右表示: 左側
         guard let source = imageSource,
-              let size = source.imageSize(at: pageIndex) else {
+              let size = source.imageSize(at: srcIndex) else {
             return .center
         }
 
         // 回転を考慮した実効アスペクト比を計算
-        let rotation = pageDisplaySettings.rotation(for: pageIndex)
+        let rotation = pageDisplaySettings.rotation(for: srcIndex)
         let effectiveWidth: CGFloat
         let effectiveHeight: CGFloat
 
@@ -1180,12 +1310,14 @@ class BookViewModel {
 
     /// 指定ページの配置を設定
     /// 配置を設定すると自動的に単ページ表示属性も付与される
+    /// @param pageIndex 表示上のページ番号
     func setAlignment(_ alignment: SinglePageAlignment, at pageIndex: Int) {
+        let srcIndex = sourceIndex(for: pageIndex)
         // 単ページ表示属性がなければ自動的に付与
-        if !pageDisplaySettings.isForcedSinglePage(pageIndex) {
-            pageDisplaySettings.setForceSinglePage(at: pageIndex, forced: true)
+        if !pageDisplaySettings.isForcedSinglePage(srcIndex) {
+            pageDisplaySettings.setForceSinglePage(at: srcIndex, forced: true)
         }
-        pageDisplaySettings.setAlignment(alignment, for: pageIndex)
+        pageDisplaySettings.setAlignment(alignment, for: srcIndex)
         saveViewState()
         loadCurrentPage()
     }
@@ -1198,27 +1330,35 @@ class BookViewModel {
     // MARK: - 回転設定
 
     /// 指定ページの回転設定を取得
+    /// @param pageIndex 表示上のページ番号
     func getRotation(at pageIndex: Int) -> ImageRotation {
-        return pageDisplaySettings.rotation(for: pageIndex)
+        let srcIndex = sourceIndex(for: pageIndex)
+        return pageDisplaySettings.rotation(for: srcIndex)
     }
 
     /// 指定ページを時計回りに90度回転
+    /// @param pageIndex 表示上のページ番号
     func rotateClockwise(at pageIndex: Int) {
-        pageDisplaySettings.rotateClockwise(at: pageIndex)
+        let srcIndex = sourceIndex(for: pageIndex)
+        pageDisplaySettings.rotateClockwise(at: srcIndex)
         saveViewState()
         loadCurrentPage()
     }
 
     /// 指定ページを反時計回りに90度回転
+    /// @param pageIndex 表示上のページ番号
     func rotateCounterClockwise(at pageIndex: Int) {
-        pageDisplaySettings.rotateCounterClockwise(at: pageIndex)
+        let srcIndex = sourceIndex(for: pageIndex)
+        pageDisplaySettings.rotateCounterClockwise(at: srcIndex)
         saveViewState()
         loadCurrentPage()
     }
 
     /// 指定ページを180度回転
+    /// @param pageIndex 表示上のページ番号
     func rotate180(at pageIndex: Int) {
-        pageDisplaySettings.rotate180(at: pageIndex)
+        let srcIndex = sourceIndex(for: pageIndex)
+        pageDisplaySettings.rotate180(at: srcIndex)
         saveViewState()
         loadCurrentPage()
     }
@@ -1226,20 +1366,26 @@ class BookViewModel {
     // MARK: - 反転設定
 
     /// 指定ページの反転設定を取得
+    /// @param pageIndex 表示上のページ番号
     func getFlip(at pageIndex: Int) -> ImageFlip {
-        return pageDisplaySettings.flip(for: pageIndex)
+        let srcIndex = sourceIndex(for: pageIndex)
+        return pageDisplaySettings.flip(for: srcIndex)
     }
 
     /// 指定ページの水平反転を切り替え
+    /// @param pageIndex 表示上のページ番号
     func toggleHorizontalFlip(at pageIndex: Int) {
-        pageDisplaySettings.toggleHorizontalFlip(at: pageIndex)
+        let srcIndex = sourceIndex(for: pageIndex)
+        pageDisplaySettings.toggleHorizontalFlip(at: srcIndex)
         saveViewState()
         loadCurrentPage()
     }
 
     /// 指定ページの垂直反転を切り替え
+    /// @param pageIndex 表示上のページ番号
     func toggleVerticalFlip(at pageIndex: Int) {
-        pageDisplaySettings.toggleVerticalFlip(at: pageIndex)
+        let srcIndex = sourceIndex(for: pageIndex)
+        pageDisplaySettings.toggleVerticalFlip(at: srcIndex)
         saveViewState()
         loadCurrentPage()
     }
@@ -1263,12 +1409,16 @@ class BookViewModel {
         let modeString = viewMode == .spread ? "spread" : "single"
         UserDefaults.standard.set(modeString, forKey: "\(viewModeKey)-\(entryId)")
 
-        // 現在のページ番号を保存（エントリIDベース）
-        UserDefaults.standard.set(currentPage, forKey: "\(currentPageKey)-\(entryId)")
+        // 現在のページ番号を保存（ソースインデックスで保存、エントリIDベース）
+        let currentSourceIndex = sourceIndex(for: currentPage)
+        UserDefaults.standard.set(currentSourceIndex, forKey: "\(currentPageKey)-\(entryId)")
 
         // 読み方向を保存（エントリIDベース）
         let directionString = readingDirection == .rightToLeft ? "rightToLeft" : "leftToRight"
         UserDefaults.standard.set(directionString, forKey: "\(readingDirectionKey)-\(entryId)")
+
+        // ソート方法を保存（エントリIDベース）
+        UserDefaults.standard.set(sortMethod.rawValue, forKey: "\(sortMethodKey)-\(entryId)")
 
         // ページ表示設定を保存（ファイル名も考慮してエントリを特定）
         historyManager?.savePageDisplaySettings(pageDisplaySettings, forFileName: source.sourceName, fileKey: fileKey)
@@ -1297,18 +1447,66 @@ class BookViewModel {
         }
         // なければデフォルトのまま
 
-        // ページ番号を復元（エントリIDベースのみ）
-        let savedPage = UserDefaults.standard.integer(forKey: "\(currentPageKey)-\(entryId)")
-        if savedPage > 0 && savedPage < totalPages {
-            currentPage = savedPage
-        }
-        // なければ0（先頭）のまま
-
         // 読み方向を復元（エントリIDベースのみ）
         if let directionString = UserDefaults.standard.string(forKey: "\(readingDirectionKey)-\(entryId)") {
             readingDirection = directionString == "rightToLeft" ? .rightToLeft : .leftToRight
         }
         // なければデフォルトのまま
+
+        // ソート方法を復元（displayOrderを先に更新する必要があるため、ページ復元より先に行う）
+        if let sortString = UserDefaults.standard.string(forKey: "\(sortMethodKey)-\(entryId)"),
+           let savedSortMethod = ImageSortMethod(rawValue: sortString) {
+            // ソートを適用（displayOrderを更新、ただしページ読み込みはスキップ）
+            sortMethod = savedSortMethod
+            let indices = Array(0..<totalPages)
+            switch savedSortMethod {
+            case .name:
+                displayOrder = indices.sorted { i1, i2 in
+                    let name1 = imageSource?.fileName(at: i1) ?? ""
+                    let name2 = imageSource?.fileName(at: i2) ?? ""
+                    return name1.localizedStandardCompare(name2) == .orderedAscending
+                }
+            case .nameReverse:
+                displayOrder = indices.sorted { i1, i2 in
+                    let name1 = imageSource?.fileName(at: i1) ?? ""
+                    let name2 = imageSource?.fileName(at: i2) ?? ""
+                    return name1.localizedStandardCompare(name2) == .orderedDescending
+                }
+            case .natural:
+                displayOrder = indices.sorted { i1, i2 in
+                    let name1 = imageSource?.fileName(at: i1) ?? ""
+                    let name2 = imageSource?.fileName(at: i2) ?? ""
+                    return name1.localizedStandardCompare(name2) == .orderedAscending
+                }
+            case .dateAscending:
+                displayOrder = indices.sorted { i1, i2 in
+                    let date1 = imageSource?.fileDate(at: i1) ?? Date.distantPast
+                    let date2 = imageSource?.fileDate(at: i2) ?? Date.distantPast
+                    return date1 < date2
+                }
+            case .dateDescending:
+                displayOrder = indices.sorted { i1, i2 in
+                    let date1 = imageSource?.fileDate(at: i1) ?? Date.distantPast
+                    let date2 = imageSource?.fileDate(at: i2) ?? Date.distantPast
+                    return date1 > date2
+                }
+            case .random:
+                displayOrder = indices.shuffled()
+            }
+        }
+        // なければデフォルト（.name）のまま
+
+        // ページ番号を復元（ソースインデックスとして保存されている、エントリIDベースのみ）
+        let savedSourceIndex = UserDefaults.standard.integer(forKey: "\(currentPageKey)-\(entryId)")
+        if savedSourceIndex > 0 && savedSourceIndex < totalPages {
+            // ソースインデックスを表示ページに変換
+            if let restoredDisplayPage = displayPage(for: savedSourceIndex) {
+                currentPage = restoredDisplayPage
+            } else {
+                currentPage = savedSourceIndex  // フォールバック
+            }
+        }
+        // なければ0（先頭）のまま
 
         // ページ表示設定を復元（ファイル名も考慮してエントリを特定）
         if let settings = historyManager?.loadPageDisplaySettings(forFileName: source.sourceName, fileKey: fileKey) {
@@ -1357,11 +1555,11 @@ class BookViewModel {
 
         switch currentDisplay {
         case .single(let page):
-            return source.fileName(at: page) ?? ""
+            return source.fileName(at: sourceIndex(for: page)) ?? ""
 
         case .spread(let left, let right):
-            let leftFileName = source.fileName(at: left) ?? ""
-            let rightFileName = source.fileName(at: right) ?? ""
+            let leftFileName = source.fileName(at: sourceIndex(for: left)) ?? ""
+            let rightFileName = source.fileName(at: sourceIndex(for: right)) ?? ""
 
             // 画面表示順（左→右）でファイル名を表示
             return "\(leftFileName)  \(rightFileName)"
@@ -1370,10 +1568,11 @@ class BookViewModel {
 
     /// 2ページ目がユーザー設定の単ページ属性かどうか（見開き表示時のみ有効、自動検出は含まない）
     var isSecondPageUserForcedSingle: Bool {
-        guard let source = imageSource else { return false }
+        guard imageSource != nil else { return false }
         let secondPage = currentPage + 1
-        guard secondPage < source.imageCount else { return false }
-        return pageDisplaySettings.isUserForcedSinglePage(secondPage)
+        guard secondPage < totalPages else { return false }
+        let srcIndex = sourceIndex(for: secondPage)
+        return pageDisplaySettings.isUserForcedSinglePage(srcIndex)
     }
 
     // 下位互換のためにarchiveFileNameをsourceNameのエイリアスとして定義
@@ -1405,17 +1604,17 @@ class BookViewModel {
         case .single(let page):
             if viewMode == .single {
                 // 単ページモード: ファイル名のみ
-                return source.fileName(at: page) ?? "Panes"
+                return source.fileName(at: sourceIndex(for: page)) ?? "Panes"
             } else {
                 // 見開きモード中の単ページ: アーカイブ名 / ファイル名
-                let fileName = source.fileName(at: page) ?? ""
+                let fileName = source.fileName(at: sourceIndex(for: page)) ?? ""
                 return "\(archiveName) / \(fileName)"
             }
 
         case .spread(let left, let right):
             // 見開き: アーカイブ名 / ファイル1 - ファイル2
-            let leftFileName = source.fileName(at: left) ?? ""
-            let rightFileName = source.fileName(at: right) ?? ""
+            let leftFileName = source.fileName(at: sourceIndex(for: left)) ?? ""
+            let rightFileName = source.fileName(at: sourceIndex(for: right)) ?? ""
             return "\(archiveName) / \(rightFileName) - \(leftFileName)"
         }
     }
@@ -1470,16 +1669,18 @@ class BookViewModel {
     // MARK: - 画像情報取得
 
     /// 指定ページの画像情報を取得
-    func getImageInfo(at index: Int) -> ImageInfo? {
+    /// @param displayPage 表示上のページ番号
+    func getImageInfo(at displayPage: Int) -> ImageInfo? {
         guard let source = imageSource,
-              index >= 0 && index < source.imageCount else {
+              displayPage >= 0 && displayPage < totalPages else {
             return nil
         }
 
-        let fileName = source.fileName(at: index) ?? "Unknown"
-        let size = source.imageSize(at: index) ?? CGSize.zero
-        let fileSize = source.fileSize(at: index) ?? 0
-        let format = source.imageFormat(at: index) ?? "Unknown"
+        let srcIndex = sourceIndex(for: displayPage)
+        let fileName = source.fileName(at: srcIndex) ?? "Unknown"
+        let size = source.imageSize(at: srcIndex) ?? CGSize.zero
+        let fileSize = source.fileSize(at: srcIndex) ?? 0
+        let format = source.imageFormat(at: srcIndex) ?? "Unknown"
 
         return ImageInfo(
             fileName: fileName,
@@ -1487,13 +1688,14 @@ class BookViewModel {
             height: Int(size.height),
             fileSize: fileSize,
             format: format,
-            pageIndex: index
+            pageIndex: displayPage
         )
     }
 
     /// 指定ページの画像を取得
-    func getImage(at index: Int) -> NSImage? {
-        return imageSource?.loadImage(at: index)
+    /// @param displayPage 表示上のページ番号
+    func getImage(at displayPage: Int) -> NSImage? {
+        return imageSource?.loadImage(at: sourceIndex(for: displayPage))
     }
 
     /// 指定ページの画像をクリップボードにコピー
@@ -1547,7 +1749,7 @@ class BookViewModel {
 
         let exportData = PageSettingsExport(
             archiveName: source.sourceName,
-            totalPages: source.imageCount,
+            totalPages: totalPages,
             exportDate: Date(),
             settings: pageDisplaySettings
         )

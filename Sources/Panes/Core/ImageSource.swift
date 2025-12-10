@@ -2,6 +2,27 @@ import Foundation
 import AppKit
 import CryptoKit
 
+/// 画像のソート方法
+enum ImageSortMethod: String, CaseIterable, Codable {
+    case name = "name"                      // 名前順（localizedStandardCompare）
+    case nameReverse = "nameReverse"        // 名前逆順
+    case natural = "natural"                // 自然順（数字を数値として比較）
+    case dateAscending = "dateAscending"    // 日付順（古い順）
+    case dateDescending = "dateDescending"  // 日付順（新しい順）
+    case random = "random"                  // ランダム順
+
+    var displayName: String {
+        switch self {
+        case .name: return L("sort_name")
+        case .nameReverse: return L("sort_name_reverse")
+        case .natural: return L("sort_natural")
+        case .dateAscending: return L("sort_date_ascending")
+        case .dateDescending: return L("sort_date_descending")
+        case .random: return L("sort_random")
+        }
+    }
+}
+
 /// 画像ソースのプロトコル（zipアーカイブ、通常ファイルなど）
 protocol ImageSource {
     /// ソース名（ファイル名など）
@@ -30,6 +51,9 @@ protocol ImageSource {
 
     /// 指定されたインデックスの画像フォーマットを取得
     func imageFormat(at index: Int) -> String?
+
+    /// 指定されたインデックスの画像ファイルの更新日時を取得
+    func fileDate(at index: Int) -> Date?
 
     /// ファイル識別用のユニークキーを生成
     func generateFileKey() -> String?

@@ -212,6 +212,18 @@ class FileImageSource: ImageSource {
         }
     }
 
+    func fileDate(at index: Int) -> Date? {
+        guard index >= 0 && index < imageURLs.count else {
+            return nil
+        }
+        let url = imageURLs[index]
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let date = attrs[.modificationDate] as? Date else {
+            return nil
+        }
+        return date
+    }
+
     /// 指定されたインデックスの画像ファイルのURLを取得
     func imageURL(at index: Int) -> URL? {
         guard index >= 0 && index < imageURLs.count else {

@@ -51,6 +51,11 @@ class RarImageSource: ImageSource {
         return rarReader.imageFormat(at: index)
     }
 
+    func fileDate(at index: Int) -> Date? {
+        // TODO: RARエントリの更新日時を取得（将来実装）
+        return nil
+    }
+
     /// 指定されたインデックスの画像の相対パス（書庫内でのパス）
     func imageRelativePath(at index: Int) -> String? {
         return rarReader.fileName(at: index)
