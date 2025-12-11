@@ -251,7 +251,12 @@ class FileHistoryManager {
         let needsMigration = storedVersion < Self.currentSchemaVersion && storedVersion > 0
 
         do {
-            let schema = Schema([FileHistoryData.self, ImageCatalogData.self])
+            let schema = Schema([
+                FileHistoryData.self,
+                ImageCatalogData.self,  // 旧モデル（マイグレーション用）
+                StandaloneImageData.self,
+                ArchiveContentImageData.self
+            ])
             let modelConfiguration = ModelConfiguration(schema: schema, url: Self.storeURL, allowsSave: true)
             modelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])
             modelContext = ModelContext(modelContainer!)

@@ -115,9 +115,14 @@ class ImageCatalogManager {
     /// アプリ設定への参照
     var appSettings: AppSettings?
 
-    /// 最大カタログ件数（将来的に設定可能に）
-    private var maxCatalogCount: Int {
-        appSettings?.maxHistoryCount ?? 500  // デフォルトは500件
+    /// 個別画像の最大カタログ件数
+    private var maxStandaloneCount: Int {
+        appSettings?.maxStandaloneImageCount ?? 10000
+    }
+
+    /// 書庫内画像の最大カタログ件数
+    private var maxArchiveContentCount: Int {
+        appSettings?.maxArchiveContentImageCount ?? 1000
     }
 
     /// isAccessibleのキャッシュ
@@ -139,14 +144,20 @@ class ImageCatalogManager {
     init() {
         setupSwiftData()
         if isInitialized {
+            migrateOldDataIfNeeded()
             loadCatalog()
         }
     }
 
-    /// SwiftDataのセットアップ（FileHistoryDataと同じコンテナを使用）
+    /// SwiftDataのセットアップ
     private func setupSwiftData() {
         do {
-            let schema = Schema([FileHistoryData.self, ImageCatalogData.self])
+            let schema = Schema([
+                FileHistoryData.self,
+                ImageCatalogData.self,  // 旧モデル（マイグレーション用）
+                StandaloneImageData.self,
+                ArchiveContentImageData.self
+            ])
             let modelConfiguration = ModelConfiguration(schema: schema, url: Self.storeURL, allowsSave: true)
             modelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])
             modelContext = ModelContext(modelContainer!)
@@ -158,20 +169,93 @@ class ImageCatalogManager {
         }
     }
 
+    /// 旧データのマイグレーション
+    private func migrateOldDataIfNeeded() {
+        guard let context = modelContext else { return }
+
+        do {
+            let oldDescriptor = FetchDescriptor<ImageCatalogData>()
+            let oldData = try context.fetch(oldDescriptor)
+
+            if oldData.isEmpty {
+                DebugLogger.log("📦 No old ImageCatalogData to migrate", level: .verbose)
+                return
+            }
+
+            DebugLogger.log("📦 Migrating \(oldData.count) old ImageCatalogData entries...", level: .normal)
+
+            for old in oldData {
+                if old.catalogType == .standalone {
+                    // 個別画像として新テーブルに移行
+                    let newData = StandaloneImageData(
+                        fileKey: old.fileKey,
+                        filePath: old.filePath,
+                        fileName: old.fileName
+                    )
+                    newData.lastAccessDate = old.lastAccessDate
+                    newData.accessCount = old.accessCount
+                    newData.memo = old.memo
+                    newData.imageWidth = old.imageWidth
+                    newData.imageHeight = old.imageHeight
+                    newData.fileSize = old.fileSize
+                    newData.imageFormat = old.imageFormat
+                    newData.tagsData = old.tagsData
+                    context.insert(newData)
+                } else if let relativePath = old.relativePath {
+                    // 書庫内画像として新テーブルに移行
+                    let newData = ArchiveContentImageData(
+                        fileKey: old.fileKey,
+                        parentPath: old.filePath,
+                        relativePath: relativePath,
+                        fileName: old.fileName
+                    )
+                    newData.lastAccessDate = old.lastAccessDate
+                    newData.accessCount = old.accessCount
+                    newData.memo = old.memo
+                    newData.imageWidth = old.imageWidth
+                    newData.imageHeight = old.imageHeight
+                    newData.fileSize = old.fileSize
+                    newData.imageFormat = old.imageFormat
+                    newData.tagsData = old.tagsData
+                    context.insert(newData)
+                }
+
+                // 旧データを削除
+                context.delete(old)
+            }
+
+            try context.save()
+            DebugLogger.log("📦 Migration completed", level: .normal)
+        } catch {
+            DebugLogger.log("❌ Migration failed: \(error)", level: .minimal)
+        }
+    }
+
     /// カタログを読み込む
     private func loadCatalog() {
         guard let context = modelContext else { return }
 
         do {
-            let descriptor = FetchDescriptor<ImageCatalogData>(
+            // 個別画像を読み込み
+            let standaloneDescriptor = FetchDescriptor<StandaloneImageData>(
                 sortBy: [SortDescriptor(\.lastAccessDate, order: .reverse)]
             )
-            let catalogData = try context.fetch(descriptor)
-            catalog = catalogData.map { $0.toEntry() }
-            DebugLogger.log("📦 Loaded \(catalog.count) image catalog entries", level: .normal)
-            if let first = catalog.first {
-                DebugLogger.log("📦 First entry: \(first.fileName), date: \(first.lastAccessDate)", level: .verbose)
-            }
+            let standaloneData = try context.fetch(standaloneDescriptor)
+
+            // 書庫内画像を読み込み
+            let archiveDescriptor = FetchDescriptor<ArchiveContentImageData>(
+                sortBy: [SortDescriptor(\.lastAccessDate, order: .reverse)]
+            )
+            let archiveData = try context.fetch(archiveDescriptor)
+
+            // 統合してソート
+            var entries: [ImageCatalogEntry] = []
+            entries.append(contentsOf: standaloneData.map { $0.toEntry() })
+            entries.append(contentsOf: archiveData.map { $0.toEntry() })
+            entries.sort { $0.lastAccessDate > $1.lastAccessDate }
+
+            catalog = entries
+            DebugLogger.log("📦 Loaded \(standaloneData.count) standalone + \(archiveData.count) archive = \(catalog.count) total entries", level: .normal)
         } catch {
             DebugLogger.log("❌ Failed to load image catalog: \(error)", level: .minimal)
         }
@@ -183,89 +267,99 @@ class ImageCatalogManager {
     func recordStandaloneImageAccess(fileKey: String, filePath: String, fileName: String,
                                      width: Int? = nil, height: Int? = nil,
                                      fileSize: Int64? = nil, format: String? = nil) {
-        recordImageAccessInternal(
-            fileKey: fileKey,
-            filePath: filePath,
-            fileName: fileName,
-            catalogType: .standalone,
-            relativePath: nil,
-            width: width, height: height,
-            fileSize: fileSize, format: format
-        )
-    }
-
-    /// 書庫/フォルダ内画像のアクセスを記録
-    func recordArchiveContentAccess(fileKey: String, parentPath: String, relativePath: String, fileName: String,
-                                    width: Int? = nil, height: Int? = nil,
-                                    fileSize: Int64? = nil, format: String? = nil) {
-        recordImageAccessInternal(
-            fileKey: fileKey,
-            filePath: parentPath,
-            fileName: fileName,
-            catalogType: .archiveContent,
-            relativePath: relativePath,
-            width: width, height: height,
-            fileSize: fileSize, format: format
-        )
-    }
-
-    /// 画像アクセスを記録（内部実装）
-    private func recordImageAccessInternal(fileKey: String, filePath: String, fileName: String,
-                                           catalogType: ImageCatalogType, relativePath: String?,
-                                           width: Int? = nil, height: Int? = nil,
-                                           fileSize: Int64? = nil, format: String? = nil) {
         guard isInitialized, let context = modelContext else {
-            DebugLogger.log("⚠️ recordImageAccess skipped: not initialized", level: .normal)
+            DebugLogger.log("⚠️ recordStandaloneImageAccess skipped: not initialized", level: .normal)
             return
         }
 
         do {
             let searchKey = fileKey
-            var descriptor = FetchDescriptor<ImageCatalogData>(
-                predicate: #Predicate<ImageCatalogData> { $0.fileKey == searchKey }
+            var descriptor = FetchDescriptor<StandaloneImageData>(
+                predicate: #Predicate<StandaloneImageData> { $0.fileKey == searchKey }
             )
             descriptor.fetchLimit = 1
             let existing = try context.fetch(descriptor)
 
-            if let catalogData = existing.first {
+            if let imageData = existing.first {
                 // 既存エントリを更新
-                let newDate = Date()
-                DebugLogger.log("📸 Updating existing entry: \(fileName), old date: \(catalogData.lastAccessDate), new date: \(newDate)", level: .verbose)
-                catalogData.lastAccessDate = newDate
-                catalogData.accessCount += 1
-                catalogData.filePath = filePath
-                catalogData.fileName = fileName
-                catalogData.catalogType = catalogType
-                catalogData.relativePath = relativePath
-                // メタデータがあれば更新
-                if let w = width { catalogData.imageWidth = w }
-                if let h = height { catalogData.imageHeight = h }
-                if let s = fileSize { catalogData.fileSize = s }
-                if let f = format { catalogData.imageFormat = f }
+                imageData.lastAccessDate = Date()
+                imageData.accessCount += 1
+                imageData.filePath = filePath
+                imageData.fileName = fileName
+                if let w = width { imageData.imageWidth = w }
+                if let h = height { imageData.imageHeight = h }
+                if let s = fileSize { imageData.fileSize = s }
+                if let f = format { imageData.imageFormat = f }
             } else {
                 // 新規エントリを作成
-                let newData: ImageCatalogData
-                if catalogType == .archiveContent, let relPath = relativePath {
-                    newData = ImageCatalogData(fileKey: fileKey, parentPath: filePath, relativePath: relPath, fileName: fileName)
-                } else {
-                    newData = ImageCatalogData(fileKey: fileKey, filePath: filePath, fileName: fileName)
-                }
+                let newData = StandaloneImageData(fileKey: fileKey, filePath: filePath, fileName: fileName)
                 newData.imageWidth = width
                 newData.imageHeight = height
                 newData.fileSize = fileSize
                 newData.imageFormat = format
                 context.insert(newData)
 
-                // 上限チェック
-                try enforceLimit(context: context)
+                // 上限チェック（メタデータなしのみ削除）
+                try enforceStandaloneLimit(context: context)
             }
 
             try context.save()
-            DebugLogger.log("📸 Recorded image: \(fileName) (\(catalogType)), reloading catalog...", level: .verbose)
             loadCatalog()
-            DebugLogger.log("📸 Catalog reloaded, count: \(catalog.count)", level: .verbose)
         } catch {
-            DebugLogger.log("❌ Failed to record image access: \(error)", level: .minimal)
+            DebugLogger.log("❌ Failed to record standalone image: \(error)", level: .minimal)
+        }
+    }
+
+    /// 書庫/フォルダ内画像のアクセスを記録
+    func recordArchiveContentAccess(fileKey: String, parentPath: String, relativePath: String, fileName: String,
+                                    width: Int? = nil, height: Int? = nil,
+                                    fileSize: Int64? = nil, format: String? = nil) {
+        guard isInitialized, let context = modelContext else {
+            DebugLogger.log("⚠️ recordArchiveContentAccess skipped: not initialized", level: .normal)
+            return
+        }
+
+        do {
+            let searchKey = fileKey
+            var descriptor = FetchDescriptor<ArchiveContentImageData>(
+                predicate: #Predicate<ArchiveContentImageData> { $0.fileKey == searchKey }
+            )
+            descriptor.fetchLimit = 1
+            let existing = try context.fetch(descriptor)
+
+            if let imageData = existing.first {
+                // 既存エントリを更新
+                imageData.lastAccessDate = Date()
+                imageData.accessCount += 1
+                imageData.parentPath = parentPath
+                imageData.relativePath = relativePath
+                imageData.fileName = fileName
+                if let w = width { imageData.imageWidth = w }
+                if let h = height { imageData.imageHeight = h }
+                if let s = fileSize { imageData.fileSize = s }
+                if let f = format { imageData.imageFormat = f }
+            } else {
+                // 新規エントリを作成
+                let newData = ArchiveContentImageData(
+                    fileKey: fileKey,
+                    parentPath: parentPath,
+                    relativePath: relativePath,
+                    fileName: fileName
+                )
+                newData.imageWidth = width
+                newData.imageHeight = height
+                newData.fileSize = fileSize
+                newData.imageFormat = format
+                context.insert(newData)
+
+                // 上限チェック（メタデータなしのみ削除）
+                try enforceArchiveContentLimit(context: context)
+            }
+
+            try context.save()
+            loadCatalog()
+        } catch {
+            DebugLogger.log("❌ Failed to record archive content image: \(error)", level: .minimal)
         }
     }
 
@@ -277,21 +371,55 @@ class ImageCatalogManager {
                                     width: width, height: height, fileSize: fileSize, format: format)
     }
 
-    /// カタログの上限をチェックし、超過分を削除
-    private func enforceLimit(context: ModelContext) throws {
-        let countDescriptor = FetchDescriptor<ImageCatalogData>()
+    /// 個別画像の上限をチェックし、超過分を削除（メタデータなしのみ）
+    private func enforceStandaloneLimit(context: ModelContext) throws {
+        let countDescriptor = FetchDescriptor<StandaloneImageData>()
         let totalCount = try context.fetchCount(countDescriptor)
-        if totalCount > maxCatalogCount {
-            let oldestDescriptor = FetchDescriptor<ImageCatalogData>(
+
+        if totalCount > maxStandaloneCount {
+            // メタデータなしの古いエントリを削除対象にする
+            let oldestDescriptor = FetchDescriptor<StandaloneImageData>(
                 sortBy: [SortDescriptor(\.lastAccessDate, order: .forward)]
             )
             let oldest = try context.fetch(oldestDescriptor)
-            let deleteCount = totalCount - maxCatalogCount
-            for i in 0..<deleteCount {
-                if i < oldest.count {
-                    context.delete(oldest[i])
+            let deleteCount = totalCount - maxStandaloneCount
+
+            var deleted = 0
+            for item in oldest {
+                if deleted >= deleteCount { break }
+                // メタデータがあるものは削除しない
+                if !item.hasMetadata {
+                    context.delete(item)
+                    deleted += 1
                 }
             }
+            DebugLogger.log("📦 Enforced standalone limit: deleted \(deleted) entries", level: .verbose)
+        }
+    }
+
+    /// 書庫内画像の上限をチェックし、超過分を削除（メタデータなしのみ）
+    private func enforceArchiveContentLimit(context: ModelContext) throws {
+        let countDescriptor = FetchDescriptor<ArchiveContentImageData>()
+        let totalCount = try context.fetchCount(countDescriptor)
+
+        if totalCount > maxArchiveContentCount {
+            // メタデータなしの古いエントリを削除対象にする
+            let oldestDescriptor = FetchDescriptor<ArchiveContentImageData>(
+                sortBy: [SortDescriptor(\.lastAccessDate, order: .forward)]
+            )
+            let oldest = try context.fetch(oldestDescriptor)
+            let deleteCount = totalCount - maxArchiveContentCount
+
+            var deleted = 0
+            for item in oldest {
+                if deleted >= deleteCount { break }
+                // メタデータがあるものは削除しない
+                if !item.hasMetadata {
+                    context.delete(item)
+                    deleted += 1
+                }
+            }
+            DebugLogger.log("📦 Enforced archive content limit: deleted \(deleted) entries", level: .verbose)
         }
     }
 
@@ -303,13 +431,28 @@ class ImageCatalogManager {
 
         do {
             let searchId = id
-            let descriptor = FetchDescriptor<ImageCatalogData>(
-                predicate: #Predicate<ImageCatalogData> { $0.id == searchId }
-            )
-            let results = try context.fetch(descriptor)
 
-            if let catalogData = results.first {
-                catalogData.memo = memo?.isEmpty == true ? nil : memo
+            // まず個別画像から検索
+            let standaloneDescriptor = FetchDescriptor<StandaloneImageData>(
+                predicate: #Predicate<StandaloneImageData> { $0.id == searchId }
+            )
+            let standaloneResults = try context.fetch(standaloneDescriptor)
+
+            if let imageData = standaloneResults.first {
+                imageData.memo = memo?.isEmpty == true ? nil : memo
+                try context.save()
+                loadCatalog()
+                return
+            }
+
+            // 書庫内画像から検索
+            let archiveDescriptor = FetchDescriptor<ArchiveContentImageData>(
+                predicate: #Predicate<ArchiveContentImageData> { $0.id == searchId }
+            )
+            let archiveResults = try context.fetch(archiveDescriptor)
+
+            if let imageData = archiveResults.first {
+                imageData.memo = memo?.isEmpty == true ? nil : memo
                 try context.save()
                 loadCatalog()
             }
@@ -326,13 +469,25 @@ class ImageCatalogManager {
 
         do {
             let searchId = id
-            let descriptor = FetchDescriptor<ImageCatalogData>(
-                predicate: #Predicate<ImageCatalogData> { $0.id == searchId }
+
+            // 個別画像から検索・削除
+            let standaloneDescriptor = FetchDescriptor<StandaloneImageData>(
+                predicate: #Predicate<StandaloneImageData> { $0.id == searchId }
             )
-            let toDelete = try context.fetch(descriptor)
-            for item in toDelete {
+            let standaloneToDelete = try context.fetch(standaloneDescriptor)
+            for item in standaloneToDelete {
                 context.delete(item)
             }
+
+            // 書庫内画像から検索・削除
+            let archiveDescriptor = FetchDescriptor<ArchiveContentImageData>(
+                predicate: #Predicate<ArchiveContentImageData> { $0.id == searchId }
+            )
+            let archiveToDelete = try context.fetch(archiveDescriptor)
+            for item in archiveToDelete {
+                context.delete(item)
+            }
+
             try context.save()
             loadCatalog()
         } catch {
@@ -345,11 +500,20 @@ class ImageCatalogManager {
         guard isInitialized, let context = modelContext else { return }
 
         do {
-            let descriptor = FetchDescriptor<ImageCatalogData>()
-            let all = try context.fetch(descriptor)
-            for item in all {
+            // 個別画像を全削除
+            let standaloneDescriptor = FetchDescriptor<StandaloneImageData>()
+            let allStandalone = try context.fetch(standaloneDescriptor)
+            for item in allStandalone {
                 context.delete(item)
             }
+
+            // 書庫内画像を全削除
+            let archiveDescriptor = FetchDescriptor<ArchiveContentImageData>()
+            let allArchive = try context.fetch(archiveDescriptor)
+            for item in allArchive {
+                context.delete(item)
+            }
+
             try context.save()
             catalog.removeAll()
         } catch {

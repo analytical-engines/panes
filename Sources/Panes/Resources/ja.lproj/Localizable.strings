@@ -49,7 +49,10 @@
 // MARK: - SettingsView - History Settings
 
 "section_history_settings" = "履歴設定";
-"show_history_on_launch" = "起動時に履歴を表示";
+"history_display_mode" = "起動時の履歴表示";
+"history_display_always_show" = "表示";
+"history_display_always_hide" = "非表示";
+"history_display_restore_last" = "終了時の状態を復元";
 "max_history_count" = "最大保存件数";
 "history_count_unit" = "件";
 "max_history_description" = "履歴に保存するファイルの最大件数です";
@@ -255,7 +258,13 @@
 // MARK: - Image Catalog Settings
 
 "section_image_catalog" = "画像カタログ";
+"section_image_catalog_settings" = "画像カタログ設定";
 "image_catalog_filter" = "表示する画像";
 "image_catalog_filter_all" = "すべて";
 "image_catalog_filter_standalone" = "個別画像のみ";
 "image_catalog_filter_archive" = "書庫/フォルダ内のみ";
+"max_standalone_image_count" = "個別画像の最大保存件数";
+"max_standalone_image_description" = "個別画像ファイルの履歴を保存する最大件数";
+"max_archive_content_image_count" = "書庫内画像の最大保存件数";
+"max_archive_content_image_description" = "書庫/フォルダ内の画像の履歴を保存する最大件数";
+"current_image_catalog_count_format" = "現在の画像カタログ件数: %d件";

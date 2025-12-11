@@ -141,19 +141,17 @@ class BookViewModel {
             }
 
         case .dateAscending:
-            // 日付順（古い順）
+            // 日付順（古い順）- 事前にキャッシュしてからソート
+            let dates = indices.map { source.fileDate(at: $0) ?? Date.distantPast }
             sortedIndices = indices.sorted { i1, i2 in
-                let date1 = source.fileDate(at: i1) ?? Date.distantPast
-                let date2 = source.fileDate(at: i2) ?? Date.distantPast
-                return date1 < date2
+                dates[i1] < dates[i2]
             }
 
         case .dateDescending:
-            // 日付順（新しい順）
+            // 日付順（新しい順）- 事前にキャッシュしてからソート
+            let dates = indices.map { source.fileDate(at: $0) ?? Date.distantPast }
             sortedIndices = indices.sorted { i1, i2 in
-                let date1 = source.fileDate(at: i1) ?? Date.distantPast
-                let date2 = source.fileDate(at: i2) ?? Date.distantPast
-                return date1 > date2
+                dates[i1] > dates[i2]
             }
 
         case .random:
@@ -1607,16 +1605,16 @@ class BookViewModel {
                     return name1.localizedStandardCompare(name2) == .orderedAscending
                 }
             case .dateAscending:
+                // 事前にキャッシュしてからソート
+                let dates = indices.map { imageSource?.fileDate(at: $0) ?? Date.distantPast }
                 sortedIndices = indices.sorted { i1, i2 in
-                    let date1 = imageSource?.fileDate(at: i1) ?? Date.distantPast
-                    let date2 = imageSource?.fileDate(at: i2) ?? Date.distantPast
-                    return date1 < date2
+                    dates[i1] < dates[i2]
                 }
             case .dateDescending:
+                // 事前にキャッシュしてからソート
+                let dates = indices.map { imageSource?.fileDate(at: $0) ?? Date.distantPast }
                 sortedIndices = indices.sorted { i1, i2 in
-                    let date1 = imageSource?.fileDate(at: i1) ?? Date.distantPast
-                    let date2 = imageSource?.fileDate(at: i2) ?? Date.distantPast
-                    return date1 > date2
+                    dates[i1] > dates[i2]
                 }
             case .random:
                 sortedIndices = indices.shuffled()

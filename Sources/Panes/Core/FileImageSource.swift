@@ -7,6 +7,7 @@ class FileImageSource: ImageSource {
     private let imageURLs: [URL]
     private let baseName: String
     private let folderURL: URL?  // フォルダが指定された場合はそのURL
+    private let fileDatesCache: [Date?]  // ファイル日付のキャッシュ（init時に事前取得）
 
     init?(urls: [URL]) {
         // URLリストから画像ファイルを収集（フォルダの場合は中身を探索）
@@ -62,6 +63,15 @@ class FileImageSource: ImageSource {
             // 複数の場合は最初のアイテムの親ディレクトリ名
             let parentPath = collectedURLs[0].deletingLastPathComponent()
             self.baseName = parentPath.lastPathComponent
+        }
+
+        // ファイル日付を事前キャッシュ（バックグラウンドスレッドで実行されるため、ここで取得しておく）
+        self.fileDatesCache = self.imageURLs.map { url in
+            guard let attrs = try? fileManager.attributesOfItem(atPath: url.path),
+                  let date = attrs[.modificationDate] as? Date else {
+                return nil
+            }
+            return date
         }
     }
 
@@ -213,15 +223,10 @@ class FileImageSource: ImageSource {
     }
 
     func fileDate(at index: Int) -> Date? {
-        guard index >= 0 && index < imageURLs.count else {
+        guard index >= 0 && index < fileDatesCache.count else {
             return nil
         }
-        let url = imageURLs[index]
-        guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
-              let date = attrs[.modificationDate] as? Date else {
-            return nil
-        }
-        return date
+        return fileDatesCache[index]
     }
 
     /// 指定されたインデックスの画像ファイルのURLを取得

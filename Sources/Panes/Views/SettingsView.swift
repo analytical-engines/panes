@@ -157,13 +157,18 @@ struct WindowSettingsTab: View {
 struct HistorySettingsTab: View {
     @Environment(AppSettings.self) private var settings
     @Environment(FileHistoryManager.self) private var historyManager
+    @Environment(ImageCatalogManager.self) private var imageCatalogManager
 
     var body: some View {
         @Bindable var settings = settings
 
         Form {
             Section(L("section_history_settings")) {
-                Toggle(L("show_history_on_launch"), isOn: $settings.showHistoryOnLaunch)
+                Picker(L("history_display_mode"), selection: $settings.historyDisplayMode) {
+                    Text(L("history_display_always_show")).tag(HistoryDisplayMode.alwaysShow)
+                    Text(L("history_display_always_hide")).tag(HistoryDisplayMode.alwaysHide)
+                    Text(L("history_display_restore_last")).tag(HistoryDisplayMode.restoreLast)
+                }
 
                 HStack {
                     Text(L("max_history_count"))
@@ -174,6 +179,32 @@ struct HistorySettingsTab: View {
                     Text(L("history_count_unit"))
                 }
                 Text(L("max_history_description"))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Section(L("section_image_catalog_settings")) {
+                HStack {
+                    Text(L("max_standalone_image_count"))
+                    Spacer()
+                    TextField("", value: $settings.maxStandaloneImageCount, format: .number)
+                        .frame(width: 80)
+                        .textFieldStyle(.roundedBorder)
+                    Text(L("history_count_unit"))
+                }
+                Text(L("max_standalone_image_description"))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                HStack {
+                    Text(L("max_archive_content_image_count"))
+                    Spacer()
+                    TextField("", value: $settings.maxArchiveContentImageCount, format: .number)
+                        .frame(width: 80)
+                        .textFieldStyle(.roundedBorder)
+                    Text(L("history_count_unit"))
+                }
+                Text(L("max_archive_content_image_description"))
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -195,6 +226,15 @@ struct HistorySettingsTab: View {
                         historyManager.resetAllAccessCounts()
                     }
                     .disabled(historyManager.history.isEmpty)
+                }
+
+                HStack {
+                    Text(L("current_image_catalog_count_format", imageCatalogManager.catalog.count))
+                    Spacer()
+                    Button(L("clear_all")) {
+                        imageCatalogManager.clearAllCatalog()
+                    }
+                    .foregroundColor(.red)
                 }
             }
 

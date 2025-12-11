@@ -13,6 +13,13 @@ enum ImageCatalogFilter: String, CaseIterable {
     case archiveOnly = "archive"        // 書庫/フォルダ内画像のみ
 }
 
+/// 履歴表示モード
+enum HistoryDisplayMode: String, CaseIterable {
+    case alwaysShow = "alwaysShow"      // 常に表示
+    case alwaysHide = "alwaysHide"      // 常に非表示
+    case restoreLast = "restoreLast"    // 終了時の状態を復元
+}
+
 /// アプリ全体の設定を管理
 @MainActor
 @Observable
@@ -26,7 +33,10 @@ class AppSettings {
         static let defaultShowStatusBar = "defaultShowStatusBar"
         static let defaultLandscapeThreshold = "defaultLandscapeThreshold"
         static let maxHistoryCount = "maxHistoryCount"
-        static let showHistoryOnLaunch = "showHistoryOnLaunch"
+        static let maxStandaloneImageCount = "maxStandaloneImageCount"
+        static let maxArchiveContentImageCount = "maxArchiveContentImageCount"
+        static let historyDisplayMode = "historyDisplayMode"
+        static let lastHistoryVisible = "lastHistoryVisible"
         static let pageJumpCount = "pageJumpCount"
         static let sessionRestoreEnabled = "sessionRestoreEnabled"
         static let sessionConcurrentLoadingLimit = "sessionConcurrentLoadingLimit"
@@ -72,14 +82,41 @@ class AppSettings {
 
     // MARK: - 履歴設定
 
-    /// 履歴の最大保存件数
+    /// 書庫ファイル履歴の最大保存件数
     var maxHistoryCount: Int {
         didSet { defaults.set(maxHistoryCount, forKey: Keys.maxHistoryCount) }
     }
 
-    /// 起動時に履歴を表示するか
-    var showHistoryOnLaunch: Bool {
-        didSet { defaults.set(showHistoryOnLaunch, forKey: Keys.showHistoryOnLaunch) }
+    /// 個別画像カタログの最大保存件数
+    var maxStandaloneImageCount: Int {
+        didSet { defaults.set(maxStandaloneImageCount, forKey: Keys.maxStandaloneImageCount) }
+    }
+
+    /// 書庫/フォルダ内画像カタログの最大保存件数
+    var maxArchiveContentImageCount: Int {
+        didSet { defaults.set(maxArchiveContentImageCount, forKey: Keys.maxArchiveContentImageCount) }
+    }
+
+    /// 履歴表示モード
+    var historyDisplayMode: HistoryDisplayMode {
+        didSet { saveHistoryDisplayMode() }
+    }
+
+    /// 最後の履歴表示状態（restoreLastモード用）
+    var lastHistoryVisible: Bool {
+        didSet { defaults.set(lastHistoryVisible, forKey: Keys.lastHistoryVisible) }
+    }
+
+    /// 起動時に履歴を表示するかどうかを計算
+    var shouldShowHistoryOnLaunch: Bool {
+        switch historyDisplayMode {
+        case .alwaysShow:
+            return true
+        case .alwaysHide:
+            return false
+        case .restoreLast:
+            return lastHistoryVisible
+        }
     }
 
     /// 画像カタログ表示フィルタ
@@ -187,18 +224,46 @@ class AppSettings {
             pageJumpCount = 5  // デフォルト: 5回
         }
 
-        // 履歴最大件数の読み込み
+        // 書庫ファイル履歴最大件数の読み込み
         if defaults.object(forKey: Keys.maxHistoryCount) != nil {
             maxHistoryCount = defaults.integer(forKey: Keys.maxHistoryCount)
         } else {
             maxHistoryCount = 50  // デフォルト: 50件
         }
 
-        // 起動時の履歴表示の読み込み
-        if defaults.object(forKey: Keys.showHistoryOnLaunch) != nil {
-            showHistoryOnLaunch = defaults.bool(forKey: Keys.showHistoryOnLaunch)
+        // 個別画像カタログ最大件数の読み込み
+        if defaults.object(forKey: Keys.maxStandaloneImageCount) != nil {
+            maxStandaloneImageCount = defaults.integer(forKey: Keys.maxStandaloneImageCount)
         } else {
-            showHistoryOnLaunch = true  // デフォルト: 表示する
+            maxStandaloneImageCount = 10000  // デフォルト: 10000件（実質無制限）
+        }
+
+        // 書庫/フォルダ内画像カタログ最大件数の読み込み
+        if defaults.object(forKey: Keys.maxArchiveContentImageCount) != nil {
+            maxArchiveContentImageCount = defaults.integer(forKey: Keys.maxArchiveContentImageCount)
+        } else {
+            maxArchiveContentImageCount = 1000  // デフォルト: 1000件
+        }
+
+        // 履歴表示モードの読み込み
+        if let modeString = defaults.string(forKey: Keys.historyDisplayMode),
+           let mode = HistoryDisplayMode(rawValue: modeString) {
+            historyDisplayMode = mode
+        } else {
+            // 旧設定からの移行
+            if defaults.object(forKey: "showHistoryOnLaunch") != nil {
+                let oldValue = defaults.bool(forKey: "showHistoryOnLaunch")
+                historyDisplayMode = oldValue ? .alwaysShow : .alwaysHide
+            } else {
+                historyDisplayMode = .alwaysShow  // デフォルト: 常に表示
+            }
+        }
+
+        // 最後の履歴表示状態の読み込み
+        if defaults.object(forKey: Keys.lastHistoryVisible) != nil {
+            lastHistoryVisible = defaults.bool(forKey: Keys.lastHistoryVisible)
+        } else {
+            lastHistoryVisible = true  // デフォルト: 表示
         }
 
         // 画像カタログ表示フィルタの読み込み
@@ -281,6 +346,10 @@ class AppSettings {
 
     private func saveImageCatalogFilter() {
         defaults.set(imageCatalogFilter.rawValue, forKey: Keys.imageCatalogFilter)
+    }
+
+    private func saveHistoryDisplayMode() {
+        defaults.set(historyDisplayMode.rawValue, forKey: Keys.historyDisplayMode)
     }
 }
 

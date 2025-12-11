@@ -7,10 +7,19 @@ struct FocusedViewModelKey: FocusedValueKey {
     typealias Value = BookViewModel
 }
 
+struct FocusedShowHistoryKey: FocusedValueKey {
+    typealias Value = Binding<Bool>
+}
+
 extension FocusedValues {
     var bookViewModel: FocusedViewModelKey.Value? {
         get { self[FocusedViewModelKey.self] }
         set { self[FocusedViewModelKey.self] = newValue }
+    }
+
+    var showHistory: FocusedShowHistoryKey.Value? {
+        get { self[FocusedShowHistoryKey.self] }
+        set { self[FocusedShowHistoryKey.self] = newValue }
     }
 }
 
@@ -40,6 +49,7 @@ private func getDefaultWindowSize() -> CGSize {
 struct ImageViewerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @FocusedValue(\.bookViewModel) private var focusedViewModel: BookViewModel?
+    @FocusedValue(\.showHistory) private var focusedShowHistory: Binding<Bool>?
     @State private var historyManager = FileHistoryManager()
     @State private var imageCatalogManager = ImageCatalogManager()
     @State private var appSettings = AppSettings()
@@ -108,9 +118,16 @@ struct ImageViewerApp: App {
             }
 
             CommandGroup(after: .sidebar) {
+                // フォーカスされているウィンドウの履歴表示をトグル
                 Toggle(L("menu_show_history"), isOn: Binding(
-                    get: { appSettings.showHistoryOnLaunch },
-                    set: { appSettings.showHistoryOnLaunch = $0 }
+                    get: { focusedShowHistory?.wrappedValue ?? appSettings.lastHistoryVisible },
+                    set: { newValue in
+                        focusedShowHistory?.wrappedValue = newValue
+                        // 「終了時の状態を復元」モードの場合は保存
+                        if appSettings.historyDisplayMode == .restoreLast {
+                            appSettings.lastHistoryVisible = newValue
+                        }
+                    }
                 ))
                 .keyboardShortcut("h", modifiers: [.command, .shift])
 
@@ -248,6 +265,7 @@ struct ImageViewerApp: App {
             SettingsView()
                 .environment(appSettings)
                 .environment(historyManager)
+                .environment(imageCatalogManager)
                 .environment(sessionManager)
         }
 

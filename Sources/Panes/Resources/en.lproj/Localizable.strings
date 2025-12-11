@@ -49,7 +49,10 @@
 // MARK: - SettingsView - History Settings
 
 "section_history_settings" = "History Settings";
-"show_history_on_launch" = "Show history on launch";
+"history_display_mode" = "History on Launch";
+"history_display_always_show" = "Show";
+"history_display_always_hide" = "Hide";
+"history_display_restore_last" = "Restore Last State";
 "max_history_count" = "Maximum History Count";
 "history_count_unit" = "items";
 "max_history_description" = "Maximum number of files to save in history";
@@ -255,7 +258,13 @@
 // MARK: - Image Catalog Settings
 
 "section_image_catalog" = "Image Catalog";
+"section_image_catalog_settings" = "Image Catalog Settings";
 "image_catalog_filter" = "Show images";
 "image_catalog_filter_all" = "All";
 "image_catalog_filter_standalone" = "Standalone only";
 "image_catalog_filter_archive" = "Archive/Folder content only";
+"max_standalone_image_count" = "Standalone Image Limit";
+"max_standalone_image_description" = "Maximum number of standalone image records to save";
+"max_archive_content_image_count" = "Archive Content Image Limit";
+"max_archive_content_image_description" = "Maximum number of archive/folder content image records to save";
+"current_image_catalog_count_format" = "Current image catalog count: %d items";

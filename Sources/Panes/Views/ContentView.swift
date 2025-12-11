@@ -73,6 +73,9 @@ struct ContentView: View {
     // 表示順序変更用（コピー/ペースト方式）
     @State private var copiedPageIndex: Int?
 
+    // セッション中の履歴表示状態（起動時にAppSettingsから初期化）
+    @State private var showHistory: Bool = true
+
     // メインビューのフォーカス管理
     @FocusState private var isMainViewFocused: Bool
 
@@ -145,6 +148,7 @@ struct ContentView: View {
                 selectedTab: $historySelectedTab,
                 lastOpenedArchiveId: $lastOpenedArchiveId,
                 lastOpenedImageId: $lastOpenedImageId,
+                showHistory: $showHistory,
                 scrollTrigger: scrollTrigger,
                 onOpenFile: openFilePicker,
                 onOpenHistoryFile: openHistoryFile,
@@ -488,13 +492,17 @@ struct ContentView: View {
     @ViewBuilder
     private var initialScreenContextMenu: some View {
         Button(action: {
-            appSettings.showHistoryOnLaunch.toggle()
+            showHistory.toggle()
+            // 「終了時の状態を復元」モードの場合は現在の状態を保存
+            if appSettings.historyDisplayMode == .restoreLast {
+                appSettings.lastHistoryVisible = showHistory
+            }
         }) {
             Label(
-                appSettings.showHistoryOnLaunch
+                showHistory
                     ? L("menu_hide_history")
                     : L("menu_show_history_toggle"),
-                systemImage: appSettings.showHistoryOnLaunch
+                systemImage: showHistory
                     ? "eye.slash"
                     : "eye"
             )
@@ -614,6 +622,7 @@ struct ContentView: View {
         .focused($isMainViewFocused)
         .focusEffectDisabled()
         .focusedValue(\.bookViewModel, viewModel)
+        .focusedValue(\.showHistory, $showHistory)
         .background(WindowNumberGetter(windowNumber: $myWindowNumber))
         .navigationTitle(viewModel.windowTitle)
         .onAppear(perform: handleOnAppear)
@@ -876,6 +885,9 @@ struct ContentView: View {
 
         // 履歴マネージャーにもアプリ設定を設定
         historyManager.appSettings = appSettings
+
+        // 起動時の履歴表示状態を設定から初期化
+        showHistory = appSettings.shouldShowHistoryOnLaunch
 
         // このウィンドウを最後に作成されたウィンドウとして登録
         ContentView.lastCreatedWindowIDLock.lock()
@@ -1353,6 +1365,7 @@ struct InitialScreenView: View {
     @Binding var selectedTab: HistoryTab
     @Binding var lastOpenedArchiveId: String?
     @Binding var lastOpenedImageId: String?
+    @Binding var showHistory: Bool  // セッション中の履歴表示状態
     let scrollTrigger: Int
     let onOpenFile: () -> Void
     let onOpenHistoryFile: (String) -> Void
@@ -1382,7 +1395,7 @@ struct InitialScreenView: View {
             .buttonStyle(.borderedProminent)
 
             // 履歴表示
-            HistoryListView(filterText: $filterText, showFilterField: $showFilterField, selectedTab: $selectedTab, lastOpenedArchiveId: $lastOpenedArchiveId, lastOpenedImageId: $lastOpenedImageId, scrollTrigger: scrollTrigger, onOpenHistoryFile: onOpenHistoryFile, onOpenInNewWindow: onOpenInNewWindow, onEditMemo: onEditMemo, onEditImageMemo: onEditImageMemo, onOpenImageFile: onOpenImageCatalogFile)
+            HistoryListView(filterText: $filterText, showFilterField: $showFilterField, selectedTab: $selectedTab, lastOpenedArchiveId: $lastOpenedArchiveId, lastOpenedImageId: $lastOpenedImageId, showHistory: $showHistory, scrollTrigger: scrollTrigger, onOpenHistoryFile: onOpenHistoryFile, onOpenInNewWindow: onOpenInNewWindow, onEditMemo: onEditMemo, onEditImageMemo: onEditImageMemo, onOpenImageFile: onOpenImageCatalogFile)
         }
     }
 }
@@ -1397,6 +1410,7 @@ struct HistoryListView: View {
     @Binding var selectedTab: HistoryTab
     @Binding var lastOpenedArchiveId: String?
     @Binding var lastOpenedImageId: String?
+    @Binding var showHistory: Bool  // セッション中の履歴表示状態
     let scrollTrigger: Int
     @FocusState private var isFilterFocused: Bool
     @State private var dismissedError = false
@@ -1495,7 +1509,7 @@ struct HistoryListView: View {
             }
 
             // 履歴表示が有効で、書庫または画像がある場合
-            if appSettings.showHistoryOnLaunch && (!recentHistory.isEmpty || !imageCatalog.isEmpty) {
+            if showHistory && (!recentHistory.isEmpty || !imageCatalog.isEmpty) {
                 VStack(alignment: .leading, spacing: 8) {
                     // タブ選択と件数表示
                     HStack {
@@ -1524,11 +1538,29 @@ struct HistoryListView: View {
                         // 件数表示（0件の場合は非表示）
                         let count = selectedTab == .archives ? recentHistory.count : imageCatalog.count
                         if count > 0 {
-                            Text(selectedTab == .archives
-                                ? "[\(recentHistory.count)/\(appSettings.maxHistoryCount)]"
-                                : "[\(imageCatalog.count)]")
-                                .foregroundColor(.gray)
-                                .font(.caption)
+                            if selectedTab == .archives {
+                                Text("[\(recentHistory.count)/\(appSettings.maxHistoryCount)]")
+                                    .foregroundColor(.gray)
+                                    .font(.caption)
+                            } else {
+                                // 画像カタログ: フィルタに応じて上限を表示
+                                let standaloneCount = imageCatalog.filter { $0.catalogType == .standalone }.count
+                                let archiveCount = imageCatalog.filter { $0.catalogType == .archiveContent }.count
+                                switch appSettings.imageCatalogFilter {
+                                case .all:
+                                    Text("[\(standaloneCount)/\(appSettings.maxStandaloneImageCount) + \(archiveCount)/\(appSettings.maxArchiveContentImageCount)]")
+                                        .foregroundColor(.gray)
+                                        .font(.caption)
+                                case .standaloneOnly:
+                                    Text("[\(standaloneCount)/\(appSettings.maxStandaloneImageCount)]")
+                                        .foregroundColor(.gray)
+                                        .font(.caption)
+                                case .archiveOnly:
+                                    Text("[\(archiveCount)/\(appSettings.maxArchiveContentImageCount)]")
+                                        .foregroundColor(.gray)
+                                        .font(.caption)
+                                }
+                            }
                         }
                     }
                     .padding(.top, 20)
