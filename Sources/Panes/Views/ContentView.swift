@@ -1624,6 +1624,7 @@ struct HistoryListView: View {
                     .padding(.vertical, 4)
                 }
                 .scrollIndicators(.visible)
+                .preferredColorScheme(.dark)
                 .frame(maxHeight: 300)
                 .task(id: scrollTrigger) {
                     guard scrollTrigger > 0 else { return }
@@ -1705,6 +1706,7 @@ struct HistoryListView: View {
                     .padding(.vertical, 4)
                 }
                 .scrollIndicators(.visible)
+                .preferredColorScheme(.dark)
                 .frame(maxHeight: 300)
                 .task(id: scrollTrigger) {
                     guard scrollTrigger > 0 else { return }
