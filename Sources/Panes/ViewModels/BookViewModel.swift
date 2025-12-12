@@ -1511,15 +1511,20 @@ class BookViewModel {
     private func saveViewState() {
         guard let source = imageSource,
               let fileKey = source.generateFileKey() else {
+            debugLog("💾 saveViewState: SKIPPED - no source or fileKey", level: .normal)
             return
         }
+
+        debugLog("💾 saveViewState: \(source.sourceName), fileKey=\(fileKey.prefix(20))...", level: .normal)
 
         // エントリIDを取得（contentKey互換性のため、実際のエントリを検索）
         let entryId: String
         if let entry = historyManager?.findEntry(fileName: source.sourceName, fileKey: fileKey) {
             entryId = entry.id
+            debugLog("💾 saveViewState: found existing entry id=\(entryId)", level: .verbose)
         } else {
             entryId = FileHistoryEntry.generateId(fileName: source.sourceName, fileKey: fileKey)
+            debugLog("💾 saveViewState: generated new entry id=\(entryId)", level: .verbose)
         }
 
         // 表示モードを保存（エントリIDベース）
@@ -1545,25 +1550,32 @@ class BookViewModel {
     private func restoreViewState() {
         guard let source = imageSource,
               let fileKey = source.generateFileKey() else {
+            debugLog("📂 restoreViewState: SKIPPED - no source or fileKey", level: .normal)
             return
         }
+
+        debugLog("📂 restoreViewState: \(source.sourceName), fileKey=\(fileKey.prefix(20))...", level: .normal)
 
         // エントリIDを取得（contentKey互換性のため、実際のエントリを検索）
         // 旧フォーマットのfileKeyで保存されたエントリにも対応
         let entryId: String
         if let entry = historyManager?.findEntry(fileName: source.sourceName, fileKey: fileKey) {
             entryId = entry.id
+            debugLog("📂 restoreViewState: found existing entry id=\(entryId)", level: .verbose)
         } else {
             // エントリが見つからない場合は新規生成
             entryId = FileHistoryEntry.generateId(fileName: source.sourceName, fileKey: fileKey)
+            debugLog("📂 restoreViewState: generated new entry id=\(entryId)", level: .verbose)
         }
 
         // ページ表示設定を復元（カスタムソート順序もここに含まれるため、ソート復元より先に行う）
         if let settings = historyManager?.loadPageDisplaySettings(forFileName: source.sourceName, fileKey: fileKey) {
             pageDisplaySettings = settings
+            debugLog("📂 restoreViewState: loaded page settings - singlePages=\(settings.userForcedSinglePageIndices.count), hidden=\(settings.hiddenPageIndices.count)", level: .normal)
         } else {
             // 設定が存在しない場合は空の設定で初期化
             pageDisplaySettings = PageDisplaySettings()
+            debugLog("📂 restoreViewState: no page settings found, using defaults", level: .normal)
         }
 
         // 表示モードを復元（エントリIDベースのみ）

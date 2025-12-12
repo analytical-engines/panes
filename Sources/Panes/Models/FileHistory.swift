@@ -182,6 +182,7 @@ class FileHistoryManager {
         if isInitialized {
             migrateFromUserDefaultsIfNeeded()
             migratePageSettingsFromUserDefaultsIfNeeded()
+            migrateEntryIdsToNewFormatIfNeeded()
             loadHistory()
         }
         // エラー時はフォールバックせず、空の履歴のまま
@@ -448,6 +449,64 @@ class FileHistoryManager {
         }
     }
 
+    /// エントリIDを旧形式から新形式に一括移行
+    /// 旧形式: fileKeyをそのままIDとして使用（またはSwiftDataが自動生成した値）
+    /// 新形式: generateId(fileName, fileKey)で生成した16桁の16進数
+    private func migrateEntryIdsToNewFormatIfNeeded() {
+        guard let context = modelContext else { return }
+
+        do {
+            let descriptor = FetchDescriptor<FileHistoryData>()
+            let allEntries = try context.fetch(descriptor)
+
+            var migratedCount = 0
+            for entry in allEntries {
+                // fileKeyを旧形式から新形式に変換（必要な場合）
+                // 旧: "ファイル名-サイズ-ハッシュ", 新: "サイズ-ハッシュ"
+                let newFileKey = Self.extractContentKey(from: entry.fileKey)
+                let expectedId = FileHistoryData.generateId(fileName: entry.fileName, fileKey: newFileKey)
+
+                // IDまたはfileKeyが期待値と異なる場合は移行が必要
+                if entry.id != expectedId || entry.fileKey != newFileKey {
+                    entry.migrateIdToNewFormat(fileName: entry.fileName, fileKey: newFileKey)
+                    migratedCount += 1
+                }
+            }
+
+            if migratedCount > 0 {
+                try context.save()
+                DebugLogger.log("📦 Migrated \(migratedCount) entry IDs to new format", level: .normal)
+            }
+        } catch {
+            DebugLogger.log("❌ Entry ID migration failed: \(error)", level: .minimal)
+        }
+    }
+
+    /// fileKeyからサイズ-ハッシュ部分を抽出（旧フォーマット対応）
+    /// 旧: "ファイル名-12345-abcdef1234567890"
+    /// 新: "12345-abcdef1234567890"
+    private static func extractContentKey(from fileKey: String) -> String {
+        // ハッシュは16文字固定、その前にハイフン、さらにその前にサイズ（数字のみ）
+        let components = fileKey.split(separator: "-")
+        guard components.count >= 2 else { return fileKey }
+
+        // 最後の要素がハッシュ（16文字の16進数）
+        let lastComponent = String(components.last!)
+        guard lastComponent.count == 16,
+              lastComponent.allSatisfy({ $0.isHexDigit }) else {
+            return fileKey
+        }
+
+        // 最後から2番目がサイズ（数字のみ）
+        let secondLast = String(components[components.count - 2])
+        guard secondLast.allSatisfy({ $0.isNumber }) else {
+            return fileKey
+        }
+
+        // サイズ-ハッシュ の形式で返す
+        return "\(secondLast)-\(lastComponent)"
+    }
+
     /// 履歴を読み込む
     private func loadHistory() {
         guard let context = modelContext else {
@@ -685,32 +744,22 @@ class FileHistoryManager {
         guard let context = modelContext else { return }
 
         do {
-            // エントリIDで検索（ファイル名+fileKeyのハッシュ）
             let entryId = FileHistoryEntry.generateId(fileName: fileName, fileKey: fileKey)
             let searchId = entryId
             var descriptor = FetchDescriptor<FileHistoryData>(
                 predicate: #Predicate<FileHistoryData> { $0.id == searchId }
             )
             descriptor.fetchLimit = 1
-            var existing = try context.fetch(descriptor)
-
-            // ID検索で見つからない場合、contentKey + fileNameで検索（旧フォーマット対応）
-            if existing.isEmpty {
-                let contentKeyMatches = try findByContentKey(fileKey, in: context)
-                if let match = contentKeyMatches.first(where: { $0.fileName == fileName }) {
-                    existing = [match]
-                }
-            }
+            let existing = try context.fetch(descriptor)
 
             if let historyData = existing.first {
                 // 既存エントリを更新
                 historyData.lastAccessDate = Date()
                 historyData.accessCount += 1
                 historyData.filePath = filePath
-                // fileKeyを新フォーマットに更新
-                historyData.fileKey = fileKey
             } else {
                 // 新規エントリを作成
+                DebugLogger.log("📊 recordAccess: creating new entry for \(fileName), id=\(entryId)", level: .normal)
                 let newData = FileHistoryData(fileKey: fileKey, filePath: filePath, fileName: fileName)
                 context.insert(newData)
 
@@ -724,11 +773,10 @@ class FileHistoryManager {
         }
     }
 
-    /// contentKey（サイズ-ハッシュ）で履歴を検索（旧フォーマット対応）
+    /// contentKey（サイズ-ハッシュ）で同一内容のファイルを検索
     private func findByContentKey(_ fileKey: String, in context: ModelContext) throws -> [FileHistoryData] {
         let contentKey = extractContentKey(from: fileKey)
 
-        // 全件取得してフィルタリング（旧フォーマット対応のため）
         let descriptor = FetchDescriptor<FileHistoryData>()
         let allEntries = try context.fetch(descriptor)
 
@@ -737,7 +785,7 @@ class FileHistoryManager {
         }
     }
 
-    /// fileKeyからサイズ-ハッシュ部分を抽出（旧フォーマット対応）
+    /// fileKeyからサイズ-ハッシュ部分を抽出
     private func extractContentKey(from fileKey: String) -> String {
         let components = fileKey.split(separator: "-")
         guard components.count >= 2 else { return fileKey }
@@ -761,34 +809,24 @@ class FileHistoryManager {
         return Array(history.prefix(limit))
     }
 
-    /// ファイル名とfileKeyからエントリを検索（contentKey互換性あり）
+    /// ファイル名とfileKeyからエントリを検索
     /// - Parameters:
     ///   - fileName: ファイル名
-    ///   - fileKey: ファイルキー（新/旧フォーマット両対応）
+    ///   - fileKey: ファイルキー
     /// - Returns: 見つかったエントリ、なければnil
     func findEntry(fileName: String, fileKey: String) -> FileHistoryEntry? {
         guard isInitialized, let context = modelContext else {
             return nil
         }
         do {
-            // まずIDで検索
             let entryId = FileHistoryEntry.generateId(fileName: fileName, fileKey: fileKey)
             let searchId = entryId
             var descriptor = FetchDescriptor<FileHistoryData>(
                 predicate: #Predicate<FileHistoryData> { $0.id == searchId }
             )
             descriptor.fetchLimit = 1
-            let idResults = try context.fetch(descriptor)
-            if let found = idResults.first {
-                return found.toEntry()
-            }
-
-            // contentKey + fileNameで検索
-            let contentKeyMatches = try findByContentKey(fileKey, in: context)
-            if let match = contentKeyMatches.first(where: { $0.fileName == fileName }) {
-                return match.toEntry()
-            }
-            return nil
+            let results = try context.fetch(descriptor)
+            return results.first?.toEntry()
         } catch {
             return nil
         }
@@ -823,18 +861,11 @@ class FileHistoryManager {
             return
         }
         do {
-            // まず完全一致で検索
             let searchKey = fileKey
-            var descriptor = FetchDescriptor<FileHistoryData>(
+            let descriptor = FetchDescriptor<FileHistoryData>(
                 predicate: #Predicate<FileHistoryData> { $0.fileKey == searchKey }
             )
-            descriptor.fetchLimit = 1
-            var toDelete = try context.fetch(descriptor)
-
-            // 見つからない場合、contentKey（サイズ-ハッシュ）で旧フォーマットを検索
-            if toDelete.isEmpty {
-                toDelete = try findByContentKey(fileKey, in: context)
-            }
+            let toDelete = try context.fetch(descriptor)
 
             for item in toDelete {
                 context.delete(item)
@@ -991,18 +1022,12 @@ class FileHistoryManager {
     private func loadPageDisplaySettingsFromSwiftData(for fileKey: String) -> PageDisplaySettings? {
         guard let context = modelContext else { return nil }
         do {
-            // まず完全一致で検索
             let searchKey = fileKey
             var descriptor = FetchDescriptor<FileHistoryData>(
                 predicate: #Predicate<FileHistoryData> { $0.fileKey == searchKey }
             )
             descriptor.fetchLimit = 1
-            var results = try context.fetch(descriptor)
-
-            // 見つからない場合、contentKey（サイズ-ハッシュ）で旧フォーマットを検索
-            if results.isEmpty {
-                results = try findByContentKey(fileKey, in: context)
-            }
+            let results = try context.fetch(descriptor)
 
             guard let entry = results.first else { return nil }
 
@@ -1081,6 +1106,7 @@ class FileHistoryManager {
     /// エントリIDを計算し、pageSettingsRefがあれば参照先に保存
     func savePageDisplaySettings(_ settings: PageDisplaySettings, forFileName fileName: String, fileKey: String) {
         let entryId = FileHistoryEntry.generateId(fileName: fileName, fileKey: fileKey)
+        DebugLogger.log("💾 savePageDisplaySettings: fileName=\(fileName), entryId=\(entryId), singlePages=\(settings.userForcedSinglePageIndices.count)", level: .normal)
         savePageDisplaySettingsById(settings, for: entryId)
     }
 
@@ -1088,23 +1114,15 @@ class FileHistoryManager {
     private func savePageDisplaySettingsToSwiftData(_ settings: PageDisplaySettings, for fileKey: String) {
         guard let context = modelContext else { return }
         do {
-            // まず完全一致で検索
             let searchKey = fileKey
             var descriptor = FetchDescriptor<FileHistoryData>(
                 predicate: #Predicate<FileHistoryData> { $0.fileKey == searchKey }
             )
             descriptor.fetchLimit = 1
-            var results = try context.fetch(descriptor)
-
-            // 見つからない場合、contentKey（サイズ-ハッシュ）で旧フォーマットを検索
-            if results.isEmpty {
-                results = try findByContentKey(fileKey, in: context)
-            }
+            let results = try context.fetch(descriptor)
 
             if let historyData = results.first {
                 historyData.setPageSettings(settings)
-                // fileKeyも新フォーマットに更新
-                historyData.fileKey = fileKey
                 try context.save()
             } else {
                 DebugLogger.log("⚠️ No history entry found for fileKey: \(fileKey)", level: .verbose)
@@ -1146,14 +1164,16 @@ class FileHistoryManager {
                     if let refEntry = refResults.first {
                         refEntry.setPageSettings(settings)
                         try context.save()
+                        DebugLogger.log("💾 savePageDisplaySettingsById: saved to ref entry \(refId)", level: .verbose)
                         return
                     }
                 }
                 // 自身に保存
                 historyData.setPageSettings(settings)
                 try context.save()
+                DebugLogger.log("💾 savePageDisplaySettingsById: saved to entry \(entryId)", level: .verbose)
             } else {
-                DebugLogger.log("⚠️ No history entry found for id: \(entryId)", level: .verbose)
+                DebugLogger.log("⚠️ No history entry found for id: \(entryId)", level: .normal)
             }
         } catch {
             DebugLogger.log("❌ Failed to save page settings by id: \(error)", level: .minimal)

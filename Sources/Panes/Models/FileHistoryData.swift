@@ -82,4 +82,14 @@ final class FileHistoryData {
     func setPageSettings(_ settings: PageDisplaySettings) {
         pageSettingsData = try? JSONEncoder().encode(settings)
     }
+
+    /// 旧形式のIDを新形式に移行
+    /// SwiftDataは@Attribute(.unique)でもプロパティの更新は許可される
+    func migrateIdToNewFormat(fileName: String, fileKey: String) {
+        let newId = FileHistoryData.generateId(fileName: fileName, fileKey: fileKey)
+        if id != newId {
+            id = newId
+            self.fileKey = fileKey  // fileKeyも同時に更新
+        }
+    }
 }
