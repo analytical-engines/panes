@@ -101,6 +101,8 @@
 "menu_reveal_in_finder" = "Finderで表示";
 "menu_open_in_new_window" = "新しいウィンドウで開く";
 "menu_edit_memo" = "メモを編集";
+"menu_edit_archive_memo" = "書庫のメモを編集";
+"menu_edit_image_memo" = "画像のメモを編集";
 "menu_sort" = "ソート順";
 
 // MARK: - Memo
@@ -268,3 +270,14 @@
 "max_archive_content_image_count" = "書庫内画像の最大保存件数";
 "max_archive_content_image_description" = "書庫/フォルダ内の画像の履歴を保存する最大件数";
 "current_image_catalog_count_format" = "現在の画像カタログ件数: %d件";
+
+// MARK: - Unified Search
+
+"unified_search_placeholder" = "検索...";
+"search_no_results" = "検索結果がありません";
+"search_type_archive" = "書庫";
+"search_type_image" = "画像";
+"search_type_standalone" = "個別画像";
+"search_type_content" = "書庫内画像";
+"search_filter_all" = "すべて";
+"search_filter_menu_title" = "絞り込み";

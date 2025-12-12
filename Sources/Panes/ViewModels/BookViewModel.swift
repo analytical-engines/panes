@@ -430,17 +430,85 @@ class BookViewModel {
         return imageSource != nil
     }
 
-    /// 現在のファイルのメモを取得
+    /// 現在表示中が書庫/フォルダ内の画像かどうか（個別画像ファイルでない）
+    var isViewingArchiveContent: Bool {
+        guard let source = imageSource else { return false }
+        return !source.isStandaloneImageSource
+    }
+
+    /// 現在のファイル（書庫/フォルダ）のメモを取得
     func getCurrentMemo() -> String? {
         guard let fileKey = currentFileKey else { return nil }
         return historyManager?.history.first(where: { $0.fileKey == fileKey })?.memo
     }
 
-    /// 現在のファイルのメモを更新
+    /// 現在のファイル（書庫/フォルダ）のメモを更新
     func updateCurrentMemo(_ memo: String?) {
         guard let fileKey = currentFileKey,
               let entry = historyManager?.history.first(where: { $0.fileKey == fileKey }) else { return }
         historyManager?.updateMemo(for: entry.id, memo: memo)
+    }
+
+    /// 現在表示中の画像のメモを取得（ImageCatalogから）
+    /// - Parameter pageIndex: 表示ページインデックス（nilなら現在のページ）
+    func getCurrentImageMemo(at pageIndex: Int? = nil) -> String? {
+        guard let source = imageSource,
+              let catalogManager = imageCatalogManager else { return nil }
+
+        let targetPage = pageIndex ?? currentPage
+        let srcIndex = sourceIndex(for: targetPage)
+
+        guard let fileKey = source.generateImageFileKey(at: srcIndex) else { return nil }
+
+        // ImageCatalogからエントリを検索
+        return catalogManager.catalog.first(where: { $0.fileKey == fileKey })?.memo
+    }
+
+    /// 現在表示中の画像のメモを更新（ImageCatalogに保存）
+    /// - Parameters:
+    ///   - memo: 新しいメモ（nilで削除）
+    ///   - pageIndex: 表示ページインデックス（nilなら現在のページ）
+    func updateCurrentImageMemo(_ memo: String?, at pageIndex: Int? = nil) {
+        guard let source = imageSource,
+              let catalogManager = imageCatalogManager else { return }
+
+        let targetPage = pageIndex ?? currentPage
+        let srcIndex = sourceIndex(for: targetPage)
+
+        guard let fileKey = source.generateImageFileKey(at: srcIndex) else { return }
+
+        // ImageCatalogからエントリを検索してメモを更新
+        if let entry = catalogManager.catalog.first(where: { $0.fileKey == fileKey }) {
+            catalogManager.updateMemo(for: entry.id, memo: memo)
+        }
+    }
+
+    /// 現在表示中の画像がImageCatalogに登録されているか
+    /// - Parameter pageIndex: 表示ページインデックス（nilなら現在のページ）
+    func hasCurrentImageInCatalog(at pageIndex: Int? = nil) -> Bool {
+        guard let source = imageSource,
+              let catalogManager = imageCatalogManager else { return false }
+
+        let targetPage = pageIndex ?? currentPage
+        let srcIndex = sourceIndex(for: targetPage)
+
+        guard let fileKey = source.generateImageFileKey(at: srcIndex) else { return false }
+
+        return catalogManager.catalog.contains(where: { $0.fileKey == fileKey })
+    }
+
+    /// 現在表示中の画像のImageCatalog IDを取得
+    /// - Parameter pageIndex: 表示ページインデックス（nilなら現在のページ）
+    func getCurrentImageCatalogId(at pageIndex: Int? = nil) -> String? {
+        guard let source = imageSource,
+              let catalogManager = imageCatalogManager else { return nil }
+
+        let targetPage = pageIndex ?? currentPage
+        let srcIndex = sourceIndex(for: targetPage)
+
+        guard let fileKey = source.generateImageFileKey(at: srcIndex) else { return nil }
+
+        return catalogManager.catalog.first(where: { $0.fileKey == fileKey })?.id
     }
 
     /// 画像ソースを開く（zipまたは画像ファイル）

@@ -101,6 +101,8 @@
 "menu_reveal_in_finder" = "Reveal in Finder";
 "menu_open_in_new_window" = "Open in New Window";
 "menu_edit_memo" = "Edit Memo";
+"menu_edit_archive_memo" = "Edit Archive Memo";
+"menu_edit_image_memo" = "Edit Image Memo";
 "menu_sort" = "Sort Order";
 
 // MARK: - Memo
@@ -268,3 +270,14 @@
 "max_archive_content_image_count" = "Archive Content Image Limit";
 "max_archive_content_image_description" = "Maximum number of archive/folder content image records to save";
 "current_image_catalog_count_format" = "Current image catalog count: %d items";
+
+// MARK: - Unified Search
+
+"unified_search_placeholder" = "Search...";
+"search_no_results" = "No results found";
+"search_type_archive" = "Archives";
+"search_type_image" = "Images";
+"search_type_standalone" = "Standalone";
+"search_type_content" = "Archive Content";
+"search_filter_all" = "All";
+"search_filter_menu_title" = "Filter";

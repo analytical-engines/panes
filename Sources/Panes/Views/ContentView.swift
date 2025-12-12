@@ -444,11 +444,38 @@ struct ContentView: View {
         Divider()
 
         // メモ編集
-        Button(action: {
-            editingMemoText = viewModel.getCurrentMemo() ?? ""
-            showMemoEdit = true
-        }) {
-            Label(L("menu_edit_memo"), systemImage: "square.and.pencil")
+        if viewModel.isViewingArchiveContent {
+            // 書庫/フォルダ内画像の場合は書庫メモと画像メモの両方を編集可能
+            Button(action: {
+                editingMemoFileKey = viewModel.currentFileKey
+                editingMemoText = viewModel.getCurrentMemo() ?? ""
+                showMemoEdit = true
+            }) {
+                Label(L("menu_edit_archive_memo"), systemImage: "archivebox")
+            }
+
+            Button(action: {
+                editingImageCatalogId = viewModel.getCurrentImageCatalogId()
+                editingMemoText = viewModel.getCurrentImageMemo() ?? ""
+                showMemoEdit = true
+            }) {
+                Label(L("menu_edit_image_memo"), systemImage: "photo")
+            }
+            .disabled(!viewModel.hasCurrentImageInCatalog())
+        } else {
+            // 個別画像の場合は従来通り
+            Button(action: {
+                if viewModel.hasCurrentImageInCatalog() {
+                    editingImageCatalogId = viewModel.getCurrentImageCatalogId()
+                    editingMemoText = viewModel.getCurrentImageMemo() ?? ""
+                } else {
+                    editingMemoFileKey = viewModel.currentFileKey
+                    editingMemoText = viewModel.getCurrentMemo() ?? ""
+                }
+                showMemoEdit = true
+            }) {
+                Label(L("menu_edit_memo"), systemImage: "square.and.pencil")
+            }
         }
 
         Divider()
@@ -557,11 +584,38 @@ struct ContentView: View {
         Divider()
 
         // メモ編集
-        Button(action: {
-            editingMemoText = viewModel.getCurrentMemo() ?? ""
-            showMemoEdit = true
-        }) {
-            Label(L("menu_edit_memo"), systemImage: "square.and.pencil")
+        if viewModel.isViewingArchiveContent {
+            // 書庫/フォルダ内画像の場合は書庫メモと画像メモの両方を編集可能
+            Button(action: {
+                editingMemoFileKey = viewModel.currentFileKey
+                editingMemoText = viewModel.getCurrentMemo() ?? ""
+                showMemoEdit = true
+            }) {
+                Label(L("menu_edit_archive_memo"), systemImage: "archivebox")
+            }
+
+            Button(action: {
+                editingImageCatalogId = viewModel.getCurrentImageCatalogId()
+                editingMemoText = viewModel.getCurrentImageMemo() ?? ""
+                showMemoEdit = true
+            }) {
+                Label(L("menu_edit_image_memo"), systemImage: "photo")
+            }
+            .disabled(!viewModel.hasCurrentImageInCatalog())
+        } else {
+            // 個別画像の場合は従来通り
+            Button(action: {
+                if viewModel.hasCurrentImageInCatalog() {
+                    editingImageCatalogId = viewModel.getCurrentImageCatalogId()
+                    editingMemoText = viewModel.getCurrentImageMemo() ?? ""
+                } else {
+                    editingMemoFileKey = viewModel.currentFileKey
+                    editingMemoText = viewModel.getCurrentMemo() ?? ""
+                }
+                showMemoEdit = true
+            }) {
+                Label(L("menu_edit_memo"), systemImage: "square.and.pencil")
+            }
         }
 
         Divider()
@@ -759,6 +813,8 @@ struct ContentView: View {
         .onKeyPress(keys: [.leftArrow]) { handleLeftArrow($0) }
         .onKeyPress(keys: [.rightArrow]) { handleRightArrow($0) }
         .onKeyPress(keys: [.space]) { press in
+            // ファイルを開いている時のみページ送り（検索フィールドへの入力を妨げない）
+            guard viewModel.hasOpenFile else { return .ignored }
             if press.modifiers.contains(.shift) { viewModel.previousPage() }
             else { viewModel.nextPage() }
             return .handled
@@ -1156,6 +1212,8 @@ struct ContentView: View {
     // MARK: - Key Handlers
 
     private func handleLeftArrow(_ press: KeyPress) -> KeyPress.Result {
+        // ファイルを開いている時のみページ送り（検索フィールドへの入力を妨げない）
+        guard viewModel.hasOpenFile else { return .ignored }
         if press.modifiers.contains(.shift) {
             // Shift+←: 右→左なら正方向シフト、左→右なら逆方向シフト
             viewModel.shiftPage(forward: viewModel.readingDirection == .rightToLeft)
@@ -1166,6 +1224,8 @@ struct ContentView: View {
     }
 
     private func handleRightArrow(_ press: KeyPress) -> KeyPress.Result {
+        // ファイルを開いている時のみページ送り（検索フィールドへの入力を妨げない）
+        guard viewModel.hasOpenFile else { return .ignored }
         if press.modifiers.contains(.shift) {
             // Shift+→: 右→左なら逆方向シフト、左→右なら正方向シフト
             viewModel.shiftPage(forward: viewModel.readingDirection == .leftToRight)
@@ -1407,13 +1467,18 @@ struct HistoryListView: View {
     @Environment(AppSettings.self) private var appSettings
     @Binding var filterText: String
     @Binding var showFilterField: Bool
-    @Binding var selectedTab: HistoryTab
+    @Binding var selectedTab: HistoryTab  // 後方互換性のため残す（将来削除予定）
     @Binding var lastOpenedArchiveId: String?
     @Binding var lastOpenedImageId: String?
     @Binding var showHistory: Bool  // セッション中の履歴表示状態
     let scrollTrigger: Int
     @FocusState private var isFilterFocused: Bool
     @State private var dismissedError = false
+    /// セクションの折りたたみ状態
+    @State private var isArchivesSectionCollapsed = false
+    @State private var isImagesSectionCollapsed = false
+    @State private var isStandaloneSectionCollapsed = false
+    @State private var isArchiveContentSectionCollapsed = false
 
     let onOpenHistoryFile: (String) -> Void
     let onOpenInNewWindow: (String) -> Void  // filePath
@@ -1497,119 +1562,118 @@ struct HistoryListView: View {
             }
 
             let recentHistory = historyManager.getRecentHistory(limit: appSettings.maxHistoryCount)
-            let imageCatalog = imageCatalogManager.catalog.filter { entry in
-                switch appSettings.imageCatalogFilter {
-                case .all:
-                    return true
-                case .standaloneOnly:
-                    return entry.catalogType == .standalone
-                case .archiveOnly:
-                    return entry.catalogType == .archiveContent
-                }
-            }
+            let imageCatalog = imageCatalogManager.catalog
+
+            // 検索クエリをパース
+            let parsedQuery = HistorySearchParser.parse(filterText)
+            // 統合検索を実行
+            let searchResult = UnifiedSearchFilter.search(
+                query: parsedQuery,
+                archives: recentHistory,
+                images: imageCatalog
+            )
 
             // 履歴表示が有効で、書庫または画像がある場合
             if showHistory && (!recentHistory.isEmpty || !imageCatalog.isEmpty) {
                 VStack(alignment: .leading, spacing: 8) {
-                    // タブ選択と件数表示
+                    // 検索フィールド（常に表示、⌘+Fでフォーカス）
                     HStack {
-                        Spacer()
-
-                        HStack(spacing: 0) {
-                            ForEach(HistoryTab.allCases, id: \.self) { tab in
-                                Button(action: {
-                                    selectedTab = tab
-                                }) {
-                                    Text(tab == .archives ? L("tab_archives") : L("tab_images"))
-                                        .font(.subheadline)
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 6)
-                                        .background(selectedTab == tab ? Color.accentColor : Color.gray.opacity(0.3))
-                                        .foregroundColor(selectedTab == tab ? .white : .gray)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .cornerRadius(6)
-
-                        Spacer()
-                    }
-                    .overlay(alignment: .trailing) {
-                        // 件数表示（0件の場合は非表示）
-                        let count = selectedTab == .archives ? recentHistory.count : imageCatalog.count
-                        if count > 0 {
-                            if selectedTab == .archives {
-                                Text("[\(recentHistory.count)/\(appSettings.maxHistoryCount)]")
-                                    .foregroundColor(.gray)
-                                    .font(.caption)
-                            } else {
-                                // 画像カタログ: フィルタに応じて上限を表示
-                                let standaloneCount = imageCatalog.filter { $0.catalogType == .standalone }.count
-                                let archiveCount = imageCatalog.filter { $0.catalogType == .archiveContent }.count
-                                switch appSettings.imageCatalogFilter {
-                                case .all:
-                                    Text("[\(standaloneCount)/\(appSettings.maxStandaloneImageCount) + \(archiveCount)/\(appSettings.maxArchiveContentImageCount)]")
-                                        .foregroundColor(.gray)
-                                        .font(.caption)
-                                case .standaloneOnly:
-                                    Text("[\(standaloneCount)/\(appSettings.maxStandaloneImageCount)]")
-                                        .foregroundColor(.gray)
-                                        .font(.caption)
-                                case .archiveOnly:
-                                    Text("[\(archiveCount)/\(appSettings.maxArchiveContentImageCount)]")
-                                        .foregroundColor(.gray)
-                                        .font(.caption)
-                                }
-                            }
-                        }
-                    }
-                    .padding(.top, 20)
-
-                    // フィルタ入力フィールド（⌘+Fで表示/非表示）
-                    if showFilterField {
-                        HStack {
-                            Image(systemName: "magnifyingglass")
-                                .foregroundColor(.gray)
-                            TextField(
-                                selectedTab == .archives
-                                    ? L("history_filter_placeholder")
-                                    : L("image_catalog_filter_placeholder"),
-                                text: $filterText
-                            )
-                            .textFieldStyle(.plain)
-                            .foregroundColor(.white)
-                            .focused($isFilterFocused)
-                            .onExitCommand {
-                                filterText = ""
-                                showFilterField = false
-                            }
-                            if !filterText.isEmpty {
-                                Button(action: { filterText = "" }) {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundColor(.gray)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(8)
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(6)
-                        .onAppear {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                isFilterFocused = true
-                            }
-                        }
-                        .onDisappear {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.gray)
+                        TextField(
+                            L("unified_search_placeholder"),
+                            text: $filterText
+                        )
+                        .textFieldStyle(.plain)
+                        .foregroundColor(.white)
+                        .focused($isFilterFocused)
+                        .onExitCommand {
+                            filterText = ""
                             isFilterFocused = false
                         }
+                        // 検索種別インジケーター
+                        if !filterText.isEmpty && parsedQuery.targetType != .all {
+                            Text(searchTargetLabel(parsedQuery.targetType))
+                                .font(.caption2)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.accentColor.opacity(0.3))
+                                .cornerRadius(4)
+                                .foregroundColor(.white)
+                        }
+                        // クリアボタン
+                        if !filterText.isEmpty {
+                            Button(action: { filterText = "" }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.gray)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        // フィルタードロップダウンメニュー
+                        Menu {
+                            Button(action: { insertSearchFilter("") }) {
+                                Label(L("search_filter_all"), systemImage: "square.grid.2x2")
+                            }
+                            Divider()
+                            Button(action: { insertSearchFilter("type:archive ") }) {
+                                Label(L("search_type_archive"), systemImage: "archivebox")
+                            }
+                            Button(action: { insertSearchFilter("type:image ") }) {
+                                Label(L("search_type_image"), systemImage: "photo.stack")
+                            }
+                            Divider()
+                            Button(action: { insertSearchFilter("type:standalone ") }) {
+                                Label(L("search_type_standalone"), systemImage: "photo")
+                            }
+                            Button(action: { insertSearchFilter("type:content ") }) {
+                                Label(L("search_type_content"), systemImage: "photo.on.rectangle")
+                            }
+                        } label: {
+                            Image(systemName: "line.3.horizontal.decrease.circle")
+                                .foregroundColor(.gray)
+                        }
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
                     }
+                    .padding(8)
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(6)
+                    .padding(.top, 20)
 
-                    // タブに応じたコンテンツ
-                    if selectedTab == .archives {
-                        archivesListView(recentHistory: recentHistory)
-                    } else {
-                        imagesCatalogView(catalog: imageCatalog)
+                    // 検索結果のセクション表示
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 12) {
+                            // 書庫セクション
+                            if parsedQuery.includesArchives && !searchResult.archives.isEmpty {
+                                archivesSectionView(
+                                    archives: searchResult.archives,
+                                    totalCount: recentHistory.count,
+                                    isFiltering: parsedQuery.hasKeyword
+                                )
+                            }
+
+                            // 画像セクション
+                            if parsedQuery.includesImages && !searchResult.images.isEmpty {
+                                imagesSectionView(
+                                    images: searchResult.images,
+                                    totalCount: imageCatalog.count,
+                                    isFiltering: parsedQuery.hasKeyword
+                                )
+                            }
+
+                            // 検索結果が空の場合
+                            if parsedQuery.hasKeyword && searchResult.isEmpty {
+                                Text(L("search_no_results"))
+                                    .foregroundColor(.gray)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 20)
+                            }
+                        }
+                        .padding(.vertical, 4)
                     }
+                    .scrollIndicators(.visible)
+                    .preferredColorScheme(.dark)
+                    .frame(maxHeight: 400)
                 }
                 .frame(maxWidth: 500)
                 .padding(.horizontal, 20)
@@ -1617,141 +1681,251 @@ struct HistoryListView: View {
         }
     }
 
-    /// 書庫リストビュー
-    @ViewBuilder
-    private func archivesListView(recentHistory: [FileHistoryEntry]) -> some View {
-        let filteredHistory = filterText.isEmpty
-            ? recentHistory
-            : recentHistory.filter { matchesFilter($0, pattern: filterText) }
+    /// 検索対象種別のラベル
+    private func searchTargetLabel(_ type: SearchTargetType) -> String {
+        switch type {
+        case .all:
+            return ""
+        case .archive:
+            return L("search_type_archive")
+        case .image:
+            return L("search_type_image")
+        case .standalone:
+            return L("search_type_standalone")
+        case .content:
+            return L("search_type_content")
+        }
+    }
 
-        if recentHistory.isEmpty {
-            Text(L("image_catalog_empty"))
-                .foregroundColor(.gray)
-                .padding(.vertical, 20)
+    /// 検索フィルターを挿入/置換する
+    private func insertSearchFilter(_ filter: String) {
+        // 既存のtype:プレフィックスを削除
+        let typePattern = /^type:\w+\s*/
+        let cleanedText = filterText.replacing(typePattern, with: "")
+
+        if filter.isEmpty {
+            // 「すべて」が選択された場合はtype:を削除するだけ
+            filterText = cleanedText
         } else {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 8) {
-                        ForEach(Array(filteredHistory.enumerated()), id: \.element.id) { index, entry in
-                            HistoryEntryRow(
-                                entry: entry,
-                                onOpenHistoryFile: { filePath in
-                                    // クリックした項目の前（または後）の項目のIDを保存
-                                    // （クリックした項目は先頭に移動し、前の項目がその位置に来るため）
-                                    if index > 0 {
-                                        lastOpenedArchiveId = filteredHistory[index - 1].id
-                                    } else if index + 1 < filteredHistory.count {
-                                        lastOpenedArchiveId = filteredHistory[index + 1].id
-                                    } else {
-                                        lastOpenedArchiveId = nil
-                                    }
-                                    onOpenHistoryFile(filePath)
-                                },
-                                onOpenInNewWindow: onOpenInNewWindow,
-                                onEditMemo: onEditMemo
-                            )
-                            .id(entry.id)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-                .scrollIndicators(.visible)
-                .preferredColorScheme(.dark)
-                .frame(maxHeight: 300)
-                .task(id: scrollTrigger) {
-                    guard scrollTrigger > 0 else { return }
-                    guard let targetId = lastOpenedArchiveId else { return }
-                    try? await Task.sleep(nanoseconds: 300_000_000)
-                    proxy.scrollTo(targetId, anchor: .center)
+            // 新しいフィルターを先頭に追加
+            filterText = filter + cleanedText
+        }
+    }
+
+    /// 書庫セクションビュー
+    @ViewBuilder
+    private func archivesSectionView(archives: [FileHistoryEntry], totalCount: Int, isFiltering: Bool) -> some View {
+        // セクションヘッダー
+        HStack {
+            Button(action: { isArchivesSectionCollapsed.toggle() }) {
+                HStack(spacing: 4) {
+                    Image(systemName: isArchivesSectionCollapsed ? "chevron.right" : "chevron.down")
+                        .font(.caption)
+                    Image(systemName: "archivebox")
+                    Text(L("tab_archives"))
+                        .font(.subheadline.bold())
+                    Text("(\(archives.count))")
+                        .font(.caption)
+                        .foregroundColor(.gray)
                 }
             }
+            .buttonStyle(.plain)
+            .foregroundColor(.white)
 
-            if !filterText.isEmpty {
-                Text(L("history_filter_result_format", filteredHistory.count, recentHistory.count))
-                    .foregroundColor(.gray)
+            Spacer()
+
+            if isFiltering {
+                Text(L("history_filter_result_format", archives.count, totalCount))
                     .font(.caption)
+                    .foregroundColor(.gray)
+            } else {
+                Text("[\(archives.count)/\(appSettings.maxHistoryCount)]")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
+        }
+        .padding(.horizontal, 4)
+
+        if !isArchivesSectionCollapsed {
+            ForEach(Array(archives.enumerated()), id: \.element.id) { index, entry in
+                HistoryEntryRow(
+                    entry: entry,
+                    onOpenHistoryFile: { filePath in
+                        if index > 0 {
+                            lastOpenedArchiveId = archives[index - 1].id
+                        } else if index + 1 < archives.count {
+                            lastOpenedArchiveId = archives[index + 1].id
+                        } else {
+                            lastOpenedArchiveId = nil
+                        }
+                        onOpenHistoryFile(filePath)
+                    },
+                    onOpenInNewWindow: onOpenInNewWindow,
+                    onEditMemo: onEditMemo
+                )
+                .id(entry.id)
             }
         }
     }
 
-    /// 画像カタログビュー
+    /// 画像セクションビュー
     @ViewBuilder
-    private func imagesCatalogView(catalog: [ImageCatalogEntry]) -> some View {
-        @Bindable var settings = appSettings
+    private func imagesSectionView(images: [ImageCatalogEntry], totalCount: Int, isFiltering: Bool) -> some View {
+        let standaloneImages = images.filter { $0.catalogType == .standalone }
+        let archiveContentImages = images.filter { $0.catalogType == .archiveContent }
 
-        let filteredCatalog = filterText.isEmpty
-            ? catalog
-            : catalog.filter { matchesImageFilter($0, pattern: filterText) }
-
-        // フィルタ切り替え（すべて/個別のみ/書庫内のみ）
-        HStack(spacing: 0) {
-            ForEach(ImageCatalogFilter.allCases, id: \.self) { filter in
-                Button(action: {
-                    settings.imageCatalogFilter = filter
-                }) {
-                    Text(filterLabel(for: filter))
+        // セクションヘッダー
+        HStack {
+            Button(action: { isImagesSectionCollapsed.toggle() }) {
+                HStack(spacing: 4) {
+                    Image(systemName: isImagesSectionCollapsed ? "chevron.right" : "chevron.down")
                         .font(.caption)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(settings.imageCatalogFilter == filter ? Color.accentColor.opacity(0.8) : Color.gray.opacity(0.3))
-                        .foregroundColor(settings.imageCatalogFilter == filter ? .white : .gray)
+                    Image(systemName: "photo")
+                    Text(L("tab_images"))
+                        .font(.subheadline.bold())
+                    Text("(\(images.count))")
+                        .font(.caption)
+                        .foregroundColor(.gray)
                 }
-                .buttonStyle(.plain)
+            }
+            .buttonStyle(.plain)
+            .foregroundColor(.white)
+
+            Spacer()
+
+            if isFiltering {
+                Text(L("history_filter_result_format", images.count, totalCount))
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            } else {
+                Text("[\(standaloneImages.count)/\(appSettings.maxStandaloneImageCount) + \(archiveContentImages.count)/\(appSettings.maxArchiveContentImageCount)]")
+                    .font(.caption)
+                    .foregroundColor(.gray)
             }
         }
-        .cornerRadius(4)
-        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 4)
 
-        if catalog.isEmpty {
-            VStack(spacing: 8) {
-                Text(L("image_catalog_empty"))
-                    .foregroundColor(.gray)
-                Text(L("image_catalog_empty_hint"))
-                    .foregroundColor(.gray.opacity(0.7))
-                    .font(.caption)
+        if !isImagesSectionCollapsed {
+            // 個別画像サブセクション
+            if !standaloneImages.isEmpty {
+                standaloneSubsectionView(
+                    images: standaloneImages,
+                    isFiltering: isFiltering
+                )
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 20)
-        } else {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 8) {
-                        ForEach(Array(filteredCatalog.enumerated()), id: \.element.id) { index, entry in
-                            ImageCatalogEntryRow(
-                                entry: entry,
-                                onOpenImageFile: { filePath, relativePath in
-                                    // クリックした項目の前（または後）の項目のIDを保存
-                                    if index > 0 {
-                                        lastOpenedImageId = filteredCatalog[index - 1].id
-                                    } else if index + 1 < filteredCatalog.count {
-                                        lastOpenedImageId = filteredCatalog[index + 1].id
-                                    } else {
-                                        lastOpenedImageId = nil
-                                    }
-                                    onOpenImageFile(filePath, relativePath)
-                                },
-                                onEditMemo: onEditImageMemo
-                            )
-                            .id(entry.id)
+
+            // 書庫/フォルダ内画像サブセクション
+            if !archiveContentImages.isEmpty {
+                archiveContentSubsectionView(
+                    images: archiveContentImages,
+                    isFiltering: isFiltering
+                )
+            }
+        }
+    }
+
+    /// 個別画像サブセクションビュー
+    @ViewBuilder
+    private func standaloneSubsectionView(images: [ImageCatalogEntry], isFiltering: Bool) -> some View {
+        HStack {
+            Button(action: { isStandaloneSectionCollapsed.toggle() }) {
+                HStack(spacing: 4) {
+                    Image(systemName: isStandaloneSectionCollapsed ? "chevron.right" : "chevron.down")
+                        .font(.caption2)
+                    Image(systemName: "doc.richtext")
+                        .font(.caption)
+                    Text(L("search_type_standalone"))
+                        .font(.caption.bold())
+                    Text("(\(images.count))")
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                }
+            }
+            .buttonStyle(.plain)
+            .foregroundColor(.white.opacity(0.9))
+
+            Spacer()
+
+            if !isFiltering {
+                Text("[\(images.count)/\(appSettings.maxStandaloneImageCount)]")
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+            }
+        }
+        .padding(.leading, 16)
+        .padding(.horizontal, 4)
+        .padding(.top, 4)
+
+        if !isStandaloneSectionCollapsed {
+            ForEach(Array(images.enumerated()), id: \.element.id) { index, entry in
+                ImageCatalogEntryRow(
+                    entry: entry,
+                    onOpenImageFile: { filePath, relativePath in
+                        if index > 0 {
+                            lastOpenedImageId = images[index - 1].id
+                        } else if index + 1 < images.count {
+                            lastOpenedImageId = images[index + 1].id
+                        } else {
+                            lastOpenedImageId = nil
                         }
-                    }
-                    .padding(.vertical, 4)
-                }
-                .scrollIndicators(.visible)
-                .preferredColorScheme(.dark)
-                .frame(maxHeight: 300)
-                .task(id: scrollTrigger) {
-                    guard scrollTrigger > 0 else { return }
-                    guard let targetId = lastOpenedImageId else { return }
-                    try? await Task.sleep(nanoseconds: 300_000_000)
-                    proxy.scrollTo(targetId, anchor: .center)
+                        onOpenImageFile(filePath, relativePath)
+                    },
+                    onEditMemo: onEditImageMemo
+                )
+                .id(entry.id)
+            }
+        }
+    }
+
+    /// 書庫/フォルダ内画像サブセクションビュー
+    @ViewBuilder
+    private func archiveContentSubsectionView(images: [ImageCatalogEntry], isFiltering: Bool) -> some View {
+        HStack {
+            Button(action: { isArchiveContentSectionCollapsed.toggle() }) {
+                HStack(spacing: 4) {
+                    Image(systemName: isArchiveContentSectionCollapsed ? "chevron.right" : "chevron.down")
+                        .font(.caption2)
+                    Image(systemName: "doc.zipper")
+                        .font(.caption)
+                    Text(L("search_type_content"))
+                        .font(.caption.bold())
+                    Text("(\(images.count))")
+                        .font(.caption2)
+                        .foregroundColor(.gray)
                 }
             }
+            .buttonStyle(.plain)
+            .foregroundColor(.white.opacity(0.9))
 
-            if !filterText.isEmpty {
-                Text(L("history_filter_result_format", filteredCatalog.count, catalog.count))
+            Spacer()
+
+            if !isFiltering {
+                Text("[\(images.count)/\(appSettings.maxArchiveContentImageCount)]")
+                    .font(.caption2)
                     .foregroundColor(.gray)
-                    .font(.caption)
+            }
+        }
+        .padding(.leading, 16)
+        .padding(.horizontal, 4)
+        .padding(.top, 4)
+
+        if !isArchiveContentSectionCollapsed {
+            ForEach(Array(images.enumerated()), id: \.element.id) { index, entry in
+                ImageCatalogEntryRow(
+                    entry: entry,
+                    onOpenImageFile: { filePath, relativePath in
+                        if index > 0 {
+                            lastOpenedImageId = images[index - 1].id
+                        } else if index + 1 < images.count {
+                            lastOpenedImageId = images[index + 1].id
+                        } else {
+                            lastOpenedImageId = nil
+                        }
+                        onOpenImageFile(filePath, relativePath)
+                    },
+                    onEditMemo: onEditImageMemo
+                )
+                .id(entry.id)
             }
         }
     }
@@ -1767,56 +1941,6 @@ struct HistoryListView: View {
 
         if alert.runModal() == .alertFirstButtonReturn {
             historyManager.resetDatabase()
-        }
-    }
-
-    /// フィルタにマッチするかチェック（ワイルドカード対応）
-    private func matchesFilter(_ entry: FileHistoryEntry, pattern: String) -> Bool {
-        // ワイルドカード文字が含まれている場合は正規表現として処理
-        if pattern.contains("*") || pattern.contains("?") {
-            let regexPattern = wildcardToRegex(pattern)
-            if let regex = try? NSRegularExpression(pattern: regexPattern, options: .caseInsensitive) {
-                let fileNameMatch = regex.firstMatch(in: entry.fileName, range: NSRange(entry.fileName.startIndex..., in: entry.fileName)) != nil
-                let memoMatch = entry.memo.map { regex.firstMatch(in: $0, range: NSRange($0.startIndex..., in: $0)) != nil } ?? false
-                return fileNameMatch || memoMatch
-            }
-        }
-        // 通常の部分一致検索
-        return entry.fileName.localizedCaseInsensitiveContains(pattern) ||
-               (entry.memo?.localizedCaseInsensitiveContains(pattern) ?? false)
-    }
-
-    /// ワイルドカードパターンを正規表現に変換
-    private func wildcardToRegex(_ pattern: String) -> String {
-        var result = NSRegularExpression.escapedPattern(for: pattern)
-        result = result.replacingOccurrences(of: "\\*", with: ".*")
-        result = result.replacingOccurrences(of: "\\?", with: ".")
-        return result
-    }
-
-    /// 画像カタログエントリがフィルタにマッチするかチェック
-    private func matchesImageFilter(_ entry: ImageCatalogEntry, pattern: String) -> Bool {
-        if pattern.contains("*") || pattern.contains("?") {
-            let regexPattern = wildcardToRegex(pattern)
-            if let regex = try? NSRegularExpression(pattern: regexPattern, options: .caseInsensitive) {
-                let fileNameMatch = regex.firstMatch(in: entry.fileName, range: NSRange(entry.fileName.startIndex..., in: entry.fileName)) != nil
-                let memoMatch = entry.memo.map { regex.firstMatch(in: $0, range: NSRange($0.startIndex..., in: $0)) != nil } ?? false
-                return fileNameMatch || memoMatch
-            }
-        }
-        return entry.fileName.localizedCaseInsensitiveContains(pattern) ||
-               (entry.memo?.localizedCaseInsensitiveContains(pattern) ?? false)
-    }
-
-    /// フィルタ種別のラベルを取得
-    private func filterLabel(for filter: ImageCatalogFilter) -> String {
-        switch filter {
-        case .all:
-            return L("image_catalog_filter_all")
-        case .standaloneOnly:
-            return L("image_catalog_filter_standalone")
-        case .archiveOnly:
-            return L("image_catalog_filter_archive")
         }
     }
 }
