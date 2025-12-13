@@ -2965,8 +2965,7 @@ struct WindowNumberGetter: NSViewRepresentable {
     }
 
     private func configureWindow(_ window: NSWindow) {
-        let oldValue = self.windowNumber
-        self.windowNumber = window.windowNumber
+        let newWindowNumber = window.windowNumber
 
         // タイトルバーの文字色を白に設定
         window.titlebarAppearsTransparent = true
@@ -2978,8 +2977,12 @@ struct WindowNumberGetter: NSViewRepresentable {
         // SwiftUIのウィンドウフレーム自動保存を無効化
         window.setFrameAutosaveName("")
 
-        if oldValue != window.windowNumber {
-            DebugLogger.log("🪟 WindowNumberGetter: captured \(window.windowNumber) (was: \(String(describing: oldValue)))", level: .normal)
+        // ビュー更新サイクル外でStateを変更（undefined behavior回避）
+        if self.windowNumber != newWindowNumber {
+            DispatchQueue.main.async {
+                DebugLogger.log("🪟 WindowNumberGetter: captured \(newWindowNumber) (was: \(String(describing: self.windowNumber)))", level: .normal)
+                self.windowNumber = newWindowNumber
+            }
         }
     }
 }
