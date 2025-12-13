@@ -50,6 +50,9 @@ struct ContentView: View {
     // 通知オブザーバが登録済みかどうか
     @State private var notificationObserversRegistered = false
 
+    // 通知オブザーバのトークン（解除用）
+    @State private var notificationObservers: [NSObjectProtocol] = []
+
     // 画像情報モーダル表示用
     @State private var showImageInfo = false
 
@@ -1044,50 +1047,83 @@ struct ContentView: View {
         let windowID = self.windowID
 
         // 最初のウィンドウでファイルを開く通知
-        NotificationCenter.default.addObserver(
+        let observer1 = NotificationCenter.default.addObserver(
             forName: .openFileInFirstWindow,
             object: nil,
             queue: .main
         ) { _ in
             // 最後に作成されたウィンドウのみが処理
+            // lastCreatedWindowIDがnilの場合は自分を登録して処理
             ContentView.lastCreatedWindowIDLock.lock()
-            let lastID = ContentView.lastCreatedWindowID
-            let isLastCreated = lastID == windowID
+            var lastID = ContentView.lastCreatedWindowID
+            var shouldProcess = false
+            if lastID == nil {
+                // 誰も担当していないので自分が担当する
+                ContentView.lastCreatedWindowID = windowID
+                lastID = windowID
+                shouldProcess = true
+                DebugLogger.log("📬 openFileInFirstWindow - windowID: \(windowID) claimed ownership (was nil)", level: .normal)
+            } else {
+                shouldProcess = lastID == windowID
+            }
             ContentView.lastCreatedWindowIDLock.unlock()
 
-            DebugLogger.log("📬 openFileInFirstWindow - windowID: \(windowID), lastID: \(String(describing: lastID)), isLast: \(isLastCreated)", level: .normal)
+            DebugLogger.log("📬 openFileInFirstWindow - windowID: \(windowID), lastID: \(String(describing: lastID)), shouldProcess: \(shouldProcess)", level: .normal)
 
-            guard isLastCreated else {
+            guard shouldProcess else {
                 DebugLogger.log("📬 Ignoring - not the last created window", level: .verbose)
                 return
             }
 
             Task { @MainActor in
+                // ウィンドウがまだ存在するか確認
+                guard let windowNumber = self.myWindowNumber,
+                      NSApp.windows.contains(where: { $0.windowNumber == windowNumber }) else {
+                    DebugLogger.log("📬 Ignoring - window no longer exists: \(windowID)", level: .normal)
+                    return
+                }
                 self.openPendingFile()
             }
         }
+        notificationObservers.append(observer1)
 
         // 新しいウィンドウ作成リクエスト（2つ目以降のファイル用）
-        NotificationCenter.default.addObserver(
+        let observer2 = NotificationCenter.default.addObserver(
             forName: .needNewWindow,
             object: nil,
             queue: .main
         ) { [openWindow] _ in
             // 最後に作成されたウィンドウのみが処理
+            // lastCreatedWindowIDがnilの場合は自分を登録して処理
             ContentView.lastCreatedWindowIDLock.lock()
-            let lastID = ContentView.lastCreatedWindowID
-            let isLastCreated = lastID == windowID
+            var lastID = ContentView.lastCreatedWindowID
+            var shouldProcess = false
+            if lastID == nil {
+                // 誰も担当していないので自分が担当する
+                ContentView.lastCreatedWindowID = windowID
+                lastID = windowID
+                shouldProcess = true
+                DebugLogger.log("📬 needNewWindow - windowID: \(windowID) claimed ownership (was nil)", level: .normal)
+            } else {
+                shouldProcess = lastID == windowID
+            }
             ContentView.lastCreatedWindowIDLock.unlock()
 
-            DebugLogger.log("📬 needNewWindow - windowID: \(windowID), lastID: \(String(describing: lastID)), isLast: \(isLastCreated)", level: .normal)
+            DebugLogger.log("📬 needNewWindow - windowID: \(windowID), lastID: \(String(describing: lastID)), shouldProcess: \(shouldProcess)", level: .normal)
 
-            guard isLastCreated else {
+            guard shouldProcess else {
                 DebugLogger.log("📬 Ignoring needNewWindow - not the last created window", level: .verbose)
                 return
             }
 
             // 新しいウィンドウを作成
             Task { @MainActor in
+                // ウィンドウがまだ存在するか確認
+                guard let windowNumber = self.myWindowNumber,
+                      NSApp.windows.contains(where: { $0.windowNumber == windowNumber }) else {
+                    DebugLogger.log("📬 Ignoring needNewWindow - window no longer exists: \(windowID)", level: .normal)
+                    return
+                }
                 DebugLogger.log("🪟 Creating new window from windowID: \(windowID)", level: .normal)
                 openWindow(id: "new")
                 try? await Task.sleep(nanoseconds: 200_000_000)
@@ -1100,9 +1136,10 @@ struct ContentView: View {
                 )
             }
         }
+        notificationObservers.append(observer2)
 
         // 全ウィンドウのフレーム一括適用通知を受け取る
-        NotificationCenter.default.addObserver(
+        let observer3 = NotificationCenter.default.addObserver(
             forName: .revealAllWindows,
             object: nil,
             queue: .main
@@ -1126,6 +1163,16 @@ struct ContentView: View {
                 self.pendingFrame = nil
             }
         }
+        notificationObservers.append(observer3)
+    }
+
+    /// 通知オブザーバを解除
+    private func removeNotificationObservers() {
+        for observer in notificationObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        notificationObservers.removeAll()
+        DebugLogger.log("🧹 Notification observers removed for window: \(windowID)", level: .normal)
     }
 
     /// SessionManagerからの保留ファイルを開く
@@ -1277,6 +1324,17 @@ struct ContentView: View {
             NSEvent.removeMonitor(monitor)
             scrollEventMonitor = nil
         }
+
+        // 通知オブザーバを解除（メモリリーク防止）
+        removeNotificationObservers()
+
+        // lastCreatedWindowIDが自分なら更新（閉じたウィンドウを指さないように）
+        ContentView.lastCreatedWindowIDLock.lock()
+        if ContentView.lastCreatedWindowID == windowID {
+            ContentView.lastCreatedWindowID = nil
+            DebugLogger.log("🪟 lastCreatedWindowID cleared (window closed): \(windowID)", level: .normal)
+        }
+        ContentView.lastCreatedWindowIDLock.unlock()
 
         // セッションマネージャーからウィンドウを削除
         sessionManager.removeWindow(id: windowID)
