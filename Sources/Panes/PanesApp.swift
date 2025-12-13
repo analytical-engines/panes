@@ -72,6 +72,9 @@ struct ImageViewerApp: App {
                     // AppDelegateに参照を渡す
                     appDelegate.sessionManager = sessionManager
                     appDelegate.appSettings = appSettings
+
+                    // SessionGroupManagerに最大件数を設定
+                    sessionGroupManager.maxSessionGroupCount = appSettings.maxSessionGroupCount
                 }
         }
         .windowStyle(.hiddenTitleBar)
@@ -364,6 +367,7 @@ struct ImageViewerApp: App {
                 .environment(historyManager)
                 .environment(imageCatalogManager)
                 .environment(sessionManager)
+                .environment(sessionGroupManager)
         }
 
         // 「このアプリケーションで開く」用のウィンドウグループ
@@ -585,39 +589,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var sessionManager: SessionManager?
     var appSettings: AppSettings?
 
-    /// セッション復元が開始されたかどうか
-    private var sessionRestorationStarted = false
-
     func applicationDidFinishLaunching(_ notification: Notification) {
         // アプリ起動時にフォーカスを取得
         NSApp.activate(ignoringOtherApps: true)
 
-        // セッション復元を遅延実行（参照が設定されるのを待つ）
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.startSessionRestorationIfNeeded()
+        // 同時読み込み制限を設定（参照が設定されるのを待つ）
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            if let sessionManager = self?.sessionManager,
+               let appSettings = self?.appSettings {
+                sessionManager.concurrentLoadingLimit = appSettings.concurrentLoadingLimit
+            }
         }
-    }
-
-    /// セッション復元を開始（必要な場合）
-    private func startSessionRestorationIfNeeded() {
-        guard !sessionRestorationStarted else { return }
-        sessionRestorationStarted = true
-
-        guard appSettings?.sessionRestoreEnabled == true else {
-            DebugLogger.log("📂 Session restore is disabled", level: .normal)
-            return
-        }
-
-        guard let sessionManager = sessionManager else {
-            DebugLogger.log("❌ SessionManager not available", level: .normal)
-            return
-        }
-
-        // 同時読み込み制限を設定
-        sessionManager.concurrentLoadingLimit = appSettings?.sessionConcurrentLoadingLimit ?? 1
-
-        // セッション復元を開始
-        sessionManager.startRestoration()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -627,24 +609,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // 設定に従って終了するかどうかを決定
         return appSettings?.quitOnLastWindowClosed ?? true
-    }
-
-    func applicationWillTerminate(_ notification: Notification) {
-        // セッション保存が有効な場合のみ保存
-        guard appSettings?.sessionRestoreEnabled == true else {
-            DebugLogger.log("📂 Session save skipped (disabled)", level: .normal)
-            return
-        }
-
-        guard let sessionManager = sessionManager else { return }
-
-        // 現在のウィンドウ状態を収集して保存
-        let entries = sessionManager.collectCurrentWindowStates()
-        if !entries.isEmpty {
-            sessionManager.saveSession(entries)
-        } else {
-            sessionManager.clearSession()
-        }
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {

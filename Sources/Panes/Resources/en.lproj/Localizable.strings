@@ -23,7 +23,6 @@
 
 "tab_general" = "General";
 "tab_history" = "History";
-"tab_session" = "Session";
 
 // MARK: - SettingsView - Display Settings
 
@@ -168,22 +167,10 @@
 "import_history_merged" = "merged with existing";
 "import_history_replaced" = "replaced existing";
 
-// MARK: - Session Settings
+// MARK: - File Loading Settings
 
-"section_session" = "Session Restore";
-"enable_session_restore" = "Restore windows on launch";
-"session_restore_description" = "Automatically reopen files that were open when the app was last closed.";
-"section_session_advanced" = "Advanced Settings";
 "concurrent_loading_limit" = "Concurrent loading limit";
-"concurrent_loading_description" = "Number of files to load simultaneously when restoring session. Lower values use less memory.";
-"section_session_management" = "Session Management";
-"saved_windows_count_format" = "Saved windows: %d";
-"clear_session" = "Clear Session";
-
-// MARK: - Session Restore Errors
-
-"session_restore_error_title" = "Session Restore";
-"session_restore_file_not_found" = "File not found: %@";
+"concurrent_loading_description" = "Number of files to load simultaneously. Lower values use less memory.";
 
 // MARK: - Window Settings
 
@@ -284,6 +271,13 @@
 "max_archive_content_image_count" = "Archive Content Image Limit";
 "max_archive_content_image_description" = "Maximum number of archive/folder content image records to save";
 "current_image_catalog_count_format" = "Current image catalog count: %d items";
+
+// MARK: - Session Group Settings
+
+"section_session_group_settings" = "Session Group Settings";
+"max_session_group_count" = "Session Group Limit";
+"max_session_group_description" = "Maximum number of named sessions to save";
+"current_session_group_count_format" = "Current session group count: %d items";
 
 // MARK: - Unified Search
 

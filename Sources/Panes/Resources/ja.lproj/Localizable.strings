@@ -23,7 +23,6 @@
 
 "tab_general" = "一般";
 "tab_history" = "履歴";
-"tab_session" = "セッション";
 
 // MARK: - SettingsView - Display Settings
 
@@ -168,22 +167,10 @@
 "import_history_merged" = "既存の履歴とマージ";
 "import_history_replaced" = "既存の履歴を置換";
 
-// MARK: - Session Settings
+// MARK: - File Loading Settings
 
-"section_session" = "セッション復元";
-"enable_session_restore" = "起動時にウィンドウを復元";
-"session_restore_description" = "アプリ終了時に開いていたファイルを自動的に再度開きます。";
-"section_session_advanced" = "詳細設定";
 "concurrent_loading_limit" = "同時読み込み数";
-"concurrent_loading_description" = "セッション復元時に同時に読み込むファイル数。小さい値ほどメモリ使用量が少なくなります。";
-"section_session_management" = "セッションの管理";
-"saved_windows_count_format" = "保存されたウィンドウ: %d件";
-"clear_session" = "セッションをクリア";
-
-// MARK: - Session Restore Errors
-
-"session_restore_error_title" = "セッション復元";
-"session_restore_file_not_found" = "ファイルが見つかりません: %@";
+"concurrent_loading_description" = "同時に読み込むファイル数。小さい値ほどメモリ使用量が少なくなります。";
 
 // MARK: - Window Settings
 
@@ -284,6 +271,13 @@
 "max_archive_content_image_count" = "書庫内画像の最大保存件数";
 "max_archive_content_image_description" = "書庫/フォルダ内の画像の履歴を保存する最大件数";
 "current_image_catalog_count_format" = "現在の画像カタログ件数: %d件";
+
+// MARK: - Session Group Settings
+
+"section_session_group_settings" = "セッショングループ設定";
+"max_session_group_count" = "セッショングループの最大保存件数";
+"max_session_group_description" = "保存する名前付きセッションの最大件数";
+"current_session_group_count_format" = "現在のセッショングループ件数: %d件";
 
 // MARK: - Unified Search
 

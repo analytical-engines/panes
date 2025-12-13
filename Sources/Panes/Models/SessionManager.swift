@@ -33,12 +33,6 @@ struct PendingFileOpen {
 @MainActor
 @Observable
 class SessionManager {
-    private let sessionKey = "windowSession"
-    private let defaults = UserDefaults.standard
-
-    /// 保存されたセッション
-    private(set) var savedSession: [WindowSessionEntry] = []
-
     /// 開くべきファイルのキュー（セッション復元 + 「このアプリケーションで開く」を統合）
     private(set) var pendingFileOpens: [PendingFileOpen] = []
 
@@ -72,44 +66,6 @@ class SessionManager {
     /// ローディングパネル
     private var loadingPanel: NSPanel?
 
-    init() {
-        loadSession()
-    }
-
-    // MARK: - Persistence
-
-    /// 保存されたセッションを読み込む
-    func loadSession() {
-        guard let data = defaults.data(forKey: sessionKey),
-              let decoded = try? JSONDecoder().decode([WindowSessionEntry].self, from: data) else {
-            savedSession = []
-            return
-        }
-        savedSession = decoded
-        DebugLogger.log("📂 Session loaded: \(savedSession.count) windows", level: .normal)
-    }
-
-    /// セッションを保存する
-    func saveSession(_ entries: [WindowSessionEntry]) {
-        guard let encoded = try? JSONEncoder().encode(entries) else {
-            DebugLogger.log("❌ Failed to encode session", level: .normal)
-            return
-        }
-        defaults.set(encoded, forKey: sessionKey)
-        savedSession = entries
-        DebugLogger.log("💾 Session saved: \(entries.count) windows", level: .normal)
-        for entry in entries {
-            DebugLogger.log("💾   - \(entry.filePath) frame: \(entry.frame)", level: .normal)
-        }
-    }
-
-    /// セッションをクリアする
-    func clearSession() {
-        defaults.removeObject(forKey: sessionKey)
-        savedSession = []
-        DebugLogger.log("🗑️ Session cleared", level: .normal)
-    }
-
     // MARK: - File Open Queue
 
     /// 「このアプリケーションで開く」からファイルをキューに追加
@@ -125,16 +81,6 @@ class SessionManager {
         DebugLogger.log("🆕 openInNewWindow called, forceNewWindow set to true", level: .normal)
         let item = PendingFileOpen(url: url)
         addToQueue([item])
-    }
-
-    /// セッション復元を開始する
-    func startRestoration() {
-        guard !savedSession.isEmpty else {
-            DebugLogger.log("📂 No session to restore", level: .normal)
-            return
-        }
-        let items = savedSession.map { PendingFileOpen(from: $0) }
-        addToQueue(items)
     }
 
     /// セッショングループを復元する

@@ -1029,8 +1029,11 @@ struct ContentView: View {
             MainActor.assumeIsolated {
                 if let frame = window?.frame {
                     sessionManager.updateWindowFrame(id: windowID, frame: frame)
-                    // 最後のウィンドウサイズを保存
-                    appSettings.updateLastWindowSize(frame.size)
+                    // セッション復元中（pendingFrameがある間）は lastWindowSize を更新しない
+                    // 復元完了後に目的のフレームが適用されてから更新される
+                    if self.pendingFrame == nil {
+                        appSettings.updateLastWindowSize(frame.size)
+                    }
                 }
             }
         }

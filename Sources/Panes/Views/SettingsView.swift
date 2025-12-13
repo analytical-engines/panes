@@ -22,11 +22,6 @@ struct SettingsView: View {
                 .tabItem {
                     Label(L("tab_history"), systemImage: "clock")
                 }
-
-            SessionSettingsTab()
-                .tabItem {
-                    Label(L("tab_session"), systemImage: "arrow.clockwise")
-                }
         }
         .frame(width: 450, height: 380)
     }
@@ -85,6 +80,17 @@ struct GeneralSettingsTab: View {
                 Toggle(L("quit_on_last_window_closed"), isOn: $settings.quitOnLastWindowClosed)
 
                 Text(L("quit_on_last_window_closed_description"))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                HStack {
+                    Text(L("concurrent_loading_limit"))
+                    Spacer()
+                    TextField("", value: $settings.concurrentLoadingLimit, format: .number)
+                        .frame(width: 60)
+                        .textFieldStyle(.roundedBorder)
+                }
+                Text(L("concurrent_loading_description"))
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -158,6 +164,7 @@ struct HistorySettingsTab: View {
     @Environment(AppSettings.self) private var settings
     @Environment(FileHistoryManager.self) private var historyManager
     @Environment(ImageCatalogManager.self) private var imageCatalogManager
+    @Environment(SessionGroupManager.self) private var sessionGroupManager
 
     var body: some View {
         @Bindable var settings = settings
@@ -209,6 +216,20 @@ struct HistorySettingsTab: View {
                     .foregroundColor(.secondary)
             }
 
+            Section(L("section_session_group_settings")) {
+                HStack {
+                    Text(L("max_session_group_count"))
+                    Spacer()
+                    TextField("", value: $settings.maxSessionGroupCount, format: .number)
+                        .frame(width: 80)
+                        .textFieldStyle(.roundedBorder)
+                    Text(L("history_count_unit"))
+                }
+                Text(L("max_session_group_description"))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
             Section(L("section_history_management")) {
                 HStack {
                     Text(L("current_history_count_format", historyManager.history.count))
@@ -236,59 +257,21 @@ struct HistorySettingsTab: View {
                     }
                     .foregroundColor(.red)
                 }
-            }
 
-        }
-        .formStyle(.grouped)
-        .padding()
-    }
-}
-
-/// セッション設定タブ
-struct SessionSettingsTab: View {
-    @Environment(AppSettings.self) private var settings
-    @Environment(SessionManager.self) private var sessionManager
-
-    var body: some View {
-        @Bindable var settings = settings
-
-        Form {
-            Section(L("section_session")) {
-                Toggle(L("enable_session_restore"), isOn: $settings.sessionRestoreEnabled)
-
-                Text(L("session_restore_description"))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-
-            Section(L("section_session_advanced")) {
                 HStack {
-                    Text(L("concurrent_loading_limit"))
+                    Text(L("current_session_group_count_format", sessionGroupManager.sessionGroups.count))
                     Spacer()
-                    TextField("", value: $settings.sessionConcurrentLoadingLimit, format: .number)
-                        .frame(width: 60)
-                        .textFieldStyle(.roundedBorder)
-                }
-                Text(L("concurrent_loading_description"))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .disabled(!settings.sessionRestoreEnabled)
-            .opacity(settings.sessionRestoreEnabled ? 1.0 : 0.5)
-
-            Section(L("section_session_management")) {
-                HStack {
-                    Text(L("saved_windows_count_format", sessionManager.savedSession.count))
-                    Spacer()
-                    Button(L("clear_session")) {
-                        sessionManager.clearSession()
+                    Button(L("clear_all")) {
+                        sessionGroupManager.clearAllSessionGroups()
                     }
                     .foregroundColor(.red)
-                    .disabled(sessionManager.savedSession.isEmpty)
+                    .disabled(sessionGroupManager.sessionGroups.isEmpty)
                 }
             }
+
         }
         .formStyle(.grouped)
         .padding()
     }
 }
+

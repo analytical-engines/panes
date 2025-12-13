@@ -35,11 +35,11 @@ class AppSettings {
         static let maxHistoryCount = "maxHistoryCount"
         static let maxStandaloneImageCount = "maxStandaloneImageCount"
         static let maxArchiveContentImageCount = "maxArchiveContentImageCount"
+        static let maxSessionGroupCount = "maxSessionGroupCount"
         static let historyDisplayMode = "historyDisplayMode"
         static let lastHistoryVisible = "lastHistoryVisible"
         static let pageJumpCount = "pageJumpCount"
-        static let sessionRestoreEnabled = "sessionRestoreEnabled"
-        static let sessionConcurrentLoadingLimit = "sessionConcurrentLoadingLimit"
+        static let concurrentLoadingLimit = "concurrentLoadingLimit"
         static let windowSizeMode = "windowSizeMode"
         static let fixedWindowWidth = "fixedWindowWidth"
         static let fixedWindowHeight = "fixedWindowHeight"
@@ -97,6 +97,11 @@ class AppSettings {
         didSet { defaults.set(maxArchiveContentImageCount, forKey: Keys.maxArchiveContentImageCount) }
     }
 
+    /// セッショングループの最大保存件数
+    var maxSessionGroupCount: Int {
+        didSet { defaults.set(maxSessionGroupCount, forKey: Keys.maxSessionGroupCount) }
+    }
+
     /// 履歴表示モード
     var historyDisplayMode: HistoryDisplayMode {
         didSet { saveHistoryDisplayMode() }
@@ -124,16 +129,11 @@ class AppSettings {
         didSet { saveImageCatalogFilter() }
     }
 
-    // MARK: - セッション設定
+    // MARK: - ファイル読み込み設定
 
-    /// セッション復元を有効にするか
-    var sessionRestoreEnabled: Bool {
-        didSet { defaults.set(sessionRestoreEnabled, forKey: Keys.sessionRestoreEnabled) }
-    }
-
-    /// セッション復元時の同時読み込み数
-    var sessionConcurrentLoadingLimit: Int {
-        didSet { defaults.set(sessionConcurrentLoadingLimit, forKey: Keys.sessionConcurrentLoadingLimit) }
+    /// 同時読み込み数（複数ファイルを開く際の並列数）
+    var concurrentLoadingLimit: Int {
+        didSet { defaults.set(concurrentLoadingLimit, forKey: Keys.concurrentLoadingLimit) }
     }
 
     // MARK: - ウィンドウ設定
@@ -245,6 +245,13 @@ class AppSettings {
             maxArchiveContentImageCount = 1000  // デフォルト: 1000件
         }
 
+        // セッショングループ最大件数の読み込み
+        if defaults.object(forKey: Keys.maxSessionGroupCount) != nil {
+            maxSessionGroupCount = defaults.integer(forKey: Keys.maxSessionGroupCount)
+        } else {
+            maxSessionGroupCount = 50  // デフォルト: 50件
+        }
+
         // 履歴表示モードの読み込み
         if let modeString = defaults.string(forKey: Keys.historyDisplayMode),
            let mode = HistoryDisplayMode(rawValue: modeString) {
@@ -274,18 +281,11 @@ class AppSettings {
             imageCatalogFilter = .all  // デフォルト: すべて表示
         }
 
-        // セッション復元の読み込み
-        if defaults.object(forKey: Keys.sessionRestoreEnabled) != nil {
-            sessionRestoreEnabled = defaults.bool(forKey: Keys.sessionRestoreEnabled)
-        } else {
-            sessionRestoreEnabled = false  // デフォルト: 無効
-        }
-
         // 同時読み込み数の読み込み
-        if defaults.object(forKey: Keys.sessionConcurrentLoadingLimit) != nil {
-            sessionConcurrentLoadingLimit = defaults.integer(forKey: Keys.sessionConcurrentLoadingLimit)
+        if defaults.object(forKey: Keys.concurrentLoadingLimit) != nil {
+            concurrentLoadingLimit = defaults.integer(forKey: Keys.concurrentLoadingLimit)
         } else {
-            sessionConcurrentLoadingLimit = 1  // デフォルト: 1
+            concurrentLoadingLimit = 1  // デフォルト: 1
         }
 
         // ウィンドウサイズモードの読み込み
