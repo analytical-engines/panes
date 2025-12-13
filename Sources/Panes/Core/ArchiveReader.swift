@@ -11,6 +11,59 @@ class ArchiveReader {
     /// 暗号化されたエントリが存在するか（スキップされたエントリがある場合true）
     private(set) var hasEncryptedEntries: Bool = false
 
+    /// 進捗報告用のコールバック型
+    typealias PhaseCallback = @Sendable (String) async -> Void
+
+    /// 非同期ファクトリメソッド（進捗報告付き）
+    static func create(url: URL, onPhaseChange: PhaseCallback? = nil) async -> ArchiveReader? {
+        let startTime = CFAbsoluteTimeGetCurrent()
+
+        // フェーズ1: アーカイブを開く
+        await onPhaseChange?(L("loading_phase_opening_archive"))
+
+        let openStart = CFAbsoluteTimeGetCurrent()
+        let archive: Archive
+        do {
+            archive = try Archive(url: url, accessMode: .read)
+        } catch {
+            return nil
+        }
+        let openTime = CFAbsoluteTimeGetCurrent() - openStart
+        print("⏱️ Archive open time: \(String(format: "%.3f", openTime))s")
+
+        // フェーズ2: 画像リストを作成
+        await onPhaseChange?(L("loading_phase_building_image_list"))
+
+        let extractStart = CFAbsoluteTimeGetCurrent()
+        let imageEntries = extractImageEntries(from: archive)
+        let extractTime = CFAbsoluteTimeGetCurrent() - extractStart
+        print("⏱️ Extract & sort time: \(String(format: "%.3f", extractTime))s")
+
+        // 暗号化エントリのチェック
+        var hasEncryptedEntries = false
+        if let totalEntries = readTotalEntriesFromZip(url: url) {
+            let accessibleEntries = archive.reduce(0) { count, _ in count + 1 }
+            if totalEntries > accessibleEntries {
+                hasEncryptedEntries = true
+                print("⚠️ Encrypted entries detected: \(totalEntries) total, \(accessibleEntries) accessible")
+            }
+        }
+
+        let totalTime = CFAbsoluteTimeGetCurrent() - startTime
+        print("⏱️ Total init time: \(String(format: "%.3f", totalTime))s")
+
+        return ArchiveReader(url: url, archive: archive, imageEntries: imageEntries, hasEncryptedEntries: hasEncryptedEntries)
+    }
+
+    /// 内部初期化（ファクトリメソッドから呼ばれる）
+    private init(url: URL, archive: Archive, imageEntries: [Entry], hasEncryptedEntries: Bool) {
+        self.archiveURL = url
+        self.archive = archive
+        self.imageEntries = imageEntries
+        self.hasEncryptedEntries = hasEncryptedEntries
+    }
+
+    /// 同期的な初期化（後方互換性のため）
     init?(url: URL) {
         let startTime = CFAbsoluteTimeGetCurrent()
         self.archiveURL = url
@@ -27,7 +80,7 @@ class ArchiveReader {
 
         // 画像ファイルのみを抽出してソート
         let extractStart = CFAbsoluteTimeGetCurrent()
-        self.imageEntries = extractImageEntries()
+        self.imageEntries = Self.extractImageEntries(from: archive)
         let extractTime = CFAbsoluteTimeGetCurrent() - extractStart
         print("⏱️ Extract & sort time: \(String(format: "%.3f", extractTime))s")
 
@@ -78,36 +131,38 @@ class ArchiveReader {
     }
 
     /// アーカイブ内の画像ファイルエントリを抽出してファイル名でソート
-    private func extractImageEntries() -> [Entry] {
+    private static func extractImageEntries(from archive: Archive) -> [Entry] {
         let imageExtensions = Set(["jpg", "jpeg", "png", "gif", "webp", "jp2", "j2k",
                                    "JPG", "JPEG", "PNG", "GIF", "WEBP", "JP2", "J2K"])
 
         print("=== Extracting image entries from archive ===")
 
-        // 直接フィルタリング（配列コピー不要）
-        let entries = archive.filter { entry in
-            // 早期リターンで不要なチェックをスキップ
-            guard entry.type == .file else { return false }
+        // 1. エントリ列挙（遅延評価を強制実行）
+        let entriesStart = CFAbsoluteTimeGetCurrent()
+        let allEntries = Array(archive)
+        print("⏱️ ZIP entries() time: \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - entriesStart))s (count: \(allEntries.count))")
 
+        // 2. フィルタリング
+        let filterStart = CFAbsoluteTimeGetCurrent()
+        let entries = allEntries.filter { entry in
+            guard entry.type == .file else { return false }
             let path = entry.path
-            // __MACOSXフォルダや隠しファイルを除外
             guard !path.contains("__MACOSX"),
                   !path.contains("/._"),
                   !(path as NSString).lastPathComponent.hasPrefix("._") else {
                 return false
             }
-
-            // 拡張子チェック（Setで高速化）
             let ext = (path as NSString).pathExtension
             return imageExtensions.contains(ext)
         }
+        print("⏱️ ZIP filter time: \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - filterStart))s (filtered: \(entries.count))")
 
-        print("Filtered image entries: \(entries.count)")
-
-        // ファイル名でソート（自然順ソート）
+        // 3. ソート
+        let sortStart = CFAbsoluteTimeGetCurrent()
         let sorted = entries.sorted { entry1, entry2 in
             entry1.path.localizedStandardCompare(entry2.path) == .orderedAscending
         }
+        print("⏱️ ZIP sort time: \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - sortStart))s")
 
         print("=== First 5 entries after sorting ===")
         for (index, entry) in sorted.prefix(5).enumerated() {

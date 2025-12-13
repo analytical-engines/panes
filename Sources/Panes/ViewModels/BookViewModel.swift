@@ -320,6 +320,9 @@ class BookViewModel {
     // エラーメッセージ
     var errorMessage: String?
 
+    // 読み込み中のフェーズ（ローディング画面に表示）
+    var loadingPhase: String?
+
     // 表示モード
     var viewMode: ViewMode = .single
 
@@ -631,11 +634,20 @@ class BookViewModel {
             )
         }
 
+        // フェーズ3: 表示状態を復元
+        loadingPhase = L("loading_phase_restoring_state")
+
         // 保存された表示状態を復元
         restoreViewState()
 
+        // フェーズ4: 画像を読み込む
+        loadingPhase = L("loading_phase_loading_image")
+
         // 画像を読み込む（復元されたページ）
         loadCurrentPage()
+
+        // 読み込み完了
+        loadingPhase = nil
     }
 
     /// zipファイルを開く（互換性のため残す）
@@ -665,24 +677,39 @@ class BookViewModel {
 
         // バックグラウンドで読み込み、完了後にUI更新
         Task {
-            let source = await Self.loadImageSource(from: urls)
+            // 進捗報告用コールバック
+            let onPhaseChange: @Sendable (String) async -> Void = { [weak self] phase in
+                await MainActor.run {
+                    self?.loadingPhase = phase
+                }
+            }
+
+            let source = await Self.loadImageSource(from: urls, onPhaseChange: onPhaseChange)
             if let source = source {
+                // フェーズ: ソースを処理
+                loadingPhase = L("loading_phase_processing")
+                await Task.yield()
+
                 self.openSource(source, recordToHistory: recordToHistory)
             } else {
+                loadingPhase = nil
                 self.errorMessage = L("error_cannot_open_file")
             }
         }
     }
 
-    /// バックグラウンドでImageSourceを読み込む
-    private nonisolated static func loadImageSource(from urls: [URL]) async -> ImageSource? {
+    /// バックグラウンドでImageSourceを読み込む（進捗報告付き）
+    private nonisolated static func loadImageSource(
+        from urls: [URL],
+        onPhaseChange: (@Sendable (String) async -> Void)? = nil
+    ) async -> ImageSource? {
         // アーカイブファイルの場合
         if urls.count == 1 {
             let ext = urls[0].pathExtension.lowercased()
             if ext == "zip" || ext == "cbz" {
-                return ArchiveImageSource(url: urls[0])
+                return await ArchiveImageSource.create(url: urls[0], onPhaseChange: onPhaseChange)
             } else if ext == "rar" || ext == "cbr" {
-                return RarImageSource(url: urls[0])
+                return await RarImageSource.create(url: urls[0], onPhaseChange: onPhaseChange)
             } else {
                 // 画像ファイルの場合
                 return FileImageSource(urls: urls)

@@ -8,6 +8,55 @@ class RarReader {
     private let archive: Archive
     private(set) var imageEntries: [Entry] = []
 
+    /// 進捗報告用のコールバック型
+    typealias PhaseCallback = @Sendable (String) async -> Void
+
+    /// 非同期ファクトリメソッド（進捗報告付き）
+    static func create(url: URL, onPhaseChange: PhaseCallback? = nil) async -> RarReader? {
+        let startTime = CFAbsoluteTimeGetCurrent()
+
+        // フェーズ1: アーカイブを開く
+        await onPhaseChange?(L("loading_phase_opening_archive"))
+
+        let openStart = CFAbsoluteTimeGetCurrent()
+        let archive: Archive
+        do {
+            archive = try Archive(path: url.path)
+        } catch {
+            print("ERROR: Failed to open RAR archive: \(error)")
+            return nil
+        }
+        let openTime = CFAbsoluteTimeGetCurrent() - openStart
+        print("⏱️ RAR Archive open time: \(String(format: "%.3f", openTime))s")
+
+        // フェーズ2: 画像リストを作成
+        await onPhaseChange?(L("loading_phase_building_image_list"))
+
+        let extractStart = CFAbsoluteTimeGetCurrent()
+        let imageEntries: [Entry]
+        do {
+            imageEntries = try extractImageEntries(from: archive)
+        } catch {
+            print("ERROR: Failed to extract entries: \(error)")
+            return nil
+        }
+        let extractTime = CFAbsoluteTimeGetCurrent() - extractStart
+        print("⏱️ RAR Extract & sort time: \(String(format: "%.3f", extractTime))s")
+
+        let totalTime = CFAbsoluteTimeGetCurrent() - startTime
+        print("⏱️ RAR Total init time: \(String(format: "%.3f", totalTime))s")
+
+        return RarReader(url: url, archive: archive, imageEntries: imageEntries)
+    }
+
+    /// 内部初期化（ファクトリメソッドから呼ばれる）
+    private init(url: URL, archive: Archive, imageEntries: [Entry]) {
+        self.archiveURL = url
+        self.archive = archive
+        self.imageEntries = imageEntries
+    }
+
+    /// 同期的な初期化（後方互換性のため）
     init?(url: URL) {
         let startTime = CFAbsoluteTimeGetCurrent()
         self.archiveURL = url
@@ -26,7 +75,7 @@ class RarReader {
         // 画像ファイルのみを抽出してソート
         let extractStart = CFAbsoluteTimeGetCurrent()
         do {
-            self.imageEntries = try extractImageEntries()
+            self.imageEntries = try Self.extractImageEntries(from: archive)
         } catch {
             print("ERROR: Failed to extract entries: \(error)")
             return nil
@@ -39,36 +88,38 @@ class RarReader {
     }
 
     /// アーカイブ内の画像ファイルエントリを抽出してファイル名でソート
-    private func extractImageEntries() throws -> [Entry] {
+    private static func extractImageEntries(from archive: Archive) throws -> [Entry] {
         let imageExtensions = Set(["jpg", "jpeg", "png", "gif", "webp", "jp2", "j2k",
                                    "JPG", "JPEG", "PNG", "GIF", "WEBP", "JP2", "J2K"])
 
         print("=== Extracting image entries from RAR archive ===")
 
+        // 1. エントリ列挙
+        let entriesStart = CFAbsoluteTimeGetCurrent()
         let allEntries = try archive.entries()
+        print("⏱️ RAR entries() time: \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - entriesStart))s (count: \(allEntries.count))")
 
-        // 画像ファイルのみフィルタリング
+        // 2. フィルタリング
+        let filterStart = CFAbsoluteTimeGetCurrent()
         let entries = allEntries.filter { entry in
             let path = entry.fileName
-            // 隠しファイルを除外
             guard !path.contains("__MACOSX"),
                   !path.contains("/._"),
                   !(path as NSString).lastPathComponent.hasPrefix("._"),
                   !(path as NSString).lastPathComponent.hasPrefix(".") else {
                 return false
             }
-
-            // 拡張子チェック
             let ext = (path as NSString).pathExtension
             return imageExtensions.contains(ext)
         }
+        print("⏱️ RAR filter time: \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - filterStart))s (filtered: \(entries.count))")
 
-        print("Filtered RAR image entries: \(entries.count)")
-
-        // ファイル名でソート（自然順ソート）
+        // 3. ソート
+        let sortStart = CFAbsoluteTimeGetCurrent()
         let sorted = entries.sorted { entry1, entry2 in
             entry1.fileName.localizedStandardCompare(entry2.fileName) == .orderedAscending
         }
+        print("⏱️ RAR sort time: \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - sortStart))s")
 
         print("=== First 5 RAR entries after sorting ===")
         for (index, entry) in sorted.prefix(5).enumerated() {

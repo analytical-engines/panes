@@ -7,6 +7,24 @@ class RarImageSource: ImageSource {
     private let rarReader: RarReader
     private let archiveURL: URL
 
+    /// 進捗報告用のコールバック型
+    typealias PhaseCallback = @Sendable (String) async -> Void
+
+    /// 非同期ファクトリメソッド（進捗報告付き）
+    static func create(url: URL, onPhaseChange: PhaseCallback? = nil) async -> RarImageSource? {
+        guard let reader = await RarReader.create(url: url, onPhaseChange: onPhaseChange) else {
+            return nil
+        }
+        return RarImageSource(reader: reader, url: url)
+    }
+
+    /// 内部初期化（ファクトリメソッドから呼ばれる）
+    private init(reader: RarReader, url: URL) {
+        self.rarReader = reader
+        self.archiveURL = url
+    }
+
+    /// 同期的な初期化（後方互換性のため）
     init?(url: URL) {
         guard let reader = RarReader(url: url) else {
             return nil

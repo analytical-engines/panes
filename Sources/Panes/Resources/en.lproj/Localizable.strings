@@ -8,6 +8,11 @@
 "open_file" = "Open File";
 "recent_files" = "Recent Files:";
 "loading" = "Loading...";
+"loading_phase_opening_archive" = "Opening archive...";
+"loading_phase_building_image_list" = "Reading index...";
+"loading_phase_processing" = "Processing file...";
+"loading_phase_restoring_state" = "Restoring view state...";
+"loading_phase_loading_image" = "Loading image...";
 "opening_windows" = "Opening Windows...";
 "drop_files_hint" = "Drop archive or image files here";
 "access_count_format" = "(%d times)";

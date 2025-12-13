@@ -83,7 +83,7 @@ struct ContentView: View {
     private var mainContent: some View {
         // isWaitingForFileを最優先でチェック（D&D時にローディング画面を表示するため）
         if isWaitingForFile {
-            LoadingView()
+            LoadingView(phase: viewModel.loadingPhase)
         } else if viewModel.viewMode == .single, let image = viewModel.currentImage {
             SinglePageView(
                 image: image,
@@ -1392,6 +1392,7 @@ struct ContentView: View {
 
 /// ローディング画面（独自アニメーション）
 struct LoadingView: View {
+    var phase: String?
     @State private var rotation: Double = 0
 
     var body: some View {
@@ -1408,7 +1409,7 @@ struct LoadingView: View {
                         rotation = 360
                     }
                 }
-            Text(L("loading"))
+            Text(phase ?? L("loading"))
                 .foregroundColor(.gray)
         }
     }
