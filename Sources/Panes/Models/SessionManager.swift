@@ -137,6 +137,17 @@ class SessionManager {
         addToQueue(items)
     }
 
+    /// セッショングループを復元する
+    func restoreSessionGroup(_ group: SessionGroup) {
+        let items = group.entries.map { $0.toPendingFileOpen() }
+        guard !items.isEmpty else {
+            DebugLogger.log("📂 No files to restore in session group: \(group.name)", level: .normal)
+            return
+        }
+        DebugLogger.log("📂 Restoring session group: \(group.name) with \(items.count) files", level: .normal)
+        addToQueue(items)
+    }
+
     /// キューにアイテムを追加（統合メソッド）
     private func addToQueue(_ items: [PendingFileOpen]) {
         pendingFileOpens.append(contentsOf: items)

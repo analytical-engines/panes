@@ -86,6 +86,15 @@
 "menu_reading_direction_ltr" = "読み方向: 左から右";
 "menu_hide_status_bar" = "ステータスバーを隠す";
 "menu_show_status_bar" = "ステータスバーを表示";
+"menu_fitting_mode" = "フィッティング";
+"menu_fitting_window" = "ウィンドウにフィット";
+"menu_fitting_height" = "縦にフィット";
+"menu_fitting_width" = "横にフィット";
+"menu_fitting_original" = "等倍表示 (1:1)";
+"menu_zoom" = "拡大/縮小";
+"menu_zoom_in" = "拡大";
+"menu_zoom_out" = "縮小";
+"menu_zoom_reset" = "等倍";
 "menu_page_settings" = "ページ設定";
 "menu_remove_single_page_attribute" = "単ページ属性を解除";
 "menu_force_single_page" = "単ページ表示を強制";
@@ -286,3 +295,22 @@
 "search_type_content" = "書庫内画像";
 "search_filter_all" = "すべて";
 "search_filter_menu_title" = "絞り込み";
+
+// MARK: - Session Groups
+
+"menu_save_session" = "セッションを保存...";
+"save_session_title" = "セッションを保存";
+"save_session_message_format" = "%d個のウィンドウを名前付きセッションとして保存します。";
+"save_session_name_placeholder" = "セッション名";
+"tab_sessions" = "セッション";
+"session_group_empty" = "保存されたセッションがありません";
+"session_group_empty_hint" = "ウィンドウメニューから現在のウィンドウをセッションとして保存できます";
+"session_group_files_format" = "%d件";
+"session_group_restore" = "復元";
+"session_group_rename" = "名前を変更";
+"session_group_delete" = "削除";
+"session_rename_title" = "セッション名を変更";
+"session_rename_placeholder" = "セッション名";
+"session_delete_confirm_title" = "セッションを削除";
+"session_delete_confirm_message" = "「%@」を削除してもよろしいですか？";
+"search_type_session" = "セッション";

@@ -7,6 +7,7 @@ enum SearchTargetType: String, CaseIterable {
     case image = "image"                // 画像ファイルのみ
     case standalone = "standalone"      // 個別画像のみ
     case content = "content"            // 書庫/フォルダ内画像のみ
+    case session = "session"            // セッションのみ
 }
 
 /// パース済みの検索クエリ
@@ -28,7 +29,7 @@ struct ParsedSearchQuery {
         switch targetType {
         case .all, .archive:
             return true
-        case .image, .standalone, .content:
+        case .image, .standalone, .content, .session:
             return false
         }
     }
@@ -38,7 +39,7 @@ struct ParsedSearchQuery {
         switch targetType {
         case .all, .image, .standalone, .content:
             return true
-        case .archive:
+        case .archive, .session:
             return false
         }
     }
@@ -48,7 +49,7 @@ struct ParsedSearchQuery {
         switch targetType {
         case .all, .image, .standalone:
             return true
-        case .archive, .content:
+        case .archive, .content, .session:
             return false
         }
     }
@@ -58,7 +59,17 @@ struct ParsedSearchQuery {
         switch targetType {
         case .all, .image, .content:
             return true
-        case .archive, .standalone:
+        case .archive, .standalone, .session:
+            return false
+        }
+    }
+
+    /// セッションを検索対象に含むか
+    var includesSessions: Bool {
+        switch targetType {
+        case .all, .session:
+            return true
+        case .archive, .image, .standalone, .content:
             return false
         }
     }
@@ -78,7 +89,9 @@ enum HistorySearchParser {
         "images": .image,
         "standalone": .standalone,
         "content": .content,
-        "archived": .content
+        "archived": .content,
+        "session": .session,
+        "sessions": .session
     ]
 
     /// 検索クエリをパースする
@@ -211,17 +224,19 @@ struct UnifiedSearchResult {
     let archives: [FileHistoryEntry]
     /// マッチした画像エントリ
     let images: [ImageCatalogEntry]
+    /// マッチしたセッショングループ
+    let sessions: [SessionGroup]
     /// 検索に使用したクエリ
     let query: ParsedSearchQuery
 
     /// 総件数
     var totalCount: Int {
-        archives.count + images.count
+        archives.count + images.count + sessions.count
     }
 
     /// 結果が空かどうか
     var isEmpty: Bool {
-        archives.isEmpty && images.isEmpty
+        archives.isEmpty && images.isEmpty && sessions.isEmpty
     }
 }
 
@@ -303,14 +318,36 @@ enum UnifiedSearchFilter {
         return result
     }
 
+    /// セッショングループがクエリにマッチするかチェック
+    static func matches(_ group: SessionGroup, query: ParsedSearchQuery) -> Bool {
+        guard query.includesSessions else { return false }
+        guard query.hasKeyword else { return true }
+
+        // セッション名で検索
+        if matchesKeyword(group.name, keyword: query.keyword) {
+            return true
+        }
+
+        // ファイル名で検索
+        for entry in group.entries {
+            if matchesKeyword(entry.fileName, keyword: query.keyword) {
+                return true
+            }
+        }
+
+        return false
+    }
+
     /// 統合検索を実行
     static func search(
         query: ParsedSearchQuery,
         archives: [FileHistoryEntry],
-        images: [ImageCatalogEntry]
+        images: [ImageCatalogEntry],
+        sessions: [SessionGroup] = []
     ) -> UnifiedSearchResult {
         // 書庫パスからFileHistoryEntryへのマッピングを作成（高速検索用）
-        let archivesByPath = Dictionary(uniqueKeysWithValues: archives.map { ($0.filePath, $0) })
+        // 重複キーがある場合は最初のエントリを使用
+        let archivesByPath = Dictionary(archives.map { ($0.filePath, $0) }, uniquingKeysWith: { first, _ in first })
 
         let filteredArchives = archives.filter { matches($0, query: query) }
         let filteredImages = images.filter { entry in
@@ -320,10 +357,12 @@ enum UnifiedSearchFilter {
                 : nil
             return matches(entry, query: query, parentArchive: parentArchive)
         }
+        let filteredSessions = sessions.filter { matches($0, query: query) }
 
         return UnifiedSearchResult(
             archives: filteredArchives,
             images: filteredImages,
+            sessions: filteredSessions,
             query: query
         )
     }

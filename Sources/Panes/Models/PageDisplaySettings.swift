@@ -14,6 +14,14 @@ enum SinglePageAlignment: String, Codable {
     case center     // センタリング（ウィンドウフィッティング）
 }
 
+/// 画像のフィッティングモード
+enum FittingMode: String, Codable, CaseIterable {
+    case window         // ウィンドウサイズにフィッティング（アスペクト比維持、全体が収まる）
+    case height         // ウィンドウの縦サイズにフィッティング（横はスクロール可能）
+    case width          // ウィンドウの横サイズにフィッティング（縦はスクロール可能）
+    case originalSize   // 等倍表示（1:1ピクセル、スクロール可能）
+}
+
 /// 画像の回転角度（90度単位）
 enum ImageRotation: Int, Codable {
     case none = 0       // 回転なし

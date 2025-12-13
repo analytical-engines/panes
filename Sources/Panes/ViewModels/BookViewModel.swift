@@ -326,6 +326,17 @@ class BookViewModel {
     // 表示モード
     var viewMode: ViewMode = .single
 
+    // フィッティングモード
+    var fittingMode: FittingMode = .window
+
+    // ズームレベル（1.0 = 100%、2.0 = 200%）
+    var zoomLevel: CGFloat = 1.0
+
+    // ズームの最小・最大値
+    private let minZoomLevel: CGFloat = 0.25
+    private let maxZoomLevel: CGFloat = 8.0
+    private let zoomStep: CGFloat = 1.25  // 25%刻み（乗算）
+
     // 読み方向
     var readingDirection: ReadingDirection = .rightToLeft
 
@@ -1234,8 +1245,12 @@ class BookViewModel {
         let previousMode = viewMode
         viewMode = viewMode == .single ? .spread : .single
 
-        // 単ページモード → 見開きモードに切り替える場合、適切な見開き位置に調整
+        // 単ページモード → 見開きモードに切り替える場合
         if previousMode == .single && viewMode == .spread {
+            // 等倍表示は見開きでは未対応なのでウィンドウフィットに変更
+            if fittingMode == .originalSize {
+                fittingMode = .window
+            }
             // adjustCurrentPageForSpreadModeで正しい表示状態を計算し、画像を読み込む
             adjustCurrentPageForSpreadMode()
             loadImages(for: currentDisplay)
@@ -1340,6 +1355,35 @@ class BookViewModel {
     /// ステータスバー表示を切り替え
     func toggleStatusBar() {
         showStatusBar.toggle()
+    }
+
+    // MARK: - ズーム操作
+
+    /// ズームイン
+    func zoomIn() {
+        let newZoom = zoomLevel * zoomStep
+        zoomLevel = min(newZoom, maxZoomLevel)
+    }
+
+    /// ズームアウト
+    func zoomOut() {
+        let newZoom = zoomLevel / zoomStep
+        zoomLevel = max(newZoom, minZoomLevel)
+    }
+
+    /// ズームをリセット（100%に戻す）
+    func resetZoom() {
+        zoomLevel = 1.0
+    }
+
+    /// ズームレベルを設定（範囲制限付き）
+    func setZoom(_ level: CGFloat) {
+        zoomLevel = max(minZoomLevel, min(level, maxZoomLevel))
+    }
+
+    /// ズームレベルのパーセント表示
+    var zoomPercentage: Int {
+        return Int(zoomLevel * 100)
     }
 
     /// 現在のページの単ページ表示属性を切り替え

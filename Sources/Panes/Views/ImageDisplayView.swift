@@ -56,16 +56,33 @@ struct ImageDisplayView: View {
     let image: NSImage
     var rotation: ImageRotation = .none
     var flip: ImageFlip = .none
+    var fittingMode: FittingMode = .window
+    /// ScrollView内で使用する場合に外部から渡すビューポートサイズ
+    var viewportSize: CGSize? = nil
 
     var body: some View {
-        GeometryReader { geometry in
+        if let viewport = viewportSize {
+            // ビューポートサイズが指定されている場合（ScrollView内）
             RotationAwareImageView(
                 image: image,
                 rotation: rotation,
                 flip: flip,
-                containerWidth: geometry.size.width,
-                containerHeight: geometry.size.height
+                containerWidth: viewport.width,
+                containerHeight: viewport.height,
+                fittingMode: fittingMode
             )
+        } else {
+            // 通常の場合（GeometryReaderでサイズ取得）
+            GeometryReader { geometry in
+                RotationAwareImageView(
+                    image: image,
+                    rotation: rotation,
+                    flip: flip,
+                    containerWidth: geometry.size.width,
+                    containerHeight: geometry.size.height,
+                    fittingMode: fittingMode
+                )
+            }
         }
     }
 }
@@ -79,6 +96,7 @@ struct RotationAwareImageView: View {
     let containerWidth: CGFloat
     let containerHeight: CGFloat
     var alignment: Alignment = .center
+    var fittingMode: FittingMode = .window
 
     var body: some View {
         // 回転後の実効コンテナサイズを計算
@@ -92,11 +110,78 @@ struct RotationAwareImageView: View {
         // 実効コンテナにフィットするスケールを計算
         let scaleX = effectiveContainerWidth / imageWidth
         let scaleY = effectiveContainerHeight / imageHeight
-        let scale = min(scaleX, scaleY)
+
+        // フィッティングモードに応じてスケールを決定
+        let scale: CGFloat = {
+            switch fittingMode {
+            case .window:
+                return min(scaleX, scaleY)
+            case .height:
+                return scaleY
+            case .width:
+                return scaleX
+            case .originalSize:
+                return 1.0  // 等倍表示（1:1ピクセル）
+            }
+        }()
 
         // フィット後のサイズ
         let fittedWidth = imageWidth * scale
         let fittedHeight = imageHeight * scale
+
+        // 回転後の視覚的なサイズ
+        let visualWidth = rotation.swapsAspectRatio ? fittedHeight : fittedWidth
+        let visualHeight = rotation.swapsAspectRatio ? fittedWidth : fittedHeight
+
+        // フレームサイズ（フィッティングモードに応じて変更）
+        let frameWidth: CGFloat = {
+            switch fittingMode {
+            case .window:
+                return containerWidth
+            case .height:
+                // 縦フィット時は視覚的な幅をフレーム幅とする（はみ出し許可）
+                return max(visualWidth, containerWidth)
+            case .width:
+                return containerWidth
+            case .originalSize:
+                // 等倍表示時は視覚的な幅をフレーム幅とする（はみ出し許可）
+                return max(visualWidth, containerWidth)
+            }
+        }()
+
+        let frameHeight: CGFloat = {
+            switch fittingMode {
+            case .window:
+                return containerHeight
+            case .height:
+                return containerHeight
+            case .width:
+                // 横フィット時は視覚的な高さをフレーム高さとする（はみ出し許可）
+                return max(visualHeight, containerHeight)
+            case .originalSize:
+                // 等倍表示時は視覚的な高さをフレーム高さとする（はみ出し許可）
+                return max(visualHeight, containerHeight)
+            }
+        }()
+
+        // 回転時のアライメント補正オフセット
+        // 90°/270°回転すると視覚的な幅と高さが入れ替わるが、
+        // SwiftUIのアライメントは回転前のフレームに基づくため補正が必要
+        let alignmentOffsetX: CGFloat = {
+            guard rotation.swapsAspectRatio else { return 0 }
+            // 視覚的な幅 = fittedHeight（回転で入れ替わる）
+            // レイアウト幅 = fittedWidth
+            switch alignment {
+            case .leading, .topLeading, .bottomLeading:
+                // 視覚的な左端をコンテナ左端に合わせる
+                return (fittedHeight - fittedWidth) / 2
+            case .trailing, .topTrailing, .bottomTrailing:
+                // 視覚的な右端をコンテナ右端に合わせる
+                return (fittedWidth - fittedHeight) / 2
+            default:
+                return 0
+            }
+        }()
 
         Image(nsImage: image)
             .resizable()
@@ -106,6 +191,7 @@ struct RotationAwareImageView: View {
                 y: flip.vertical ? -1 : 1
             )
             .rotationEffect(.degrees(Double(rotation.rawValue)))
-            .frame(width: containerWidth, height: containerHeight, alignment: alignment)
+            .offset(x: alignmentOffsetX)
+            .frame(width: frameWidth, height: frameHeight, alignment: alignment)
     }
 }

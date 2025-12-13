@@ -54,6 +54,7 @@ struct ImageViewerApp: App {
     @State private var imageCatalogManager = ImageCatalogManager()
     @State private var appSettings = AppSettings()
     @State private var sessionManager = SessionManager()
+    @State private var sessionGroupManager = SessionGroupManager()
     @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
@@ -63,6 +64,7 @@ struct ImageViewerApp: App {
                 .environment(imageCatalogManager)
                 .environment(appSettings)
                 .environment(sessionManager)
+                .environment(sessionGroupManager)
                 .onAppear {
                     // ウィンドウを最前面に
                     NSApp.activate(ignoringOtherApps: true)
@@ -163,6 +165,88 @@ struct ImageViewerApp: App {
                 }
                 .disabled(focusedViewModel == nil)
 
+                // フィッティングモード
+                Menu(L("menu_fitting_mode")) {
+                    Button(action: {
+                        focusedViewModel?.fittingMode = .window
+                    }) {
+                        Label(
+                            L("menu_fitting_window"),
+                            systemImage: focusedViewModel?.fittingMode == .window
+                                ? "checkmark"
+                                : ""
+                        )
+                    }
+                    Button(action: {
+                        focusedViewModel?.fittingMode = .height
+                    }) {
+                        Label(
+                            L("menu_fitting_height"),
+                            systemImage: focusedViewModel?.fittingMode == .height
+                                ? "checkmark"
+                                : ""
+                        )
+                    }
+                    Button(action: {
+                        focusedViewModel?.fittingMode = .width
+                    }) {
+                        Label(
+                            L("menu_fitting_width"),
+                            systemImage: focusedViewModel?.fittingMode == .width
+                                ? "checkmark"
+                                : ""
+                        )
+                    }
+
+                    Divider()
+
+                    Button(action: {
+                        focusedViewModel?.fittingMode = .originalSize
+                    }) {
+                        Label(
+                            L("menu_fitting_original"),
+                            systemImage: focusedViewModel?.fittingMode == .originalSize
+                                ? "checkmark"
+                                : ""
+                        )
+                    }
+                    .disabled(focusedViewModel?.viewMode == .spread)
+                }
+                .disabled(focusedViewModel == nil)
+
+                // ズーム
+                Menu(L("menu_zoom")) {
+                    Button(action: {
+                        focusedViewModel?.zoomIn()
+                    }) {
+                        Label(L("menu_zoom_in"), systemImage: "plus.magnifyingglass")
+                    }
+                    .keyboardShortcut("+", modifiers: .command)
+
+                    Button(action: {
+                        focusedViewModel?.zoomOut()
+                    }) {
+                        Label(L("menu_zoom_out"), systemImage: "minus.magnifyingglass")
+                    }
+                    .keyboardShortcut("-", modifiers: .command)
+
+                    Divider()
+
+                    Button(action: {
+                        focusedViewModel?.resetZoom()
+                    }) {
+                        Label(L("menu_zoom_reset"), systemImage: "1.magnifyingglass")
+                    }
+                    .keyboardShortcut("0", modifiers: .command)
+
+                    Divider()
+
+                    // 現在のズームレベル表示
+                    Text("\(focusedViewModel?.zoomPercentage ?? 100)%")
+                        .foregroundColor(.secondary)
+                }
+                .disabled(focusedViewModel == nil)
+
                 Button(action: {
                     focusedViewModel?.toggleStatusBar()
                 }) {
@@ -258,6 +342,19 @@ struct ImageViewerApp: App {
                 }
                 .disabled(focusedViewModel == nil)
             }
+
+            // ウィンドウメニューにセッション保存を追加
+            CommandGroup(before: .windowArrangement) {
+                Button(action: {
+                    saveCurrentWindowsAsSession()
+                }) {
+                    Label(L("menu_save_session"), systemImage: "square.stack.3d.up")
+                }
+                .keyboardShortcut("s", modifiers: [.command, .shift])
+                .disabled(sessionManager.activeWindows.isEmpty)
+
+                Divider()
+            }
         }
 
         // 設定ウィンドウ
@@ -276,6 +373,7 @@ struct ImageViewerApp: App {
                 .environment(imageCatalogManager)
                 .environment(appSettings)
                 .environment(sessionManager)
+                .environment(sessionGroupManager)
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(getDefaultWindowSize())
@@ -287,6 +385,7 @@ struct ImageViewerApp: App {
                 .environment(imageCatalogManager)
                 .environment(appSettings)
                 .environment(sessionManager)
+                .environment(sessionGroupManager)
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(getDefaultWindowSize())
@@ -446,6 +545,37 @@ struct ImageViewerApp: App {
                 alert.runModal()
             }
         }
+    }
+
+    /// 現在のウィンドウをセッショングループとして保存
+    private func saveCurrentWindowsAsSession() {
+        let windowEntries = sessionManager.collectCurrentWindowStates()
+        guard !windowEntries.isEmpty else { return }
+
+        let alert = NSAlert()
+        alert.messageText = L("save_session_title")
+        alert.informativeText = String(format: L("save_session_message_format"), windowEntries.count)
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: L("save"))
+        alert.addButton(withTitle: L("cancel"))
+
+        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        textField.stringValue = generateDefaultSessionName()
+        textField.placeholderString = L("save_session_name_placeholder")
+        alert.accessoryView = textField
+        alert.window.initialFirstResponder = textField
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            let name = textField.stringValue.isEmpty ? generateDefaultSessionName() : textField.stringValue
+            _ = sessionGroupManager.createSessionGroup(name: name, from: windowEntries)
+        }
+    }
+
+    /// デフォルトのセッション名を生成
+    private func generateDefaultSessionName() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy/MM/dd HH:mm"
+        return formatter.string(from: Date())
     }
 }
 

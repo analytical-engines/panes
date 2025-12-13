@@ -20,8 +20,10 @@ struct ContentView: View {
     @Environment(ImageCatalogManager.self) private var imageCatalogManager
     @Environment(AppSettings.self) private var appSettings
     @Environment(SessionManager.self) private var sessionManager
+    @Environment(SessionGroupManager.self) private var sessionGroupManager
     @Environment(\.openWindow) private var openWindow
     @State private var eventMonitor: Any?
+    @State private var scrollEventMonitor: Any?
     @State private var myWindowNumber: Int?
     @State private var windowID = UUID()
 
@@ -73,6 +75,9 @@ struct ContentView: View {
     // 表示順序変更用（コピー/ペースト方式）
     @State private var copiedPageIndex: Int?
 
+    // ピンチジェスチャー用のベースライン（ジェスチャー開始時のズームレベル）
+    @State private var magnificationGestureBaseline: CGFloat = 1.0
+
     // セッション中の履歴表示状態（起動時にAppSettingsから初期化）
     @State private var showHistory: Bool = true
 
@@ -90,6 +95,8 @@ struct ContentView: View {
                 pageIndex: viewModel.currentPage,
                 rotation: viewModel.getRotation(at: viewModel.currentPage),
                 flip: viewModel.getFlip(at: viewModel.currentPage),
+                fittingMode: viewModel.fittingMode,
+                zoomLevel: viewModel.zoomLevel,
                 showStatusBar: viewModel.showStatusBar,
                 archiveFileName: viewModel.archiveFileName,
                 currentFileName: viewModel.currentFileName,
@@ -121,6 +128,8 @@ struct ContentView: View {
                 firstPageFlip: viewModel.getFlip(at: viewModel.currentPage),
                 secondPageRotation: viewModel.getRotation(at: viewModel.currentPage + 1),
                 secondPageFlip: viewModel.getFlip(at: viewModel.currentPage + 1),
+                fittingMode: viewModel.fittingMode,
+                zoomLevel: viewModel.zoomLevel,
                 showStatusBar: viewModel.showStatusBar,
                 archiveFileName: viewModel.archiveFileName,
                 currentFileName: viewModel.currentFileName,
@@ -163,7 +172,11 @@ struct ContentView: View {
                     editingMemoText = currentMemo ?? ""
                     showMemoEdit = true
                 },
-                onOpenImageCatalogFile: openImageCatalogFile
+                onOpenImageCatalogFile: openImageCatalogFile,
+                onRestoreSession: { session in
+                    sessionGroupManager.updateLastAccessed(id: session.id)
+                    sessionManager.restoreSessionGroup(session)
+                }
             )
             .contextMenu { initialScreenContextMenu }
         }
@@ -670,6 +683,30 @@ struct ContentView: View {
                 }
 
             mainContent
+        }
+        .gesture(
+            MagnificationGesture()
+                .onChanged { value in
+                    // ピンチジェスチャー中：ベースラインから相対的にズームを適用
+                    if viewModel.hasOpenFile {
+                        viewModel.setZoom(magnificationGestureBaseline * value)
+                    }
+                }
+                .onEnded { value in
+                    // ジェスチャー終了時：最終値を確定してベースラインを更新
+                    if viewModel.hasOpenFile {
+                        viewModel.setZoom(magnificationGestureBaseline * value)
+                        magnificationGestureBaseline = viewModel.zoomLevel
+                    }
+                }
+        )
+        .onAppear {
+            // ベースラインを初期化
+            magnificationGestureBaseline = viewModel.zoomLevel
+        }
+        .onChange(of: viewModel.zoomLevel) { _, newValue in
+            // メニューやキーボードでズームが変更された場合にベースラインを更新
+            magnificationGestureBaseline = newValue
         }
         .frame(minWidth: 800, minHeight: 600)
         .focusable()
@@ -1188,6 +1225,38 @@ struct ContentView: View {
             }
             return event
         }
+
+        // ⌘ + スクロールホイールでズーム
+        scrollEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak viewModel] event in
+            // ⌘キーが押されているか確認
+            guard event.modifierFlags.contains(.command) else {
+                return event
+            }
+
+            // 自分のウィンドウか確認
+            let keyWindowNumber = NSApp.keyWindow?.windowNumber
+            guard self.myWindowNumber == keyWindowNumber else {
+                return event
+            }
+
+            // ファイルが開いているか確認
+            guard viewModel?.hasOpenFile == true else {
+                return event
+            }
+
+            // スクロール量を取得（縦スクロールを使用）
+            let delta = event.scrollingDeltaY
+
+            // 感度調整（スクロール量に応じてズーム）
+            let zoomFactor: CGFloat = 1.0 + (delta * 0.01)
+
+            if let currentZoom = viewModel?.zoomLevel {
+                viewModel?.setZoom(currentZoom * zoomFactor)
+            }
+
+            // イベントを消費（通常のスクロールとして処理しない）
+            return nil
+        }
     }
 
     private func setupNotificationObservers() {
@@ -1199,6 +1268,11 @@ struct ContentView: View {
         if let monitor = eventMonitor {
             NSEvent.removeMonitor(monitor)
             eventMonitor = nil
+        }
+
+        if let monitor = scrollEventMonitor {
+            NSEvent.removeMonitor(monitor)
+            scrollEventMonitor = nil
         }
 
         // セッションマネージャーからウィンドウを削除
@@ -1434,6 +1508,7 @@ struct InitialScreenView: View {
     let onEditMemo: (String, String?) -> Void  // (fileKey, currentMemo) for archives
     let onEditImageMemo: (String, String?) -> Void  // (id, currentMemo) for image catalog
     let onOpenImageCatalogFile: (String, String?) -> Void  // (filePath, relativePath) for image catalog
+    var onRestoreSession: ((SessionGroup) -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 20) {
@@ -1456,7 +1531,7 @@ struct InitialScreenView: View {
             .buttonStyle(.borderedProminent)
 
             // 履歴表示
-            HistoryListView(filterText: $filterText, showFilterField: $showFilterField, selectedTab: $selectedTab, lastOpenedArchiveId: $lastOpenedArchiveId, lastOpenedImageId: $lastOpenedImageId, showHistory: $showHistory, scrollTrigger: scrollTrigger, onOpenHistoryFile: onOpenHistoryFile, onOpenInNewWindow: onOpenInNewWindow, onEditMemo: onEditMemo, onEditImageMemo: onEditImageMemo, onOpenImageFile: onOpenImageCatalogFile)
+            HistoryListView(filterText: $filterText, showFilterField: $showFilterField, selectedTab: $selectedTab, lastOpenedArchiveId: $lastOpenedArchiveId, lastOpenedImageId: $lastOpenedImageId, showHistory: $showHistory, scrollTrigger: scrollTrigger, onOpenHistoryFile: onOpenHistoryFile, onOpenInNewWindow: onOpenInNewWindow, onEditMemo: onEditMemo, onEditImageMemo: onEditImageMemo, onOpenImageFile: onOpenImageCatalogFile, onRestoreSession: onRestoreSession)
         }
     }
 }
@@ -1466,6 +1541,7 @@ struct HistoryListView: View {
     @Environment(FileHistoryManager.self) private var historyManager
     @Environment(ImageCatalogManager.self) private var imageCatalogManager
     @Environment(AppSettings.self) private var appSettings
+    @Environment(SessionGroupManager.self) private var sessionGroupManager
     @Binding var filterText: String
     @Binding var showFilterField: Bool
     @Binding var selectedTab: HistoryTab  // 後方互換性のため残す（将来削除予定）
@@ -1480,12 +1556,14 @@ struct HistoryListView: View {
     @State private var isImagesSectionCollapsed = false
     @State private var isStandaloneSectionCollapsed = false
     @State private var isArchiveContentSectionCollapsed = false
+    @State private var isSessionsSectionCollapsed = false
 
     let onOpenHistoryFile: (String) -> Void
     let onOpenInNewWindow: (String) -> Void  // filePath
     let onEditMemo: (String, String?) -> Void  // (fileKey, currentMemo) for archives
     let onEditImageMemo: (String, String?) -> Void  // (id, currentMemo) for image catalog
     let onOpenImageFile: (String, String?) -> Void  // (filePath, relativePath) - 画像ファイルを開く
+    var onRestoreSession: ((SessionGroup) -> Void)? = nil
 
     var body: some View {
         Group {
@@ -1564,6 +1642,7 @@ struct HistoryListView: View {
 
             let recentHistory = historyManager.getRecentHistory(limit: appSettings.maxHistoryCount)
             let imageCatalog = imageCatalogManager.catalog
+            let sessionGroups = sessionGroupManager.sessionGroups
 
             // 検索クエリをパース
             let parsedQuery = HistorySearchParser.parse(filterText)
@@ -1571,11 +1650,12 @@ struct HistoryListView: View {
             let searchResult = UnifiedSearchFilter.search(
                 query: parsedQuery,
                 archives: recentHistory,
-                images: imageCatalog
+                images: imageCatalog,
+                sessions: sessionGroups
             )
 
-            // 履歴表示が有効で、書庫または画像がある場合
-            if showHistory && (!recentHistory.isEmpty || !imageCatalog.isEmpty) {
+            // 履歴表示が有効で、書庫または画像またはセッションがある場合
+            if showHistory && (!recentHistory.isEmpty || !imageCatalog.isEmpty || !sessionGroups.isEmpty) {
                 VStack(alignment: .leading, spacing: 8) {
                     // 検索フィールド（常に表示、⌘+Fでフォーカス）
                     HStack {
@@ -1622,6 +1702,9 @@ struct HistoryListView: View {
                             Button(action: { insertSearchFilter("type:image ") }) {
                                 Label(L("search_type_image"), systemImage: "photo.stack")
                             }
+                            Button(action: { insertSearchFilter("type:session ") }) {
+                                Label(L("search_type_session"), systemImage: "square.stack.3d.up")
+                            }
                             Divider()
                             Button(action: { insertSearchFilter("type:standalone ") }) {
                                 Label(L("search_type_standalone"), systemImage: "photo")
@@ -1662,6 +1745,15 @@ struct HistoryListView: View {
                                 )
                             }
 
+                            // セッションセクション
+                            if parsedQuery.includesSessions && !searchResult.sessions.isEmpty {
+                                sessionsSectionView(
+                                    sessions: searchResult.sessions,
+                                    totalCount: sessionGroups.count,
+                                    isFiltering: parsedQuery.hasKeyword
+                                )
+                            }
+
                             // 検索結果が空の場合
                             if parsedQuery.hasKeyword && searchResult.isEmpty {
                                 Text(L("search_no_results"))
@@ -1695,6 +1787,8 @@ struct HistoryListView: View {
             return L("search_type_standalone")
         case .content:
             return L("search_type_content")
+        case .session:
+            return L("search_type_session")
         }
     }
 
@@ -1931,6 +2025,58 @@ struct HistoryListView: View {
         }
     }
 
+    /// セッションセクションビュー
+    @ViewBuilder
+    private func sessionsSectionView(sessions: [SessionGroup], totalCount: Int, isFiltering: Bool) -> some View {
+        // セクションヘッダー
+        HStack {
+            Button(action: { isSessionsSectionCollapsed.toggle() }) {
+                HStack(spacing: 4) {
+                    Image(systemName: isSessionsSectionCollapsed ? "chevron.right" : "chevron.down")
+                        .font(.caption)
+                    Image(systemName: "square.stack.3d.up")
+                    Text(L("tab_sessions"))
+                        .font(.subheadline.bold())
+                    Text("(\(sessions.count))")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
+            }
+            .buttonStyle(.plain)
+            .foregroundColor(.white)
+
+            Spacer()
+
+            if isFiltering {
+                Text(L("history_filter_result_format", sessions.count, totalCount))
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            } else {
+                Text("[\(sessions.count)/\(sessionGroupManager.maxSessionGroupCount)]")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
+        }
+        .padding(.horizontal, 4)
+
+        if !isSessionsSectionCollapsed {
+            ForEach(sessions) { session in
+                SessionGroupRow(
+                    session: session,
+                    onRestore: {
+                        onRestoreSession?(session)
+                    },
+                    onRename: { newName in
+                        sessionGroupManager.renameSessionGroup(id: session.id, newName: newName)
+                    },
+                    onDelete: {
+                        sessionGroupManager.deleteSessionGroup(id: session.id)
+                    }
+                )
+            }
+        }
+    }
+
     /// データベースリセットの確認ダイアログを表示
     private func showResetDatabaseConfirmation() {
         let alert = NSAlert()
@@ -1942,6 +2088,107 @@ struct HistoryListView: View {
 
         if alert.runModal() == .alertFirstButtonReturn {
             historyManager.resetDatabase()
+        }
+    }
+}
+
+/// セッショングループの行
+struct SessionGroupRow: View {
+    let session: SessionGroup
+    let onRestore: () -> Void
+    let onRename: (String) -> Void
+    let onDelete: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: onRestore) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(session.name)
+                        .foregroundColor(.white)
+                    HStack(spacing: 8) {
+                        Text(String(format: L("session_group_files_format"), session.fileCount))
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                        Text(formatDate(session.lastAccessedAt))
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                }
+                Spacer()
+                // アクセス可能なファイル数
+                if session.accessibleFileCount < session.fileCount {
+                    Text("\(session.accessibleFileCount)/\(session.fileCount)")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
+            }
+            .padding(.vertical, 4)
+            .padding(.horizontal, 8)
+            .background(isHovering ? Color.white.opacity(0.1) : Color.clear)
+            .cornerRadius(4)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovering = hovering
+        }
+        .contextMenu {
+            Button(action: onRestore) {
+                Label(L("session_group_restore"), systemImage: "arrow.uturn.backward")
+            }
+            Divider()
+            Button(action: {
+                showRenameDialog()
+            }) {
+                Label(L("session_group_rename"), systemImage: "pencil")
+            }
+            Button(role: .destructive, action: {
+                showDeleteConfirmation()
+            }) {
+                Label(L("session_group_delete"), systemImage: "trash")
+            }
+        }
+    }
+
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+
+    private func showRenameDialog() {
+        let alert = NSAlert()
+        alert.messageText = L("session_rename_title")
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: L("save"))
+        alert.addButton(withTitle: L("cancel"))
+
+        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        textField.stringValue = session.name
+        textField.placeholderString = L("session_rename_placeholder")
+        alert.accessoryView = textField
+        alert.window.initialFirstResponder = textField
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            let newName = textField.stringValue
+            if !newName.isEmpty {
+                onRename(newName)
+            }
+        }
+    }
+
+    private func showDeleteConfirmation() {
+        let alert = NSAlert()
+        alert.messageText = L("session_delete_confirm_title")
+        alert.informativeText = String(format: L("session_delete_confirm_message"), session.name)
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: L("session_group_delete"))
+        alert.addButton(withTitle: L("cancel"))
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            onDelete()
         }
     }
 }
@@ -2314,6 +2561,8 @@ struct SinglePageView<ContextMenu: View>: View {
     let pageIndex: Int
     let rotation: ImageRotation
     let flip: ImageFlip
+    let fittingMode: FittingMode
+    let zoomLevel: CGFloat
     let showStatusBar: Bool
     let archiveFileName: String
     let currentFileName: String
@@ -2323,8 +2572,83 @@ struct SinglePageView<ContextMenu: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ImageDisplayView(image: image, rotation: rotation, flip: flip)
-                .contextMenu { contextMenuBuilder(pageIndex) }
+            GeometryReader { geometry in
+                // ズーム適用後の仮想ビューポートサイズ
+                let effectiveViewport = CGSize(
+                    width: geometry.size.width * zoomLevel,
+                    height: geometry.size.height * zoomLevel
+                )
+
+                // ズームが適用されている場合は常にスクロール可能にする
+                if zoomLevel != 1.0 {
+                    ScrollView([.horizontal, .vertical], showsIndicators: true) {
+                        ImageDisplayView(
+                            image: image,
+                            rotation: rotation,
+                            flip: flip,
+                            fittingMode: fittingMode,
+                            viewportSize: effectiveViewport
+                        )
+                        .contextMenu { contextMenuBuilder(pageIndex) }
+                        .frame(
+                            minWidth: geometry.size.width,
+                            minHeight: geometry.size.height,
+                            alignment: .center
+                        )
+                    }
+                    .defaultScrollAnchor(.center)
+                } else {
+                    switch fittingMode {
+                    case .window:
+                        ImageDisplayView(image: image, rotation: rotation, flip: flip, fittingMode: fittingMode)
+                            .contextMenu { contextMenuBuilder(pageIndex) }
+                    case .height:
+                        // 縦フィット: 横スクロール可能、横センタリング
+                        ScrollView(.horizontal, showsIndicators: true) {
+                            ImageDisplayView(
+                                image: image,
+                                rotation: rotation,
+                                flip: flip,
+                                fittingMode: fittingMode,
+                                viewportSize: geometry.size
+                            )
+                            .contextMenu { contextMenuBuilder(pageIndex) }
+                            .frame(minWidth: geometry.size.width, alignment: .center)
+                        }
+                    case .width:
+                        // 横フィット: 縦スクロール可能、縦センタリング
+                        ScrollView(.vertical, showsIndicators: true) {
+                            ImageDisplayView(
+                                image: image,
+                                rotation: rotation,
+                                flip: flip,
+                                fittingMode: fittingMode,
+                                viewportSize: geometry.size
+                            )
+                            .contextMenu { contextMenuBuilder(pageIndex) }
+                            .frame(minHeight: geometry.size.height, alignment: .center)
+                        }
+                    case .originalSize:
+                        // 等倍表示: 縦横スクロール可能、センタリング
+                        ScrollView([.horizontal, .vertical], showsIndicators: true) {
+                            ImageDisplayView(
+                                image: image,
+                                rotation: rotation,
+                                flip: flip,
+                                fittingMode: fittingMode,
+                                viewportSize: geometry.size
+                            )
+                            .contextMenu { contextMenuBuilder(pageIndex) }
+                            .frame(
+                                minWidth: geometry.size.width,
+                                minHeight: geometry.size.height,
+                                alignment: .center
+                            )
+                        }
+                        .defaultScrollAnchor(.center)
+                    }
+                }
+            }
 
             if showStatusBar {
                 StatusBarView(
@@ -2350,6 +2674,8 @@ struct SpreadPageView<ContextMenu: View>: View {
     let firstPageFlip: ImageFlip
     let secondPageRotation: ImageRotation
     let secondPageFlip: ImageFlip
+    let fittingMode: FittingMode
+    let zoomLevel: CGFloat
     let showStatusBar: Bool
     let archiveFileName: String
     let currentFileName: String
@@ -2359,19 +2685,114 @@ struct SpreadPageView<ContextMenu: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SpreadView(
-                readingDirection: readingDirection,
-                firstPageImage: firstPageImage,
-                firstPageIndex: firstPageIndex,
-                secondPageImage: secondPageImage,
-                secondPageIndex: secondPageIndex,
-                singlePageAlignment: singlePageAlignment,
-                firstPageRotation: firstPageRotation,
-                firstPageFlip: firstPageFlip,
-                secondPageRotation: secondPageRotation,
-                secondPageFlip: secondPageFlip,
-                contextMenuBuilder: contextMenuBuilder
-            )
+            GeometryReader { geometry in
+                // ズーム適用後の仮想ビューポートサイズ
+                let effectiveViewport = CGSize(
+                    width: geometry.size.width * zoomLevel,
+                    height: geometry.size.height * zoomLevel
+                )
+
+                // ズームが適用されている場合は常にスクロール可能にする
+                if zoomLevel != 1.0 {
+                    ScrollView([.horizontal, .vertical], showsIndicators: true) {
+                        SpreadView(
+                            readingDirection: readingDirection,
+                            firstPageImage: firstPageImage,
+                            firstPageIndex: firstPageIndex,
+                            secondPageImage: secondPageImage,
+                            secondPageIndex: secondPageIndex,
+                            singlePageAlignment: singlePageAlignment,
+                            firstPageRotation: firstPageRotation,
+                            firstPageFlip: firstPageFlip,
+                            secondPageRotation: secondPageRotation,
+                            secondPageFlip: secondPageFlip,
+                            fittingMode: fittingMode,
+                            viewportSize: effectiveViewport,
+                            contextMenuBuilder: contextMenuBuilder
+                        )
+                        .frame(
+                            minWidth: geometry.size.width,
+                            minHeight: geometry.size.height,
+                            alignment: .center
+                        )
+                    }
+                    .defaultScrollAnchor(.center)
+                } else {
+                    switch fittingMode {
+                    case .window:
+                        SpreadView(
+                            readingDirection: readingDirection,
+                            firstPageImage: firstPageImage,
+                            firstPageIndex: firstPageIndex,
+                            secondPageImage: secondPageImage,
+                            secondPageIndex: secondPageIndex,
+                            singlePageAlignment: singlePageAlignment,
+                            firstPageRotation: firstPageRotation,
+                            firstPageFlip: firstPageFlip,
+                            secondPageRotation: secondPageRotation,
+                            secondPageFlip: secondPageFlip,
+                            fittingMode: fittingMode,
+                            contextMenuBuilder: contextMenuBuilder
+                        )
+                    case .height:
+                        // 縦フィット: 横スクロール可能、横センタリング
+                        ScrollView(.horizontal, showsIndicators: true) {
+                            SpreadView(
+                                readingDirection: readingDirection,
+                                firstPageImage: firstPageImage,
+                                firstPageIndex: firstPageIndex,
+                                secondPageImage: secondPageImage,
+                                secondPageIndex: secondPageIndex,
+                                singlePageAlignment: singlePageAlignment,
+                                firstPageRotation: firstPageRotation,
+                                firstPageFlip: firstPageFlip,
+                                secondPageRotation: secondPageRotation,
+                                secondPageFlip: secondPageFlip,
+                                fittingMode: fittingMode,
+                                viewportSize: geometry.size,
+                                contextMenuBuilder: contextMenuBuilder
+                            )
+                            .frame(minWidth: geometry.size.width, alignment: .center)
+                        }
+                    case .width:
+                        // 横フィット: 縦スクロール可能、縦センタリング
+                        ScrollView(.vertical, showsIndicators: true) {
+                            SpreadView(
+                                readingDirection: readingDirection,
+                                firstPageImage: firstPageImage,
+                                firstPageIndex: firstPageIndex,
+                                secondPageImage: secondPageImage,
+                                secondPageIndex: secondPageIndex,
+                                singlePageAlignment: singlePageAlignment,
+                                firstPageRotation: firstPageRotation,
+                                firstPageFlip: firstPageFlip,
+                                secondPageRotation: secondPageRotation,
+                                secondPageFlip: secondPageFlip,
+                                fittingMode: fittingMode,
+                                viewportSize: geometry.size,
+                                contextMenuBuilder: contextMenuBuilder
+                            )
+                            .frame(minHeight: geometry.size.height, alignment: .center)
+                        }
+                    case .originalSize:
+                        // 等倍表示は見開きでは未対応、ウィンドウフィットにフォールバック
+                        SpreadView(
+                            readingDirection: readingDirection,
+                            firstPageImage: firstPageImage,
+                            firstPageIndex: firstPageIndex,
+                            secondPageImage: secondPageImage,
+                            secondPageIndex: secondPageIndex,
+                            singlePageAlignment: singlePageAlignment,
+                            firstPageRotation: firstPageRotation,
+                            firstPageFlip: firstPageFlip,
+                            secondPageRotation: secondPageRotation,
+                            secondPageFlip: secondPageFlip,
+                            fittingMode: .window,
+                            contextMenuBuilder: contextMenuBuilder
+                        )
+                    }
+                }
+            }
 
             if showStatusBar {
                 StatusBarView(
@@ -2463,31 +2884,54 @@ struct WindowNumberGetter: NSViewRepresentable {
     @Binding var windowNumber: Int?
 
     func makeNSView(context: Context) -> NSView {
-        let view = NSView()
+        let view = WindowNumberGetterView()
+        view.onWindowAttached = { window in
+            configureWindow(window)
+        }
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        // ウィンドウが利用可能になるまで待つ
-        DispatchQueue.main.async {
-            if let window = nsView.window {
-                let oldValue = self.windowNumber
-                self.windowNumber = window.windowNumber
-
-                // タイトルバーの文字色を白に設定
-                window.titlebarAppearsTransparent = true
-                window.appearance = NSAppearance(named: .darkAqua)
-
-                // macOSのState Restorationを無効化（独自のセッション復元を使用）
-                window.isRestorable = false
-
-                // SwiftUIのウィンドウフレーム自動保存を無効化
-                window.setFrameAutosaveName("")
-
-                if oldValue != window.windowNumber {
-                    DebugLogger.log("🪟 WindowNumberGetter: captured \(window.windowNumber) (was: \(String(describing: oldValue)))", level: .normal)
-                }
+        // ビューが既にウィンドウに追加されている場合は設定
+        if let view = nsView as? WindowNumberGetterView {
+            view.onWindowAttached = { window in
+                configureWindow(window)
             }
+            if let window = nsView.window {
+                configureWindow(window)
+            }
+        }
+    }
+
+    private func configureWindow(_ window: NSWindow) {
+        let oldValue = self.windowNumber
+        self.windowNumber = window.windowNumber
+
+        // タイトルバーの文字色を白に設定
+        window.titlebarAppearsTransparent = true
+        window.appearance = NSAppearance(named: .darkAqua)
+
+        // macOSのState Restorationを無効化（独自のセッション復元を使用）
+        window.isRestorable = false
+
+        // SwiftUIのウィンドウフレーム自動保存を無効化
+        window.setFrameAutosaveName("")
+
+        if oldValue != window.windowNumber {
+            DebugLogger.log("🪟 WindowNumberGetter: captured \(window.windowNumber) (was: \(String(describing: oldValue)))", level: .normal)
+        }
+    }
+}
+
+/// ウィンドウへの追加を検出するカスタムNSView
+private class WindowNumberGetterView: NSView {
+    var onWindowAttached: ((NSWindow) -> Void)?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let window = self.window {
+            DebugLogger.log("🪟 WindowNumberGetterView: viewDidMoveToWindow called with window \(window.windowNumber)", level: .normal)
+            onWindowAttached?(window)
         }
     }
 }

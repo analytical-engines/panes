@@ -86,6 +86,15 @@
 "menu_reading_direction_ltr" = "Reading Direction: Left to Right";
 "menu_hide_status_bar" = "Hide Status Bar";
 "menu_show_status_bar" = "Show Status Bar";
+"menu_fitting_mode" = "Fitting Mode";
+"menu_fitting_window" = "Fit to Window";
+"menu_fitting_height" = "Fit to Height";
+"menu_fitting_width" = "Fit to Width";
+"menu_fitting_original" = "Original Size (1:1)";
+"menu_zoom" = "Zoom";
+"menu_zoom_in" = "Zoom In";
+"menu_zoom_out" = "Zoom Out";
+"menu_zoom_reset" = "Actual Size";
 "menu_page_settings" = "Page Settings";
 "menu_remove_single_page_attribute" = "Remove Single Page Attribute";
 "menu_force_single_page" = "Force Single Page Display";
@@ -286,3 +295,22 @@
 "search_type_content" = "Archive Content";
 "search_filter_all" = "All";
 "search_filter_menu_title" = "Filter";
+
+// MARK: - Session Groups
+
+"menu_save_session" = "Save Session...";
+"save_session_title" = "Save Session";
+"save_session_message_format" = "Save %d window(s) as a named session.";
+"save_session_name_placeholder" = "Session name";
+"tab_sessions" = "Sessions";
+"session_group_empty" = "No saved sessions";
+"session_group_empty_hint" = "Save current windows as a session from Window menu";
+"session_group_files_format" = "%d files";
+"session_group_restore" = "Restore";
+"session_group_rename" = "Rename";
+"session_group_delete" = "Delete";
+"session_rename_title" = "Rename Session";
+"session_rename_placeholder" = "Session name";
+"session_delete_confirm_title" = "Delete Session";
+"session_delete_confirm_message" = "Are you sure you want to delete \"%@\"?";
+"search_type_session" = "Sessions";
