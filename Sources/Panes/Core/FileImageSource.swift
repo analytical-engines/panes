@@ -138,17 +138,19 @@ class FileImageSource: ImageSource {
             return nil
         }
 
-        // ボリューム識別子を取得（別ボリュームで同じinodeの可能性があるため）
-        guard let resourceValues = try? url.resourceValues(forKeys: [.volumeIdentifierKey]),
-              let volumeID = resourceValues.volumeIdentifier else {
-            // ボリュームIDが取得できない場合はinodeのみ使用
+        // ボリュームUUIDを取得（別ボリュームで同じinodeの可能性があるため）
+        // volumeIdentifierは再マウント時に変わる可能性があるため、安定したUUIDを使用
+        guard let resourceValues = try? url.resourceValues(forKeys: [.volumeUUIDStringKey]),
+              let volumeUUID = resourceValues.volumeUUIDString else {
+            // ボリュームUUIDが取得できない場合はinodeのみ使用
             let key = "folder-\(inode)"
             DebugLogger.log("📁 generateFileKey: key = \(key)", level: .verbose)
             return key
         }
 
-        // ボリュームIDはNSCopyingに準拠したオブジェクトなのでdescriptionを使用
-        let key = "folder-\(volumeID.description)-\(inode)"
+        // ボリュームUUIDの最初の8文字を使用（十分にユニーク）
+        let volumePrefix = String(volumeUUID.prefix(8))
+        let key = "folder-\(volumePrefix)-\(inode)"
         DebugLogger.log("📁 generateFileKey: key = \(key)", level: .verbose)
         return key
     }

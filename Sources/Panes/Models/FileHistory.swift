@@ -183,6 +183,7 @@ class FileHistoryManager {
             migrateFromUserDefaultsIfNeeded()
             migratePageSettingsFromUserDefaultsIfNeeded()
             migrateEntryIdsToNewFormatIfNeeded()
+            migrateCorruptedFolderFileKeysIfNeeded()
             loadHistory()
         }
         // エラー時はフォールバックせず、空の履歴のまま
@@ -479,6 +480,90 @@ class FileHistoryManager {
             }
         } catch {
             DebugLogger.log("❌ Entry ID migration failed: \(error)", level: .minimal)
+        }
+    }
+
+    /// 壊れたフォルダfileKeyを修正するマイグレーション
+    /// 壊れた形式: "folder-{length = 8, bytes = ...}-inode"
+    /// 正しい形式: "folder-volumeUUID8文字-inode"
+    private func migrateCorruptedFolderFileKeysIfNeeded() {
+        guard let context = modelContext else { return }
+
+        do {
+            let descriptor = FetchDescriptor<FileHistoryData>()
+            let allEntries = try context.fetch(descriptor)
+
+            // 壊れたfileKeyを持つエントリを特定
+            let corruptedEntries = allEntries.filter { $0.fileKey.contains("{length = ") }
+            guard !corruptedEntries.isEmpty else { return }
+
+            DebugLogger.log("📦 Found \(corruptedEntries.count) entries with corrupted folder fileKey", level: .normal)
+
+            var migratedCount = 0
+            var mergedCount = 0
+            var entriesToDelete: [FileHistoryData] = []
+
+            for entry in corruptedEntries {
+                // filePathからフォルダにアクセスして正しいfileKeyを生成
+                let folderURL = URL(fileURLWithPath: entry.filePath)
+
+                // inodeを取得
+                guard let attrs = try? FileManager.default.attributesOfItem(atPath: folderURL.path),
+                      let inode = attrs[.systemFileNumber] as? UInt64 else {
+                    DebugLogger.log("⚠️ Cannot access folder for migration: \(entry.filePath)", level: .normal)
+                    continue
+                }
+
+                // ボリュームUUIDを取得
+                var newFileKey: String
+                if let resourceValues = try? folderURL.resourceValues(forKeys: [.volumeUUIDStringKey]),
+                   let volumeUUID = resourceValues.volumeUUIDString {
+                    let volumePrefix = String(volumeUUID.prefix(8))
+                    newFileKey = "folder-\(volumePrefix)-\(inode)"
+                } else {
+                    newFileKey = "folder-\(inode)"
+                }
+
+                // 同じ新しいfileKeyを持つ既存エントリを探す（重複マージ用）
+                let newId = FileHistoryData.generateId(fileName: entry.fileName, fileKey: newFileKey)
+                let existingEntry = allEntries.first { $0.id == newId && $0 !== entry }
+
+                if let existing = existingEntry {
+                    // 重複がある場合：アクセス回数を合算し、古い方を削除
+                    existing.accessCount += entry.accessCount
+                    if entry.lastAccessDate > existing.lastAccessDate {
+                        existing.lastAccessDate = entry.lastAccessDate
+                    }
+                    // ページ設定がある場合は引き継ぐ
+                    if existing.pageSettingsData == nil && entry.pageSettingsData != nil {
+                        existing.pageSettingsData = entry.pageSettingsData
+                    }
+                    // メモがある場合は引き継ぐ
+                    if existing.memo == nil && entry.memo != nil {
+                        existing.memo = entry.memo
+                    }
+                    entriesToDelete.append(entry)
+                    mergedCount += 1
+                    DebugLogger.log("📦 Merged duplicate entry: \(entry.fileName) (accessCount: \(entry.accessCount) -> \(existing.accessCount))", level: .normal)
+                } else {
+                    // 重複がない場合：fileKeyとIDを更新
+                    entry.fileKey = newFileKey
+                    entry.id = newId
+                    migratedCount += 1
+                }
+            }
+
+            // 重複エントリを削除
+            for entry in entriesToDelete {
+                context.delete(entry)
+            }
+
+            if migratedCount > 0 || mergedCount > 0 {
+                try context.save()
+                DebugLogger.log("✅ Folder fileKey migration: \(migratedCount) migrated, \(mergedCount) merged", level: .normal)
+            }
+        } catch {
+            DebugLogger.log("❌ Folder fileKey migration failed: \(error)", level: .minimal)
         }
     }
 
