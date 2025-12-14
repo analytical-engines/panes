@@ -10,6 +10,7 @@
 "loading" = "読み込み中...";
 "loading_phase_opening_archive" = "書庫を開いています...";
 "loading_phase_building_image_list" = "インデックスを読み込んでいます...";
+"loading_phase_extracting_images" = "画像を展開しています...";
 "loading_phase_processing" = "ファイルを処理しています...";
 "loading_phase_restoring_state" = "表示状態を復元しています...";
 "loading_phase_loading_image" = "画像を読み込んでいます...";
@@ -133,6 +134,7 @@
 "error_cannot_open_images" = "画像ファイルを開けませんでした";
 "error_no_file_selected" = "ファイルが選択されていません";
 "error_cannot_open_file" = "ファイルを開けませんでした";
+"error_7z_unsupported_compression" = "この7zファイルは未対応の圧縮形式です";
 "error_image_load_failed_format" = "画像の読み込みに失敗しました\nファイル: %@\nページ: %d/%d";
 
 // MARK: - Page Settings Export/Import

@@ -10,6 +10,7 @@
 "loading" = "Loading...";
 "loading_phase_opening_archive" = "Opening archive...";
 "loading_phase_building_image_list" = "Reading index...";
+"loading_phase_extracting_images" = "Extracting images...";
 "loading_phase_processing" = "Processing file...";
 "loading_phase_restoring_state" = "Restoring view state...";
 "loading_phase_loading_image" = "Loading image...";
@@ -133,6 +134,7 @@
 "error_cannot_open_images" = "Could not open image files";
 "error_no_file_selected" = "No file selected";
 "error_cannot_open_file" = "Could not open file";
+"error_7z_unsupported_compression" = "This 7z file uses unsupported compression format";
 "error_image_load_failed_format" = "Failed to load image\nFile: %@\nPage: %d/%d";
 
 // MARK: - Page Settings Export/Import

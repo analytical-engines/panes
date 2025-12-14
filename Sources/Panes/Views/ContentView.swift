@@ -6,6 +6,7 @@ extension UTType {
     static let rar = UTType(filenameExtension: "rar")!
     static let cbr = UTType(filenameExtension: "cbr")!
     static let cbz = UTType(filenameExtension: "cbz")!
+    static let sevenZip = UTType(filenameExtension: "7z")!
 }
 
 /// タブの種類
@@ -1375,7 +1376,7 @@ struct ContentView: View {
         openPanel.canChooseFiles = true
         openPanel.canChooseDirectories = true
         openPanel.allowsMultipleSelection = true
-        openPanel.allowedContentTypes = [.zip, .cbz, .rar, .cbr, .jpeg, .png, .gif, .webP, .folder]
+        openPanel.allowedContentTypes = [.zip, .cbz, .rar, .cbr, .sevenZip, .jpeg, .png, .gif, .webP, .folder]
         openPanel.message = L("drop_files_hint")
 
         openPanel.begin { response in

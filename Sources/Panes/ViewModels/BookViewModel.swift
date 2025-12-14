@@ -695,7 +695,15 @@ class BookViewModel {
                 }
             }
 
-            let source = await Self.loadImageSource(from: urls, onPhaseChange: onPhaseChange)
+            // エラー報告用コールバック（MainActorで直接errorMessageに設定）
+            let onError: @Sendable (String) async -> Void = { [weak self] error in
+                await MainActor.run {
+                    self?.loadingPhase = nil
+                    self?.errorMessage = error
+                }
+            }
+
+            let source = await Self.loadImageSource(from: urls, onPhaseChange: onPhaseChange, onError: onError)
             if let source = source {
                 // フェーズ: ソースを処理
                 loadingPhase = L("loading_phase_processing")
@@ -704,7 +712,10 @@ class BookViewModel {
                 self.openSource(source, recordToHistory: recordToHistory)
             } else {
                 loadingPhase = nil
-                self.errorMessage = L("error_cannot_open_file")
+                // エラーコールバックで設定されていない場合のみ汎用エラーを設定
+                if self.errorMessage == nil {
+                    self.errorMessage = L("error_cannot_open_file")
+                }
             }
         }
     }
@@ -712,7 +723,8 @@ class BookViewModel {
     /// バックグラウンドでImageSourceを読み込む（進捗報告付き）
     private nonisolated static func loadImageSource(
         from urls: [URL],
-        onPhaseChange: (@Sendable (String) async -> Void)? = nil
+        onPhaseChange: (@Sendable (String) async -> Void)? = nil,
+        onError: (@Sendable (String) async -> Void)? = nil
     ) async -> ImageSource? {
         // アーカイブファイルの場合
         if urls.count == 1 {
@@ -721,6 +733,9 @@ class BookViewModel {
                 return await ArchiveImageSource.create(url: urls[0], onPhaseChange: onPhaseChange)
             } else if ext == "rar" || ext == "cbr" {
                 return await RarImageSource.create(url: urls[0], onPhaseChange: onPhaseChange)
+            } else if ext == "7z" {
+                print("📦 BookViewModel: Detected 7z file, calling SevenZipImageSource.create")
+                return await SevenZipImageSource.create(url: urls[0], onPhaseChange: onPhaseChange, onError: onError)
             } else {
                 // 画像ファイルの場合
                 return FileImageSource(urls: urls)
