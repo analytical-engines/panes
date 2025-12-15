@@ -1077,10 +1077,17 @@ struct ContentView: View {
             }
 
             Task { @MainActor in
+                // myWindowNumberが設定されるまで少し待つ
+                var attempts = 0
+                while self.myWindowNumber == nil && attempts < 20 {
+                    try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
+                    attempts += 1
+                }
+
                 // ウィンドウがまだ存在するか確認
                 guard let windowNumber = self.myWindowNumber,
                       NSApp.windows.contains(where: { $0.windowNumber == windowNumber }) else {
-                    DebugLogger.log("📬 Ignoring - window no longer exists: \(windowID)", level: .normal)
+                    DebugLogger.log("📬 Ignoring - window no longer exists: \(windowID) (after \(attempts) attempts)", level: .normal)
                     return
                 }
                 self.openPendingFile()
@@ -1119,10 +1126,17 @@ struct ContentView: View {
 
             // 新しいウィンドウを作成
             Task { @MainActor in
+                // myWindowNumberが設定されるまで少し待つ
+                var attempts = 0
+                while self.myWindowNumber == nil && attempts < 20 {
+                    try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
+                    attempts += 1
+                }
+
                 // ウィンドウがまだ存在するか確認
                 guard let windowNumber = self.myWindowNumber,
                       NSApp.windows.contains(where: { $0.windowNumber == windowNumber }) else {
-                    DebugLogger.log("📬 Ignoring needNewWindow - window no longer exists: \(windowID)", level: .normal)
+                    DebugLogger.log("📬 Ignoring needNewWindow - window no longer exists: \(windowID) (after \(attempts) attempts)", level: .normal)
                     return
                 }
                 DebugLogger.log("🪟 Creating new window from windowID: \(windowID)", level: .normal)
