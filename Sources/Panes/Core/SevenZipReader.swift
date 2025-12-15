@@ -153,7 +153,7 @@ class SevenZipReader {
         // 2. フィルタリング
         let filterStart = CFAbsoluteTimeGetCurrent()
         let entries = allEntryInfos.filter { entryInfo in
-            // ディレクトリは除外（名前が/で終わるか、サイズが0でパス拡張子がない場合）
+                // ディレクトリは除外（名前が/で終わるか、サイズが0でパス拡張子がない場合）
             let path = entryInfo.name
             if path.hasSuffix("/") { return false }
 

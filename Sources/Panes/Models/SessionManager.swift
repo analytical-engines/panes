@@ -51,12 +51,6 @@ class SessionManager {
     /// 次に開くべきファイル情報（ウィンドウに渡す用）
     var pendingFileOpen: PendingFileOpen?
 
-    /// 最初のウィンドウを使ったかどうか
-    private var isFirstWindowUsed: Bool = false
-
-    /// 強制的に新しいウィンドウで開くかどうか（openInNewWindow用）
-    private var forceNewWindow: Bool = false
-
     /// 処理完了したウィンドウ数
     private var processedWindowCount: Int = 0
 
@@ -76,9 +70,7 @@ class SessionManager {
 
     /// 新しいウィンドウでファイルを開く（履歴から「新しいウィンドウで開く」用）
     func openInNewWindow(url: URL) {
-        // 強制的に新しいウィンドウで開くフラグを設定
-        forceNewWindow = true
-        DebugLogger.log("🆕 openInNewWindow called, forceNewWindow set to true", level: .normal)
+        DebugLogger.log("🆕 openInNewWindow called", level: .normal)
         let item = PendingFileOpen(url: url)
         addToQueue([item])
     }
@@ -142,13 +134,10 @@ class SessionManager {
         guard !pendingFileOpens.isEmpty else { return }
 
         isProcessing = true
-        // forceNewWindowが設定されている場合は最初のウィンドウを使用済みとしてマーク
-        isFirstWindowUsed = forceNewWindow
-        forceNewWindow = false  // フラグをリセット
         processedWindowCount = 0
         totalWindowsToProcess = pendingFileOpens.count
 
-        DebugLogger.log("🔄 Starting file open processing: \(totalWindowsToProcess) files, isFirstWindowUsed: \(isFirstWindowUsed)", level: .normal)
+        DebugLogger.log("🔄 Starting file open processing: \(totalWindowsToProcess) files", level: .normal)
 
         // 複数ファイルの場合はローディングパネルを表示
         if totalWindowsToProcess > 1 {
@@ -178,24 +167,13 @@ class SessionManager {
 
         pendingFileOpen = fileOpen
 
-        if !isFirstWindowUsed {
-            // 最初のファイル：起動時に作成されたウィンドウを使用
-            isFirstWindowUsed = true
-            DebugLogger.log("🆕 Using first window (openFileInFirstWindow)", level: .normal)
-            NotificationCenter.default.post(
-                name: .openFileInFirstWindow,
-                object: nil,
-                userInfo: nil
-            )
-        } else {
-            // 2つ目以降のファイル：新しいウィンドウを作成
-            DebugLogger.log("🆕 Creating new window (needNewWindow)", level: .normal)
-            NotificationCenter.default.post(
-                name: .needNewWindow,
-                object: nil,
-                userInfo: nil
-            )
-        }
+        // 常に新しいウィンドウを作成
+        DebugLogger.log("🆕 Creating new window (needNewWindow)", level: .normal)
+        NotificationCenter.default.post(
+            name: .needNewWindow,
+            object: nil,
+            userInfo: nil
+        )
     }
 
     /// ウィンドウの読み込み完了を通知する
@@ -220,7 +198,6 @@ class SessionManager {
     /// 処理完了
     private func finishProcessing() {
         isProcessing = false
-        isFirstWindowUsed = false
         processedWindowCount = 0
         totalWindowsToProcess = 0
 
@@ -375,11 +352,11 @@ private struct LoadingPanelContent: View {
 // MARK: - Notification Names
 
 extension NSNotification.Name {
-    /// 最初のウィンドウでファイルを開く通知
-    static let openFileInFirstWindow = NSNotification.Name("OpenFileInFirstWindow")
-
-    /// 新しいウィンドウ作成リクエスト（2つ目以降のファイル用）
+    /// 新しいウィンドウ作成リクエスト
     static let needNewWindow = NSNotification.Name("NeedNewWindow")
+
+    /// 最後に作成されたウィンドウで待機中ファイルを開く
+    static let openPendingFileInLastWindow = NSNotification.Name("OpenPendingFileInLastWindow")
 
     /// 全ウィンドウ一斉表示通知
     static let revealAllWindows = NSNotification.Name("RevealAllWindowsAfterRestoration")

@@ -1047,9 +1047,9 @@ struct ContentView: View {
     private func setupSessionObservers() {
         let windowID = self.windowID
 
-        // 最初のウィンドウでファイルを開く通知
+        // 最後に作成されたウィンドウで待機中ファイルを開く通知
         let observer1 = NotificationCenter.default.addObserver(
-            forName: .openFileInFirstWindow,
+            forName: .openPendingFileInLastWindow,
             object: nil,
             queue: .main
         ) { _ in
@@ -1063,13 +1063,13 @@ struct ContentView: View {
                 ContentView.lastCreatedWindowID = windowID
                 lastID = windowID
                 shouldProcess = true
-                DebugLogger.log("📬 openFileInFirstWindow - windowID: \(windowID) claimed ownership (was nil)", level: .normal)
+                DebugLogger.log("📬 openPendingFileInLastWindow - windowID: \(windowID) claimed ownership (was nil)", level: .normal)
             } else {
                 shouldProcess = lastID == windowID
             }
             ContentView.lastCreatedWindowIDLock.unlock()
 
-            DebugLogger.log("📬 openFileInFirstWindow - windowID: \(windowID), lastID: \(String(describing: lastID)), shouldProcess: \(shouldProcess)", level: .normal)
+            DebugLogger.log("📬 openPendingFileInLastWindow - windowID: \(windowID), lastID: \(String(describing: lastID)), shouldProcess: \(shouldProcess)", level: .normal)
 
             guard shouldProcess else {
                 DebugLogger.log("📬 Ignoring - not the last created window", level: .verbose)
@@ -1145,7 +1145,7 @@ struct ContentView: View {
 
                 // 新しいウィンドウにファイルを開かせる
                 NotificationCenter.default.post(
-                    name: .openFileInFirstWindow,
+                    name: .openPendingFileInLastWindow,
                     object: nil,
                     userInfo: nil
                 )
