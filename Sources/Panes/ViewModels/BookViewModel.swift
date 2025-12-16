@@ -76,6 +76,16 @@ class BookViewModel {
     // 画像ソース
     private var imageSource: ImageSource?
 
+    // 画像キャッシュ（sourceIndexをキーにNSImageを保存）
+    private let imageCache: NSCache<NSNumber, NSImage> = {
+        let cache = NSCache<NSNumber, NSImage>()
+        cache.countLimit = 10  // 最大10枚まで保持
+        return cache
+    }()
+
+    // プリフェッチ範囲（現在ページ ± prefetchRange）
+    private let prefetchRange = 3
+
     // ページデータ配列（表示順に並んでいる）
     // 例: pages[0].sourceIndex == 2 なら表示0ページ目はソース2番目の画像
     private var pages: [PageData] = []
@@ -426,6 +436,9 @@ class BookViewModel {
         // 現在の表示状態を保存
         saveViewState()
 
+        // キャッシュをクリア
+        imageCache.removeAllObjects()
+
         // 状態をリセット
         imageSource = nil
         sourceName = ""
@@ -623,6 +636,10 @@ class BookViewModel {
 
     /// ソースを開く処理の完了（共通部分）
     private func completeOpenSource(_ source: ImageSource, recordAccess: Bool) {
+        // 前のソースのキャッシュをクリア
+        imageCache.removeAllObjects()
+        debugLog("🗑️ Image cache cleared for new source", level: .verbose)
+
         self.imageSource = source
         self.sourceName = source.sourceName
         self.totalPages = source.imageCount
@@ -1157,32 +1174,92 @@ class BookViewModel {
         return .spread(m, m1)
     }
 
+    /// キャッシュを使って画像を読み込む（sourceIndexで指定）
+    private func loadCachedImage(at sourceIndex: Int) -> NSImage? {
+        let key = NSNumber(value: sourceIndex)
+
+        // キャッシュヒット
+        if let cached = imageCache.object(forKey: key) {
+            debugLog("🎯 Cache hit for sourceIndex \(sourceIndex)", level: .verbose)
+            return cached
+        }
+
+        // キャッシュミス → ソースから読み込み
+        guard let source = imageSource,
+              let image = source.loadImage(at: sourceIndex) else {
+            return nil
+        }
+
+        imageCache.setObject(image, forKey: key)
+        debugLog("💾 Cached image for sourceIndex \(sourceIndex)", level: .verbose)
+        return image
+    }
+
+    /// 指定ページ周辺をプリフェッチ
+    private func prefetchImages(around displayPage: Int) {
+        guard let source = imageSource else { return }
+
+        // プリフェッチ対象のsourceIndexリストを事前に計算
+        var indicesToPrefetch: [Int] = []
+        for offset in 1...prefetchRange {
+            let forwardPage = displayPage + offset
+            if forwardPage < totalPages {
+                indicesToPrefetch.append(sourceIndex(for: forwardPage))
+            }
+            let backwardPage = displayPage - offset
+            if backwardPage >= 0 {
+                indicesToPrefetch.append(sourceIndex(for: backwardPage))
+            }
+        }
+
+        // MainActor上で非同期プリフェッチ（UIをブロックしない）
+        Task {
+            for srcIndex in indicesToPrefetch {
+                let key = NSNumber(value: srcIndex)
+                // 既にキャッシュにあればスキップ
+                if self.imageCache.object(forKey: key) != nil {
+                    continue
+                }
+                // 画像を読み込んでキャッシュに追加
+                if let image = source.loadImage(at: srcIndex) {
+                    self.imageCache.setObject(image, forKey: key)
+                }
+                // 他のタスクに実行機会を与える
+                await Task.yield()
+            }
+        }
+    }
+
     /// 表示状態に基づいて画像をロード
     /// displayにはdisplayPage（表示上のページ番号）が含まれる
     private func loadImages(for display: PageDisplay) {
-        guard let source = imageSource else { return }
+        guard imageSource != nil else { return }
 
         switch display {
         case .single(let displayPage):
             let srcIndex = sourceIndex(for: displayPage)
             if viewMode == .single {
-                self.currentImage = source.loadImage(at: srcIndex)
+                self.currentImage = loadCachedImage(at: srcIndex)
             } else {
-                self.firstPageImage = source.loadImage(at: srcIndex)
+                self.firstPageImage = loadCachedImage(at: srcIndex)
                 self.secondPageImage = nil
             }
             // 画像カタログに記録
             recordImageToCatalog(at: srcIndex)
+            // プリフェッチ開始
+            prefetchImages(around: displayPage)
 
         case .spread(let leftDisplay, let rightDisplay):
             // RTL: first=right側（小さいdisplayPage）, second=left側（大きいdisplayPage）
             let rightSrcIndex = sourceIndex(for: rightDisplay)
             let leftSrcIndex = sourceIndex(for: leftDisplay)
-            self.firstPageImage = source.loadImage(at: rightSrcIndex)
-            self.secondPageImage = source.loadImage(at: leftSrcIndex)
+            self.firstPageImage = loadCachedImage(at: rightSrcIndex)
+            self.secondPageImage = loadCachedImage(at: leftSrcIndex)
             // 画像カタログに記録
             recordImageToCatalog(at: rightSrcIndex)
             recordImageToCatalog(at: leftSrcIndex)
+            // プリフェッチ開始（右側ページを基準）
+            prefetchImages(around: rightDisplay)
         }
 
         self.errorMessage = nil
