@@ -174,3 +174,23 @@ struct SpreadView<ContextMenu: View>: View {
         }
     }
 }
+
+// MARK: - Equatable
+// クロージャ（contextMenuBuilder）を除外して比較することで、
+// フォーカス変更時の不要なbody再評価をスキップできる
+extension SpreadView: Equatable {
+    nonisolated static func == (lhs: SpreadView, rhs: SpreadView) -> Bool {
+        // 画像はページインデックスで判断（同じインデックスなら同じ画像）
+        // NSImageは並行処理の問題があるため比較しない
+        lhs.firstPageIndex == rhs.firstPageIndex &&
+        lhs.secondPageIndex == rhs.secondPageIndex &&
+        lhs.readingDirection == rhs.readingDirection &&
+        lhs.singlePageAlignment == rhs.singlePageAlignment &&
+        lhs.firstPageRotation == rhs.firstPageRotation &&
+        lhs.firstPageFlip == rhs.firstPageFlip &&
+        lhs.secondPageRotation == rhs.secondPageRotation &&
+        lhs.secondPageFlip == rhs.secondPageFlip &&
+        lhs.fittingMode == rhs.fittingMode &&
+        lhs.viewportSize == rhs.viewportSize
+    }
+}

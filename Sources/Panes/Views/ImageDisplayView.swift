@@ -193,5 +193,6 @@ struct RotationAwareImageView: View {
             .rotationEffect(.degrees(Double(rotation.rawValue)))
             .offset(x: alignmentOffsetX)
             .frame(width: frameWidth, height: frameHeight, alignment: alignment)
+            .drawingGroup()
     }
 }

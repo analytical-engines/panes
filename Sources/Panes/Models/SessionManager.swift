@@ -37,9 +37,13 @@ class SessionManager {
     private(set) var pendingFileOpens: [PendingFileOpen] = []
 
     /// 現在のアクティブなウィンドウ（追跡用）
+    /// @ObservationIgnored: UIに直接関係しない追跡用データなので、
+    /// 変更時にViewの再評価をトリガーしない
+    @ObservationIgnored
     private(set) var activeWindows: [UUID: WindowSessionEntry] = [:]
 
     /// 現在読み込み中のウィンドウ数
+    @ObservationIgnored
     private(set) var currentLoadingCount: Int = 0
 
     /// ファイルオープン処理中かどうか
@@ -52,9 +56,11 @@ class SessionManager {
     var pendingFileOpen: PendingFileOpen?
 
     /// 処理完了したウィンドウ数
+    @ObservationIgnored
     private var processedWindowCount: Int = 0
 
     /// 処理対象のウィンドウ総数
+    @ObservationIgnored
     private var totalWindowsToProcess: Int = 0
 
     /// ローディングパネル

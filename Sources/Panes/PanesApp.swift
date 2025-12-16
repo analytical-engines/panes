@@ -2,26 +2,8 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// FocusedValuesのキー定義
-struct FocusedViewModelKey: FocusedValueKey {
-    typealias Value = BookViewModel
-}
-
-struct FocusedShowHistoryKey: FocusedValueKey {
-    typealias Value = Binding<Bool>
-}
-
-extension FocusedValues {
-    var bookViewModel: FocusedViewModelKey.Value? {
-        get { self[FocusedViewModelKey.self] }
-        set { self[FocusedViewModelKey.self] = newValue }
-    }
-
-    var showHistory: FocusedShowHistoryKey.Value? {
-        get { self[FocusedShowHistoryKey.self] }
-        set { self[FocusedShowHistoryKey.self] = newValue }
-    }
-}
+// Note: FocusedValuesは使用しない（パフォーマンス問題のため）
+// 代わりにWindowCoordinatorを使用してNSApp.keyWindowから直接ViewModelを取得する
 
 /// ウィンドウのデフォルトサイズを取得（UserDefaultsから読み込み）
 private func getDefaultWindowSize() -> CGSize {
@@ -48,14 +30,24 @@ private func getDefaultWindowSize() -> CGSize {
 @main
 struct ImageViewerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @FocusedValue(\.bookViewModel) private var focusedViewModel: BookViewModel?
-    @FocusedValue(\.showHistory) private var focusedShowHistory: Binding<Bool>?
+    // focusedValueは使用しない（パフォーマンス問題のため）
+    // 代わりにWindowCoordinator.shared.keyWindowViewModelを使用
     @State private var historyManager = FileHistoryManager()
     @State private var imageCatalogManager = ImageCatalogManager()
     @State private var appSettings = AppSettings()
     @State private var sessionManager = SessionManager()
     @State private var sessionGroupManager = SessionGroupManager()
     @Environment(\.openWindow) private var openWindow
+
+    /// キーウィンドウのViewModel（WindowCoordinator経由）
+    private var focusedViewModel: BookViewModel? {
+        WindowCoordinator.shared.keyWindowViewModel
+    }
+
+    /// キーウィンドウがファイルを開いているか
+    private var keyWindowHasOpenFile: Bool {
+        WindowCoordinator.shared.keyWindowHasOpenFile
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -125,9 +117,9 @@ struct ImageViewerApp: App {
             CommandGroup(after: .sidebar) {
                 // フォーカスされているウィンドウの履歴表示をトグル
                 Toggle(L("menu_show_history"), isOn: Binding(
-                    get: { focusedShowHistory?.wrappedValue ?? appSettings.lastHistoryVisible },
+                    get: { WindowCoordinator.shared.keyWindowShowHistory ?? appSettings.lastHistoryVisible },
                     set: { newValue in
-                        focusedShowHistory?.wrappedValue = newValue
+                        WindowCoordinator.shared.setKeyWindowShowHistory(newValue)
                         // 「終了時の状態を復元」モードの場合は保存
                         if appSettings.historyDisplayMode == .restoreLast {
                             appSettings.lastHistoryVisible = newValue

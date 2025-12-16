@@ -673,6 +673,7 @@ struct ContentView: View {
     }
 
     var body: some View {
+        let _ = DebugLogger.log("🔄 ContentView body: windowID=\(windowID), isMainViewFocused=\(isMainViewFocused)", level: .verbose)
         ZStack {
             Color.black
                 .ignoresSafeArea()
@@ -716,8 +717,7 @@ struct ContentView: View {
         .focusable()
         .focused($isMainViewFocused)
         .focusEffectDisabled()
-        .focusedValue(\.bookViewModel, viewModel)
-        .focusedValue(\.showHistory, $showHistory)
+        // focusedValueは削除：WindowCoordinatorで代替（パフォーマンス改善）
         .background(WindowNumberGetter(windowNumber: $myWindowNumber))
         .navigationTitle(viewModel.windowTitle)
         .onAppear(perform: handleOnAppear)
@@ -825,7 +825,7 @@ struct ContentView: View {
                 }
             }
         }
-        .onChange(of: myWindowNumber) { _, newWindowNumber in
+        .onChange(of: myWindowNumber) { oldWindowNumber, newWindowNumber in
             // WindowNumberGetterでウィンドウ番号が設定されたときにフレームも取得
             if let windowNumber = newWindowNumber,
                currentWindowFrame == nil,
@@ -833,6 +833,19 @@ struct ContentView: View {
                 currentWindowFrame = window.frame
                 DebugLogger.log("🪟 Window frame captured via onChange(myWindowNumber): \(window.frame)", level: .normal)
                 setupWindowFrameObserver(for: window)
+            }
+
+            // WindowCoordinatorに登録（focusedValueの代替）
+            if let oldNumber = oldWindowNumber {
+                WindowCoordinator.shared.unregister(windowNumber: oldNumber)
+            }
+            if let newNumber = newWindowNumber {
+                WindowCoordinator.shared.register(windowNumber: newNumber, viewModel: viewModel)
+                WindowCoordinator.shared.registerShowHistory(
+                    windowNumber: newNumber,
+                    getter: { showHistory },
+                    setter: { showHistory = $0 }
+                )
             }
         }
         .onChange(of: showHistoryFilter) { _, newValue in
@@ -1342,6 +1355,11 @@ struct ContentView: View {
 
         // 通知オブザーバを解除（メモリリーク防止）
         removeNotificationObservers()
+
+        // WindowCoordinatorから解除
+        if let windowNumber = myWindowNumber {
+            WindowCoordinator.shared.unregister(windowNumber: windowNumber)
+        }
 
         // lastCreatedWindowIDが自分なら更新（閉じたウィンドウを指さないように）
         ContentView.lastCreatedWindowIDLock.lock()
@@ -2786,6 +2804,7 @@ struct SpreadPageView<ContextMenu: View>: View {
                             viewportSize: effectiveViewport,
                             contextMenuBuilder: contextMenuBuilder
                         )
+                        .equatable()
                         .frame(
                             minWidth: geometry.size.width,
                             minHeight: geometry.size.height,
@@ -2810,6 +2829,7 @@ struct SpreadPageView<ContextMenu: View>: View {
                             fittingMode: fittingMode,
                             contextMenuBuilder: contextMenuBuilder
                         )
+                        .equatable()
                     case .height:
                         // 縦フィット: 横スクロール可能、横センタリング
                         ScrollView(.horizontal, showsIndicators: true) {
@@ -2828,6 +2848,7 @@ struct SpreadPageView<ContextMenu: View>: View {
                                 viewportSize: geometry.size,
                                 contextMenuBuilder: contextMenuBuilder
                             )
+                            .equatable()
                             .frame(minWidth: geometry.size.width, alignment: .center)
                         }
                     case .width:
@@ -2848,6 +2869,7 @@ struct SpreadPageView<ContextMenu: View>: View {
                                 viewportSize: geometry.size,
                                 contextMenuBuilder: contextMenuBuilder
                             )
+                            .equatable()
                             .frame(minHeight: geometry.size.height, alignment: .center)
                         }
                     case .originalSize:
@@ -2866,6 +2888,7 @@ struct SpreadPageView<ContextMenu: View>: View {
                             fittingMode: .window,
                             contextMenuBuilder: contextMenuBuilder
                         )
+                        .equatable()
                     }
                 }
             }
