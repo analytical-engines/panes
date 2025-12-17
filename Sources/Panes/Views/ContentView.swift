@@ -799,6 +799,12 @@ struct ContentView: View {
 
                 // 初期画面に戻ったのでスクロール位置復元をトリガー
                 scrollTrigger += 1
+
+                // 初期画面に戻ったので、必要に応じて履歴とカタログを再読み込み
+                if showHistory {
+                    historyManager.reloadHistoryIfNeeded()
+                    imageCatalogManager.reloadCatalogIfNeeded()
+                }
             }
         }
         .onChange(of: viewModel.currentPage) { _, newPage in
@@ -854,6 +860,13 @@ struct ContentView: View {
                 DispatchQueue.main.async {
                     isMainViewFocused = true
                 }
+            }
+        }
+        .onChange(of: showHistory) { _, newValue in
+            // 履歴表示が有効になったら、必要に応じて履歴とカタログを再読み込み
+            if newValue {
+                historyManager.reloadHistoryIfNeeded()
+                imageCatalogManager.reloadCatalogIfNeeded()
             }
         }
         .onChange(of: showMemoEdit) { _, newValue in

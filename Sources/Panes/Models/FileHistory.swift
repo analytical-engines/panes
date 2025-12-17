@@ -149,6 +149,10 @@ class FileHistoryManager {
 
     var history: [FileHistoryEntry] = []
 
+    /// 履歴の再読み込みが必要かどうか（パフォーマンス改善用）
+    @ObservationIgnored
+    private var historyNeedsReload: Bool = false
+
     /// SwiftData初期化エラー（nilなら成功）
     private(set) var initializationError: Error?
 
@@ -605,9 +609,17 @@ class FileHistoryManager {
             )
             let historyData = try context.fetch(descriptor)
             history = historyData.map { $0.toEntry() }
+            historyNeedsReload = false
             DebugLogger.log("📦 Loaded \(history.count) history entries from SwiftData", level: .normal)
         } catch {
             DebugLogger.log("❌ Failed to load history: \(error)", level: .minimal)
+        }
+    }
+
+    /// 必要な場合のみ履歴を再読み込み（初期画面表示時に呼ぶ）
+    func reloadHistoryIfNeeded() {
+        if historyNeedsReload {
+            loadHistory()
         }
     }
 
@@ -760,7 +772,9 @@ class FileHistoryManager {
             }
 
             try context.save()
-            loadHistory()
+            // loadHistory()は呼ばない（パフォーマンス改善）
+            // 初期画面表示時にreloadHistoryIfNeeded()で再読み込み
+            historyNeedsReload = true
         } catch {
             DebugLogger.log("❌ Failed to record access with pageSettingsRef: \(error)", level: .minimal)
         }
@@ -818,7 +832,9 @@ class FileHistoryManager {
             }
 
             try context.save()
-            loadHistory()
+            // loadHistory()は呼ばない（パフォーマンス改善）
+            // 初期画面表示時にreloadHistoryIfNeeded()で再読み込み
+            historyNeedsReload = true
         } catch {
             DebugLogger.log("❌ Failed to record access as new entry: \(error)", level: .minimal)
         }
@@ -852,7 +868,9 @@ class FileHistoryManager {
             }
 
             try context.save()
-            loadHistory()
+            // loadHistory()は呼ばない（パフォーマンス改善）
+            // 初期画面表示時にreloadHistoryIfNeeded()で再読み込み
+            historyNeedsReload = true
         } catch {
             DebugLogger.log("❌ Failed to record access: \(error)", level: .minimal)
         }

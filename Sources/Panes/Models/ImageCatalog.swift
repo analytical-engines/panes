@@ -104,6 +104,10 @@ class ImageCatalogManager {
     /// カタログの全エントリ（最終アクセス日時順）
     var catalog: [ImageCatalogEntry] = []
 
+    /// カタログの再読み込みが必要かどうか（パフォーマンス改善用）
+    @ObservationIgnored
+    private var catalogNeedsReload: Bool = false
+
     /// 初期化エラー
     private(set) var initializationError: Error?
 
@@ -255,9 +259,17 @@ class ImageCatalogManager {
             entries.sort { $0.lastAccessDate > $1.lastAccessDate }
 
             catalog = entries
+            catalogNeedsReload = false
             DebugLogger.log("📦 Loaded \(standaloneData.count) standalone + \(archiveData.count) archive = \(catalog.count) total entries", level: .normal)
         } catch {
             DebugLogger.log("❌ Failed to load image catalog: \(error)", level: .minimal)
+        }
+    }
+
+    /// 必要な場合のみカタログを再読み込み（履歴画面表示時に呼ぶ）
+    func reloadCatalogIfNeeded() {
+        if catalogNeedsReload {
+            loadCatalog()
         }
     }
 
@@ -304,7 +316,9 @@ class ImageCatalogManager {
             }
 
             try context.save()
-            loadCatalog()
+            // loadCatalog()は呼ばない（パフォーマンス改善）
+            // 履歴画面表示時にreloadCatalogIfNeeded()で再読み込み
+            catalogNeedsReload = true
         } catch {
             DebugLogger.log("❌ Failed to record standalone image: \(error)", level: .minimal)
         }
@@ -357,7 +371,9 @@ class ImageCatalogManager {
             }
 
             try context.save()
-            loadCatalog()
+            // loadCatalog()は呼ばない（パフォーマンス改善）
+            // 履歴画面表示時にreloadCatalogIfNeeded()で再読み込み
+            catalogNeedsReload = true
         } catch {
             DebugLogger.log("❌ Failed to record archive content image: \(error)", level: .minimal)
         }
