@@ -310,3 +310,19 @@
 "session_delete_confirm_title" = "セッションを削除";
 "session_delete_confirm_message" = "「%@」を削除してもよろしいですか？";
 "search_type_session" = "セッション";
+
+// MARK: - Keyboard Shortcuts
+
+"shortcut_next_page" = "次のページ";
+"shortcut_previous_page" = "前のページ";
+"shortcut_skip_forward" = "数ページ進む";
+"shortcut_skip_backward" = "数ページ戻る";
+"shortcut_first_page" = "最初のページ";
+"shortcut_last_page" = "最後のページ";
+"shortcut_fullscreen" = "フルスクリーン切替";
+"shortcut_view_mode" = "表示モード切替";
+"shortcut_reading_direction" = "読み方向切替";
+"shortcut_zoom_in" = "拡大";
+"shortcut_zoom_out" = "縮小";
+"shortcut_reset_zoom" = "ズームリセット";
+"shortcut_close_file" = "ファイルを閉じる";

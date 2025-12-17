@@ -310,3 +310,19 @@
 "session_delete_confirm_title" = "Delete Session";
 "session_delete_confirm_message" = "Are you sure you want to delete \"%@\"?";
 "search_type_session" = "Sessions";
+
+// MARK: - Keyboard Shortcuts
+
+"shortcut_next_page" = "Next Page";
+"shortcut_previous_page" = "Previous Page";
+"shortcut_skip_forward" = "Skip Forward";
+"shortcut_skip_backward" = "Skip Backward";
+"shortcut_first_page" = "First Page";
+"shortcut_last_page" = "Last Page";
+"shortcut_fullscreen" = "Toggle Fullscreen";
+"shortcut_view_mode" = "Toggle View Mode";
+"shortcut_reading_direction" = "Toggle Reading Direction";
+"shortcut_zoom_in" = "Zoom In";
+"shortcut_zoom_out" = "Zoom Out";
+"shortcut_reset_zoom" = "Reset Zoom";
+"shortcut_close_file" = "Close File";

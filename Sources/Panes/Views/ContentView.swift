@@ -1309,20 +1309,24 @@ struct ContentView: View {
 
     private func setupEventMonitor() {
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak viewModel] event in
+            // 自分のウィンドウか確認
+            let keyWindowNumber = NSApp.keyWindow?.windowNumber
+            let isMyWindowActive = (self.myWindowNumber == keyWindowNumber)
+            guard isMyWindowActive else {
+                return event
+            }
+
+            // カスタムショートカットをチェック
+            if let action = CustomShortcutManager.shared.findAction(for: event) {
+                DebugLogger.log("🔑 Custom shortcut: \(action.rawValue)", level: .normal)
+                if self.executeShortcutAction(action, viewModel: viewModel) {
+                    return nil  // イベントを消費
+                }
+            }
+
+            // 既存のハードコードショートカット（Shift+Tab）
             if event.keyCode == 48 {
                 DebugLogger.log("🔑 Tab key detected", level: .verbose)
-                DebugLogger.log("   myWindowNumber: \(String(describing: self.myWindowNumber))", level: .verbose)
-                DebugLogger.log("   keyWindow?.windowNumber: \(String(describing: NSApp.keyWindow?.windowNumber))", level: .verbose)
-
-                let keyWindowNumber = NSApp.keyWindow?.windowNumber
-                let isMyWindowActive = (self.myWindowNumber == keyWindowNumber)
-
-                DebugLogger.log("   isMyWindowActive: \(isMyWindowActive)", level: .verbose)
-
-                guard isMyWindowActive else {
-                    DebugLogger.log("   ❌ Not my window, ignoring", level: .verbose)
-                    return event
-                }
 
                 if event.modifierFlags.contains(.shift) {
                     DebugLogger.log("   ✅ Shift+Tab detected in my window, skipping backward", level: .normal)
@@ -1366,6 +1370,48 @@ struct ContentView: View {
             // イベントを消費（通常のスクロールとして処理しない）
             return nil
         }
+    }
+
+    /// カスタムショートカットのアクションを実行
+    /// - Returns: アクションが実行された場合はtrue
+    private func executeShortcutAction(_ action: ShortcutAction, viewModel: BookViewModel?) -> Bool {
+        guard let viewModel = viewModel else { return false }
+
+        // ファイルが開いていない場合は一部のアクションのみ許可
+        if !viewModel.hasOpenFile {
+            return false
+        }
+
+        switch action {
+        case .nextPage:
+            viewModel.nextPage()
+        case .previousPage:
+            viewModel.previousPage()
+        case .skipForward:
+            viewModel.skipForward(pages: appSettings.pageJumpCount)
+        case .skipBackward:
+            viewModel.skipBackward(pages: appSettings.pageJumpCount)
+        case .goToFirstPage:
+            viewModel.goToFirstPage()
+        case .goToLastPage:
+            viewModel.goToLastPage()
+        case .toggleFullScreen:
+            toggleFullScreen()
+        case .toggleViewMode:
+            viewModel.toggleViewMode()
+        case .toggleReadingDirection:
+            viewModel.toggleReadingDirection()
+        case .zoomIn:
+            viewModel.zoomIn()
+        case .zoomOut:
+            viewModel.zoomOut()
+        case .resetZoom:
+            viewModel.resetZoom()
+        case .closeFile:
+            viewModel.closeFile()
+        }
+
+        return true
     }
 
     private func setupNotificationObservers() {
