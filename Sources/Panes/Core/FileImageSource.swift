@@ -7,9 +7,11 @@ class FileImageSource: ImageSource {
     private let imageURLs: [URL]
     private let baseName: String
     private let folderURL: URL?  // フォルダが指定された場合はそのURL
-    private let fileDatesCache: [Date?]  // ファイル日付のキャッシュ（init時に事前取得）
+    private var fileDatesCache: [Date?]?  // ファイル日付のキャッシュ（遅延読み込み）
 
     init?(urls: [URL]) {
+        let totalStart = CFAbsoluteTimeGetCurrent()
+
         // URLリストから画像ファイルを収集（フォルダの場合は中身を探索）
         var collectedURLs: [URL] = []
         let imageExtensions = ["jpg", "jpeg", "png", "gif", "webp", "jp2", "j2k",
@@ -17,6 +19,7 @@ class FileImageSource: ImageSource {
         let fileManager = FileManager.default
         var detectedFolderURL: URL? = nil
 
+        let enumerateStart = CFAbsoluteTimeGetCurrent()
         for url in urls {
             var isDirectory: ObjCBool = false
             guard fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
@@ -43,15 +46,20 @@ class FileImageSource: ImageSource {
                 }
             }
         }
+        let enumerateTime = (CFAbsoluteTimeGetCurrent() - enumerateStart) * 1000
+        DebugLogger.log("⏱️ FileImageSource: enumerate \(collectedURLs.count) files: \(String(format: "%.1f", enumerateTime))ms", level: .normal)
 
         guard !collectedURLs.isEmpty else {
             return nil
         }
 
         // ファイル名でソート
+        let sortStart = CFAbsoluteTimeGetCurrent()
         self.imageURLs = collectedURLs.sorted { url1, url2 in
             url1.path.localizedStandardCompare(url2.path) == .orderedAscending
         }
+        let sortTime = (CFAbsoluteTimeGetCurrent() - sortStart) * 1000
+        DebugLogger.log("⏱️ FileImageSource: sort: \(String(format: "%.1f", sortTime))ms", level: .normal)
 
         // フォルダURLを保持
         self.folderURL = detectedFolderURL
@@ -65,14 +73,11 @@ class FileImageSource: ImageSource {
             self.baseName = parentPath.lastPathComponent
         }
 
-        // ファイル日付を事前キャッシュ（バックグラウンドスレッドで実行されるため、ここで取得しておく）
-        self.fileDatesCache = self.imageURLs.map { url in
-            guard let attrs = try? fileManager.attributesOfItem(atPath: url.path),
-                  let date = attrs[.modificationDate] as? Date else {
-                return nil
-            }
-            return date
-        }
+        // 日付キャッシュは遅延読み込み（必要になるまで取得しない）
+        self.fileDatesCache = nil
+
+        let totalTime = (CFAbsoluteTimeGetCurrent() - totalStart) * 1000
+        DebugLogger.log("⏱️ FileImageSource.init total: \(String(format: "%.1f", totalTime))ms", level: .normal)
     }
 
     var sourceName: String {
@@ -225,10 +230,37 @@ class FileImageSource: ImageSource {
     }
 
     func fileDate(at index: Int) -> Date? {
-        guard index >= 0 && index < fileDatesCache.count else {
+        // キャッシュがあればそこから返す
+        if let cache = fileDatesCache, index >= 0 && index < cache.count {
+            return cache[index]
+        }
+
+        // キャッシュがない場合はオンデマンドで取得
+        guard index >= 0 && index < imageURLs.count else {
             return nil
         }
-        return fileDatesCache[index]
+        let url = imageURLs[index]
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let date = attrs[.modificationDate] as? Date else {
+            return nil
+        }
+        return date
+    }
+
+    /// 全ファイルの日付を一括でキャッシュ（日付ソート時に呼び出す）
+    func loadAllFileDates() {
+        guard fileDatesCache == nil else { return }  // 既にキャッシュ済み
+
+        let start = CFAbsoluteTimeGetCurrent()
+        fileDatesCache = imageURLs.map { url in
+            guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+                  let date = attrs[.modificationDate] as? Date else {
+                return nil
+            }
+            return date
+        }
+        let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000
+        DebugLogger.log("⏱️ FileImageSource: loadAllFileDates: \(String(format: "%.1f", elapsed))ms", level: .normal)
     }
 
     /// 指定されたインデックスの画像ファイルのURLを取得

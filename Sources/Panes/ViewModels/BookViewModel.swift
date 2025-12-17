@@ -543,6 +543,8 @@ class BookViewModel {
     ///   - source: 画像ソース
     ///   - recordToHistory: 書庫履歴に記録するかどうか（デフォルト: true）
     func openSource(_ source: ImageSource, recordToHistory: Bool = true) {
+        let openSourceStart = CFAbsoluteTimeGetCurrent()
+
         guard source.imageCount > 0 else {
             // 暗号化されたアーカイブかどうかをチェック
             if let archiveSource = source as? ArchiveImageSource,
@@ -567,10 +569,18 @@ class BookViewModel {
         }
 
         // ファイル同一性チェック（書庫/フォルダのみ）
-        if let fileKey = source.generateFileKey(),
+        let fileKeyStart = CFAbsoluteTimeGetCurrent()
+        let fileKey = source.generateFileKey()
+        let fileKeyTime = (CFAbsoluteTimeGetCurrent() - fileKeyStart) * 1000
+        DebugLogger.log("⏱️ openSource: generateFileKey: \(String(format: "%.1f", fileKeyTime))ms", level: .normal)
+
+        if let fileKey = fileKey,
            let url = source.sourceURL,
            let manager = historyManager {
+            let checkStart = CFAbsoluteTimeGetCurrent()
             let checkResult = manager.checkFileIdentity(fileKey: fileKey, fileName: source.sourceName)
+            let checkTime = (CFAbsoluteTimeGetCurrent() - checkStart) * 1000
+            DebugLogger.log("⏱️ openSource: checkFileIdentity: \(String(format: "%.1f", checkTime))ms", level: .normal)
 
             switch checkResult {
             case .exactMatch, .newFile:
@@ -592,6 +602,9 @@ class BookViewModel {
             // 履歴マネージャーがない場合やfileKeyが取得できない場合はそのまま開く
             completeOpenSource(source, recordAccess: false)
         }
+
+        let openSourceTime = (CFAbsoluteTimeGetCurrent() - openSourceStart) * 1000
+        DebugLogger.log("⏱️ openSource total: \(String(format: "%.1f", openSourceTime))ms", level: .normal)
     }
 
     /// ファイル同一性ダイアログでユーザーが選択した後に呼ばれる
@@ -636,6 +649,8 @@ class BookViewModel {
 
     /// ソースを開く処理の完了（共通部分）
     private func completeOpenSource(_ source: ImageSource, recordAccess: Bool) {
+        let totalStart = CFAbsoluteTimeGetCurrent()
+
         // 前のソースのキャッシュをクリア
         imageCache.removeAllObjects()
         debugLog("🗑️ Image cache cleared for new source", level: .verbose)
@@ -651,6 +666,7 @@ class BookViewModel {
         initializePages(count: source.imageCount)
 
         // 書庫履歴に記録（書庫/フォルダの場合のみ、個別画像ファイルは画像カタログのみに記録）
+        let recordStart = CFAbsoluteTimeGetCurrent()
         if recordAccess,
            !source.isStandaloneImageSource,
            let fileKey = source.generateFileKey(),
@@ -661,21 +677,32 @@ class BookViewModel {
                 fileName: source.sourceName
             )
         }
+        let recordTime = (CFAbsoluteTimeGetCurrent() - recordStart) * 1000
+        DebugLogger.log("⏱️ completeOpenSource: recordAccess: \(String(format: "%.1f", recordTime))ms", level: .normal)
 
         // フェーズ3: 表示状態を復元
         loadingPhase = L("loading_phase_restoring_state")
 
         // 保存された表示状態を復元
+        let restoreStart = CFAbsoluteTimeGetCurrent()
         restoreViewState()
+        let restoreTime = (CFAbsoluteTimeGetCurrent() - restoreStart) * 1000
+        DebugLogger.log("⏱️ completeOpenSource: restoreViewState: \(String(format: "%.1f", restoreTime))ms", level: .normal)
 
         // フェーズ4: 画像を読み込む
         loadingPhase = L("loading_phase_loading_image")
 
         // 画像を読み込む（復元されたページ）
+        let loadStart = CFAbsoluteTimeGetCurrent()
         loadCurrentPage()
+        let loadTime = (CFAbsoluteTimeGetCurrent() - loadStart) * 1000
+        DebugLogger.log("⏱️ completeOpenSource: loadCurrentPage: \(String(format: "%.1f", loadTime))ms", level: .normal)
 
         // 読み込み完了
         loadingPhase = nil
+
+        let totalTime = (CFAbsoluteTimeGetCurrent() - totalStart) * 1000
+        DebugLogger.log("⏱️ completeOpenSource total: \(String(format: "%.1f", totalTime))ms", level: .normal)
     }
 
     /// zipファイルを開く（互換性のため残す）
