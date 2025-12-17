@@ -1067,6 +1067,24 @@ struct ContentView: View {
                 }
             }
         }
+
+        // ウィンドウがフォーカスされた時に履歴/カタログを更新
+        let viewModel = self.viewModel
+        let historyManager = self.historyManager
+        let imageCatalogManager = self.imageCatalogManager
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification,
+            object: window,
+            queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                // 初期画面を表示中（ファイルを開いていない）場合のみ更新
+                if !viewModel.hasOpenFile {
+                    historyManager.reloadHistoryIfNeeded()
+                    imageCatalogManager.reloadCatalogIfNeeded()
+                }
+            }
+        }
     }
 
     /// ファイルオープン通知の監視を設定
