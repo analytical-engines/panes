@@ -273,6 +273,31 @@ class ImageCatalogManager {
         }
     }
 
+    /// メモリ上のカタログ配列を直接更新する（DBリロード不要）
+    private func updateCatalogArrayDirectly(_ entry: ImageCatalogEntry) {
+        // 既存エントリを探して削除
+        catalog.removeAll { $0.id == entry.id }
+
+        // 新しいエントリを先頭に追加
+        catalog.insert(entry, at: 0)
+
+        // 上限を超えた分を削除（種類ごとに）
+        let maxCount = entry.catalogType == .standalone ? maxStandaloneCount : maxArchiveContentCount
+        let sameTypeEntries = catalog.filter { $0.catalogType == entry.catalogType }
+        if sameTypeEntries.count > maxCount {
+            // メタデータなしの古いエントリを削除
+            let toRemove = sameTypeEntries
+                .filter { $0.memo == nil && $0.tags.isEmpty }
+                .suffix(sameTypeEntries.count - maxCount)
+            for removeEntry in toRemove {
+                catalog.removeAll { $0.id == removeEntry.id }
+            }
+        }
+
+        // アクセシビリティキャッシュを更新
+        accessibilityCache[entry.filePath] = true
+    }
+
     // MARK: - Record Access
 
     /// 個別画像ファイルのアクセスを記録
@@ -292,9 +317,18 @@ class ImageCatalogManager {
             descriptor.fetchLimit = 1
             let existing = try context.fetch(descriptor)
 
+            let now = Date()
+            var newAccessCount = 1
+            var memo: String? = nil
+            var tags: [String] = []
+            var imgWidth = width
+            var imgHeight = height
+            var imgFileSize = fileSize
+            var imgFormat = format
+
             if let imageData = existing.first {
                 // 既存エントリを更新
-                imageData.lastAccessDate = Date()
+                imageData.lastAccessDate = now
                 imageData.accessCount += 1
                 imageData.filePath = filePath
                 imageData.fileName = fileName
@@ -302,6 +336,13 @@ class ImageCatalogManager {
                 if let h = height { imageData.imageHeight = h }
                 if let s = fileSize { imageData.fileSize = s }
                 if let f = format { imageData.imageFormat = f }
+                newAccessCount = imageData.accessCount
+                memo = imageData.memo
+                tags = imageData.getTags()
+                imgWidth = imageData.imageWidth
+                imgHeight = imageData.imageHeight
+                imgFileSize = imageData.fileSize
+                imgFormat = imageData.imageFormat
             } else {
                 // 新規エントリを作成
                 let newData = StandaloneImageData(fileKey: fileKey, filePath: filePath, fileName: fileName)
@@ -316,9 +357,25 @@ class ImageCatalogManager {
             }
 
             try context.save()
-            // loadCatalog()は呼ばない（パフォーマンス改善）
-            // 履歴画面表示時にreloadCatalogIfNeeded()で再読み込み
-            catalogNeedsReload = true
+
+            // メモリ上の配列を直接更新（リロード不要）
+            let entry = ImageCatalogEntry(
+                id: fileKey,
+                fileKey: fileKey,
+                filePath: filePath,
+                fileName: fileName,
+                catalogType: .standalone,
+                relativePath: nil,
+                lastAccessDate: now,
+                accessCount: newAccessCount,
+                memo: memo,
+                imageWidth: imgWidth,
+                imageHeight: imgHeight,
+                fileSize: imgFileSize,
+                imageFormat: imgFormat,
+                tags: tags
+            )
+            updateCatalogArrayDirectly(entry)
         } catch {
             DebugLogger.log("❌ Failed to record standalone image: \(error)", level: .minimal)
         }
@@ -341,9 +398,18 @@ class ImageCatalogManager {
             descriptor.fetchLimit = 1
             let existing = try context.fetch(descriptor)
 
+            let now = Date()
+            var newAccessCount = 1
+            var memo: String? = nil
+            var tags: [String] = []
+            var imgWidth = width
+            var imgHeight = height
+            var imgFileSize = fileSize
+            var imgFormat = format
+
             if let imageData = existing.first {
                 // 既存エントリを更新
-                imageData.lastAccessDate = Date()
+                imageData.lastAccessDate = now
                 imageData.accessCount += 1
                 imageData.parentPath = parentPath
                 imageData.relativePath = relativePath
@@ -352,6 +418,13 @@ class ImageCatalogManager {
                 if let h = height { imageData.imageHeight = h }
                 if let s = fileSize { imageData.fileSize = s }
                 if let f = format { imageData.imageFormat = f }
+                newAccessCount = imageData.accessCount
+                memo = imageData.memo
+                tags = imageData.getTags()
+                imgWidth = imageData.imageWidth
+                imgHeight = imageData.imageHeight
+                imgFileSize = imageData.fileSize
+                imgFormat = imageData.imageFormat
             } else {
                 // 新規エントリを作成
                 let newData = ArchiveContentImageData(
@@ -371,9 +444,25 @@ class ImageCatalogManager {
             }
 
             try context.save()
-            // loadCatalog()は呼ばない（パフォーマンス改善）
-            // 履歴画面表示時にreloadCatalogIfNeeded()で再読み込み
-            catalogNeedsReload = true
+
+            // メモリ上の配列を直接更新（リロード不要）
+            let entry = ImageCatalogEntry(
+                id: fileKey,
+                fileKey: fileKey,
+                filePath: parentPath,
+                fileName: fileName,
+                catalogType: .archiveContent,
+                relativePath: relativePath,
+                lastAccessDate: now,
+                accessCount: newAccessCount,
+                memo: memo,
+                imageWidth: imgWidth,
+                imageHeight: imgHeight,
+                fileSize: imgFileSize,
+                imageFormat: imgFormat,
+                tags: tags
+            )
+            updateCatalogArrayDirectly(entry)
         } catch {
             DebugLogger.log("❌ Failed to record archive content image: \(error)", level: .minimal)
         }

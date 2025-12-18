@@ -623,6 +623,43 @@ class FileHistoryManager {
         }
     }
 
+    /// メモリ上の履歴配列を直接更新する（DBリロード不要）
+    /// エントリが存在すれば更新して先頭に移動、なければ先頭に追加
+    private func updateHistoryArrayDirectly(
+        id: String,
+        fileKey: String,
+        pageSettingsRef: String?,
+        filePath: String,
+        fileName: String,
+        lastAccessDate: Date,
+        accessCount: Int,
+        memo: String?
+    ) {
+        // 既存エントリを探して削除
+        history.removeAll { $0.id == id }
+
+        // 新しいエントリを先頭に追加
+        let entry = FileHistoryEntry(
+            id: id,
+            fileKey: fileKey,
+            pageSettingsRef: pageSettingsRef,
+            filePath: filePath,
+            fileName: fileName,
+            lastAccessDate: lastAccessDate,
+            accessCount: accessCount,
+            memo: memo
+        )
+        history.insert(entry, at: 0)
+
+        // 上限を超えた分を削除
+        if history.count > maxHistoryCount {
+            history = Array(history.prefix(maxHistoryCount))
+        }
+
+        // アクセシビリティキャッシュを更新
+        accessibilityCache[filePath] = true
+    }
+
     // MARK: - File Identity Check
 
     /// ファイルの同一性をチェックする
@@ -756,12 +793,18 @@ class FileHistoryManager {
             descriptor.fetchLimit = 1
             let results = try context.fetch(descriptor)
 
+            let now = Date()
+            var newAccessCount = 1
+            var memo: String? = nil
+
             if let existing = results.first {
                 // 既存エントリを更新
-                existing.lastAccessDate = Date()
+                existing.lastAccessDate = now
                 existing.accessCount += 1
                 existing.filePath = filePath
                 existing.pageSettingsRef = pageSettingsRef
+                newAccessCount = existing.accessCount
+                memo = existing.memo
             } else {
                 // 新規エントリを作成
                 let newData = FileHistoryData(fileKey: fileKey, pageSettingsRef: pageSettingsRef, filePath: filePath, fileName: fileName)
@@ -772,9 +815,18 @@ class FileHistoryManager {
             }
 
             try context.save()
-            // loadHistory()は呼ばない（パフォーマンス改善）
-            // 初期画面表示時にreloadHistoryIfNeeded()で再読み込み
-            historyNeedsReload = true
+
+            // メモリ上の配列を直接更新（リロード不要）
+            updateHistoryArrayDirectly(
+                id: entryId,
+                fileKey: fileKey,
+                pageSettingsRef: pageSettingsRef,
+                filePath: filePath,
+                fileName: fileName,
+                lastAccessDate: now,
+                accessCount: newAccessCount,
+                memo: memo
+            )
         } catch {
             DebugLogger.log("❌ Failed to record access with pageSettingsRef: \(error)", level: .minimal)
         }
@@ -832,9 +884,20 @@ class FileHistoryManager {
             }
 
             try context.save()
-            // loadHistory()は呼ばない（パフォーマンス改善）
-            // 初期画面表示時にreloadHistoryIfNeeded()で再読み込み
-            historyNeedsReload = true
+
+            // メモリ上の配列を直接更新（リロード不要）
+            let entryId = FileHistoryEntry.generateId(fileName: fileName, fileKey: fileKey)
+            let now = Date()
+            updateHistoryArrayDirectly(
+                id: entryId,
+                fileKey: fileKey,
+                pageSettingsRef: nil,
+                filePath: filePath,
+                fileName: fileName,
+                lastAccessDate: now,
+                accessCount: 1,
+                memo: nil
+            )
         } catch {
             DebugLogger.log("❌ Failed to record access as new entry: \(error)", level: .minimal)
         }
@@ -853,11 +916,17 @@ class FileHistoryManager {
             descriptor.fetchLimit = 1
             let existing = try context.fetch(descriptor)
 
+            let now = Date()
+            var newAccessCount = 1
+            var memo: String? = nil
+
             if let historyData = existing.first {
                 // 既存エントリを更新
-                historyData.lastAccessDate = Date()
+                historyData.lastAccessDate = now
                 historyData.accessCount += 1
                 historyData.filePath = filePath
+                newAccessCount = historyData.accessCount
+                memo = historyData.memo
             } else {
                 // 新規エントリを作成
                 DebugLogger.log("📊 recordAccess: creating new entry for \(fileName), id=\(entryId)", level: .normal)
@@ -868,9 +937,18 @@ class FileHistoryManager {
             }
 
             try context.save()
-            // loadHistory()は呼ばない（パフォーマンス改善）
-            // 初期画面表示時にreloadHistoryIfNeeded()で再読み込み
-            historyNeedsReload = true
+
+            // メモリ上の配列を直接更新（リロード不要）
+            updateHistoryArrayDirectly(
+                id: entryId,
+                fileKey: fileKey,
+                pageSettingsRef: nil,
+                filePath: filePath,
+                fileName: fileName,
+                lastAccessDate: now,
+                accessCount: newAccessCount,
+                memo: memo
+            )
         } catch {
             DebugLogger.log("❌ Failed to record access: \(error)", level: .minimal)
         }
