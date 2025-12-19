@@ -139,6 +139,7 @@ struct ContentView: View {
                 currentFileName: viewModel.currentFileName,
                 singlePageIndicator: viewModel.singlePageIndicator,
                 pageInfo: viewModel.pageInfo,
+                copiedPageIndex: copiedPageIndex,
                 contextMenuBuilder: { pageIndex in imageContextMenu(for: pageIndex) }
             )
             .pageIndicatorOverlay(
@@ -245,65 +246,76 @@ struct ContentView: View {
             Label(L("menu_single_page_alignment"), systemImage: "arrow.left.and.right")
         }
 
-        // 回転メニュー
+        // 回転・反転メニュー
         Menu {
-            Button(action: {
-                viewModel.rotateClockwise(at: pageIndex)
-            }) {
-                Label(L("menu_rotate_clockwise"), systemImage: "rotate.right")
+            // 回転
+            Menu {
+                Button(action: {
+                    viewModel.rotateClockwise(at: pageIndex)
+                }) {
+                    Label(L("menu_rotate_clockwise"), systemImage: "rotate.right")
+                }
+
+                Button(action: {
+                    viewModel.rotateCounterClockwise(at: pageIndex)
+                }) {
+                    Label(L("menu_rotate_counterclockwise"), systemImage: "rotate.left")
+                }
+
+                Divider()
+
+                Button(action: {
+                    viewModel.rotate180(at: pageIndex)
+                }) {
+                    Label(L("menu_rotate_180"), systemImage: "arrow.up.arrow.down")
+                }
+            } label: {
+                let rotation = viewModel.getRotation(at: pageIndex)
+                Label(
+                    L("menu_rotation"),
+                    systemImage: rotation == .none ? "arrow.clockwise" : "arrow.clockwise.circle.fill"
+                )
             }
 
-            Button(action: {
-                viewModel.rotateCounterClockwise(at: pageIndex)
-            }) {
-                Label(L("menu_rotate_counterclockwise"), systemImage: "rotate.left")
-            }
+            // 反転
+            Menu {
+                Button(action: {
+                    viewModel.toggleHorizontalFlip(at: pageIndex)
+                }) {
+                    HStack {
+                        Text(L("menu_flip_horizontal"))
+                        Spacer()
+                        if viewModel.getFlip(at: pageIndex).horizontal {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
 
-            Divider()
-
-            Button(action: {
-                viewModel.rotate180(at: pageIndex)
-            }) {
-                Label(L("menu_rotate_180"), systemImage: "arrow.up.arrow.down")
+                Button(action: {
+                    viewModel.toggleVerticalFlip(at: pageIndex)
+                }) {
+                    HStack {
+                        Text(L("menu_flip_vertical"))
+                        Spacer()
+                        if viewModel.getFlip(at: pageIndex).vertical {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            } label: {
+                let flip = viewModel.getFlip(at: pageIndex)
+                Label(
+                    L("menu_flip"),
+                    systemImage: (flip.horizontal || flip.vertical) ? "arrow.left.and.right.righttriangle.left.righttriangle.right.fill" : "arrow.left.and.right.righttriangle.left.righttriangle.right"
+                )
             }
         } label: {
             let rotation = viewModel.getRotation(at: pageIndex)
-            Label(
-                L("menu_rotation"),
-                systemImage: rotation == .none ? "arrow.clockwise" : "arrow.clockwise.circle.fill"
-            )
-        }
-
-        // 反転メニュー
-        Menu {
-            Button(action: {
-                viewModel.toggleHorizontalFlip(at: pageIndex)
-            }) {
-                HStack {
-                    Text(L("menu_flip_horizontal"))
-                    Spacer()
-                    if viewModel.getFlip(at: pageIndex).horizontal {
-                        Image(systemName: "checkmark")
-                    }
-                }
-            }
-
-            Button(action: {
-                viewModel.toggleVerticalFlip(at: pageIndex)
-            }) {
-                HStack {
-                    Text(L("menu_flip_vertical"))
-                    Spacer()
-                    if viewModel.getFlip(at: pageIndex).vertical {
-                        Image(systemName: "checkmark")
-                    }
-                }
-            }
-        } label: {
             let flip = viewModel.getFlip(at: pageIndex)
+            let hasTransform = rotation != .none || flip.horizontal || flip.vertical
             Label(
-                L("menu_flip"),
-                systemImage: (flip.horizontal || flip.vertical) ? "arrow.left.and.right.righttriangle.left.righttriangle.right.fill" : "arrow.left.and.right.righttriangle.left.righttriangle.right"
+                L("menu_rotation_and_flip"),
+                systemImage: hasTransform ? "arrow.triangle.2.circlepath.circle.fill" : "arrow.triangle.2.circlepath"
             )
         }
 
@@ -361,39 +373,6 @@ struct ContentView: View {
                     ? "arrow.left"
                     : "arrow.right"
             )
-        }
-
-        // ステータスバー表示切替
-        Button(action: {
-            viewModel.toggleStatusBar()
-        }) {
-            Label(
-                viewModel.showStatusBar
-                    ? L("menu_hide_status_bar")
-                    : L("menu_show_status_bar"),
-                systemImage: viewModel.showStatusBar
-                    ? "eye.slash"
-                    : "eye"
-            )
-        }
-
-        // ソート順
-        Menu {
-            ForEach(ImageSortMethod.allCases, id: \.self) { method in
-                Button(action: {
-                    viewModel.applySort(method)
-                }) {
-                    HStack {
-                        Text(method.displayName)
-                        Spacer()
-                        if viewModel.sortMethod == method {
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-            }
-        } label: {
-            Label(L("menu_sort"), systemImage: "arrow.up.arrow.down")
         }
 
         // 表示順序変更メニュー（常に表示、操作時に自動でカスタムモードに切り替え）
@@ -497,32 +476,19 @@ struct ContentView: View {
 
         Divider()
 
-        // ページ設定サブメニュー
-        Menu {
-            Button(action: {
-                exportPageSettings()
-            }) {
-                Label(L("menu_export_page_settings"), systemImage: "square.and.arrow.up")
-            }
-
-            Button(action: {
-                importPageSettings()
-            }) {
-                Label(L("menu_import_page_settings"), systemImage: "square.and.arrow.down")
-            }
-
-            Divider()
-
-            Button(action: {
-                resetPageSettings()
-            }) {
-                Label(L("menu_reset_page_settings"), systemImage: "arrow.counterclockwise")
-            }
-        } label: {
-            Label(L("menu_page_settings"), systemImage: "gearshape")
+        // ステータスバー表示切替
+        Button(action: {
+            viewModel.toggleStatusBar()
+        }) {
+            Label(
+                viewModel.showStatusBar
+                    ? L("menu_hide_status_bar")
+                    : L("menu_show_status_bar"),
+                systemImage: viewModel.showStatusBar
+                    ? "eye.slash"
+                    : "eye"
+            )
         }
-
-        Divider()
 
         // ファイルを閉じる
         Button(action: {
@@ -584,20 +550,6 @@ struct ContentView: View {
             )
         }
 
-        // ステータスバー表示切替
-        Button(action: {
-            viewModel.toggleStatusBar()
-        }) {
-            Label(
-                viewModel.showStatusBar
-                    ? L("menu_hide_status_bar")
-                    : L("menu_show_status_bar"),
-                systemImage: viewModel.showStatusBar
-                    ? "eye.slash"
-                    : "eye"
-            )
-        }
-
         Divider()
 
         // メモ編集
@@ -637,32 +589,19 @@ struct ContentView: View {
 
         Divider()
 
-        // ページ設定サブメニュー
-        Menu {
-            Button(action: {
-                exportPageSettings()
-            }) {
-                Label(L("menu_export_page_settings"), systemImage: "square.and.arrow.up")
-            }
-
-            Button(action: {
-                importPageSettings()
-            }) {
-                Label(L("menu_import_page_settings"), systemImage: "square.and.arrow.down")
-            }
-
-            Divider()
-
-            Button(action: {
-                resetPageSettings()
-            }) {
-                Label(L("menu_reset_page_settings"), systemImage: "arrow.counterclockwise")
-            }
-        } label: {
-            Label(L("menu_page_settings"), systemImage: "gearshape")
+        // ステータスバー表示切替
+        Button(action: {
+            viewModel.toggleStatusBar()
+        }) {
+            Label(
+                viewModel.showStatusBar
+                    ? L("menu_hide_status_bar")
+                    : L("menu_show_status_bar"),
+                systemImage: viewModel.showStatusBar
+                    ? "eye.slash"
+                    : "eye"
+            )
         }
-
-        Divider()
 
         // ファイルを閉じる
         Button(action: {
@@ -1168,7 +1107,7 @@ struct ContentView: View {
                 return
             }
 
-            // 新しいウィンドウを作成
+            // 新しいウィンドウを作成（または空のウィンドウで開く）
             Task { @MainActor in
                 // myWindowNumberが設定されるまで少し待つ
                 var attempts = 0
@@ -1183,8 +1122,16 @@ struct ContentView: View {
                     DebugLogger.log("📬 Ignoring needNewWindow - window no longer exists: \(windowID) (after \(attempts) attempts)", level: .normal)
                     return
                 }
+
+                // このウィンドウがファイルを開いていなければ、自分で開く
+                if !self.viewModel.hasOpenFile {
+                    DebugLogger.log("📬 Using empty window for file: \(windowID)", level: .normal)
+                    self.openPendingFile()
+                    return
+                }
+
                 DebugLogger.log("🪟 Creating new window from windowID: \(windowID)", level: .normal)
-                openWindow(id: "new")
+                openWindow(id: "main")
                 try? await Task.sleep(nanoseconds: 200_000_000)
 
                 // 新しいウィンドウにファイルを開かせる
@@ -1231,6 +1178,7 @@ struct ContentView: View {
             NotificationCenter.default.removeObserver(observer)
         }
         notificationObservers.removeAll()
+        notificationObserversRegistered = false
         DebugLogger.log("🧹 Notification observers removed for window: \(windowID)", level: .normal)
     }
 
@@ -1549,14 +1497,12 @@ struct ContentView: View {
             await MainActor.run {
                 if !urls.isEmpty {
                     DebugLogger.log("📬 Opening file via D&D: \(urls.first?.lastPathComponent ?? "unknown")", level: .normal)
-                    // 先にローディング状態にしてから閉じる（初期画面が表示されないように）
-                    withAnimation { isWaitingForFile = true }
-                    // 既にファイルが開いている場合は一度閉じる（hasOpenFileのonChangeをトリガーするため）
+                    // 既にファイルが開いている場合は一度閉じる
                     if viewModel.hasOpenFile {
                         viewModel.closeFile()
                     }
-                    viewModel.imageCatalogManager = imageCatalogManager
-                    viewModel.openFiles(urls: urls)
+                    // pendingURLsを設定してonChangeをトリガーする（履歴からの読み込みと同じ経路）
+                    pendingURLs = urls
                 }
             }
         }
@@ -2852,6 +2798,7 @@ struct SpreadPageView<ContextMenu: View>: View {
     let currentFileName: String
     let singlePageIndicator: String
     let pageInfo: String
+    var copiedPageIndex: Int? = nil
     let contextMenuBuilder: (Int) -> ContextMenu
 
     var body: some View {
@@ -2879,6 +2826,7 @@ struct SpreadPageView<ContextMenu: View>: View {
                             secondPageFlip: secondPageFlip,
                             fittingMode: fittingMode,
                             viewportSize: effectiveViewport,
+                            copiedPageIndex: copiedPageIndex,
                             contextMenuBuilder: contextMenuBuilder
                         )
                         .equatable()
@@ -2904,6 +2852,7 @@ struct SpreadPageView<ContextMenu: View>: View {
                             secondPageRotation: secondPageRotation,
                             secondPageFlip: secondPageFlip,
                             fittingMode: fittingMode,
+                            copiedPageIndex: copiedPageIndex,
                             contextMenuBuilder: contextMenuBuilder
                         )
                         .equatable()
@@ -2923,6 +2872,7 @@ struct SpreadPageView<ContextMenu: View>: View {
                                 secondPageFlip: secondPageFlip,
                                 fittingMode: fittingMode,
                                 viewportSize: geometry.size,
+                                copiedPageIndex: copiedPageIndex,
                                 contextMenuBuilder: contextMenuBuilder
                             )
                             .equatable()
@@ -2944,6 +2894,7 @@ struct SpreadPageView<ContextMenu: View>: View {
                                 secondPageFlip: secondPageFlip,
                                 fittingMode: fittingMode,
                                 viewportSize: geometry.size,
+                                copiedPageIndex: copiedPageIndex,
                                 contextMenuBuilder: contextMenuBuilder
                             )
                             .equatable()
@@ -2963,6 +2914,7 @@ struct SpreadPageView<ContextMenu: View>: View {
                             secondPageRotation: secondPageRotation,
                             secondPageFlip: secondPageFlip,
                             fittingMode: .window,
+                            copiedPageIndex: copiedPageIndex,
                             contextMenuBuilder: contextMenuBuilder
                         )
                         .equatable()

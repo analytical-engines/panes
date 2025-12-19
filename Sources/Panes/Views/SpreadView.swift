@@ -16,6 +16,8 @@ struct SpreadView<ContextMenu: View>: View {
     var fittingMode: FittingMode = .window
     /// ScrollView内で使用する場合に外部から渡すビューポートサイズ
     var viewportSize: CGSize? = nil
+    /// コンテキストメニュー状態（移動元マーク等）- Equatableで比較してメニュー更新を検出
+    var copiedPageIndex: Int? = nil
     let contextMenuBuilder: (Int) -> ContextMenu
 
     var body: some View {
@@ -182,8 +184,10 @@ extension SpreadView: Equatable {
     nonisolated static func == (lhs: SpreadView, rhs: SpreadView) -> Bool {
         // 画像はページインデックスで判断（同じインデックスなら同じ画像）
         // NSImageは並行処理の問題があるため比較しない
+        // ただしsecondPageImageの有無は比較する（単ページ切り替え検出用）
         lhs.firstPageIndex == rhs.firstPageIndex &&
         lhs.secondPageIndex == rhs.secondPageIndex &&
+        (lhs.secondPageImage != nil) == (rhs.secondPageImage != nil) &&
         lhs.readingDirection == rhs.readingDirection &&
         lhs.singlePageAlignment == rhs.singlePageAlignment &&
         lhs.firstPageRotation == rhs.firstPageRotation &&
@@ -191,6 +195,7 @@ extension SpreadView: Equatable {
         lhs.secondPageRotation == rhs.secondPageRotation &&
         lhs.secondPageFlip == rhs.secondPageFlip &&
         lhs.fittingMode == rhs.fittingMode &&
-        lhs.viewportSize == rhs.viewportSize
+        lhs.viewportSize == rhs.viewportSize &&
+        lhs.copiedPageIndex == rhs.copiedPageIndex
     }
 }

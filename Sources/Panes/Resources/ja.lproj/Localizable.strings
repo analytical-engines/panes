@@ -82,16 +82,15 @@
 "menu_hide_history" = "履歴を非表示";
 "menu_single_view" = "単ページ表示";
 "menu_spread_view" = "見開き表示";
-"menu_reading_direction_rtl" = "読み方向: 右から左";
-"menu_reading_direction_ltr" = "読み方向: 左から右";
+"menu_reading_direction_rtl" = "ページ方向: 右から左";
+"menu_reading_direction_ltr" = "ページ方向: 左から右";
 "menu_hide_status_bar" = "ステータスバーを隠す";
 "menu_show_status_bar" = "ステータスバーを表示";
-"menu_fitting_mode" = "フィッティング";
+"menu_display_size" = "表示サイズ";
 "menu_fitting_window" = "ウィンドウにフィット";
 "menu_fitting_height" = "縦にフィット";
 "menu_fitting_width" = "横にフィット";
 "menu_fitting_original" = "等倍表示 (1:1)";
-"menu_zoom" = "拡大/縮小";
 "menu_zoom_in" = "拡大";
 "menu_zoom_out" = "縮小";
 "menu_zoom_reset" = "等倍";
@@ -102,6 +101,7 @@
 "menu_align_right" = "右側";
 "menu_align_left" = "左側";
 "menu_align_center" = "中央（ウィンドウフィット）";
+"menu_rotation_and_flip" = "回転・反転";
 "menu_rotation" = "回転";
 "menu_rotate_clockwise" = "右に90°回転";
 "menu_rotate_counterclockwise" = "左に90°回転";
@@ -117,7 +117,7 @@
 "menu_edit_memo" = "メモを編集";
 "menu_edit_archive_memo" = "書庫のメモを編集";
 "menu_edit_image_memo" = "画像のメモを編集";
-"menu_sort" = "ソート順";
+"menu_sort" = "整列";
 
 // MARK: - Memo
 
@@ -219,7 +219,7 @@
 
 // MARK: - Display Order
 
-"menu_display_order" = "表示順序";
+"menu_display_order" = "表示順序の変更";
 "menu_mark_for_move" = "移動元としてマーク";
 "menu_page_marked" = "マーク済み";
 "menu_insert_before" = "この画像の前に挿入";

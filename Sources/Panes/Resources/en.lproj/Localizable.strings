@@ -82,16 +82,15 @@
 "menu_hide_history" = "Hide History";
 "menu_single_view" = "Single View";
 "menu_spread_view" = "Spread View";
-"menu_reading_direction_rtl" = "Reading Direction: Right to Left";
-"menu_reading_direction_ltr" = "Reading Direction: Left to Right";
+"menu_reading_direction_rtl" = "Page Direction: Right to Left";
+"menu_reading_direction_ltr" = "Page Direction: Left to Right";
 "menu_hide_status_bar" = "Hide Status Bar";
 "menu_show_status_bar" = "Show Status Bar";
-"menu_fitting_mode" = "Fitting Mode";
+"menu_display_size" = "Display Size";
 "menu_fitting_window" = "Fit to Window";
 "menu_fitting_height" = "Fit to Height";
 "menu_fitting_width" = "Fit to Width";
 "menu_fitting_original" = "Original Size (1:1)";
-"menu_zoom" = "Zoom";
 "menu_zoom_in" = "Zoom In";
 "menu_zoom_out" = "Zoom Out";
 "menu_zoom_reset" = "Actual Size";
@@ -102,6 +101,7 @@
 "menu_align_right" = "Right Side";
 "menu_align_left" = "Left Side";
 "menu_align_center" = "Center (Window Fitting)";
+"menu_rotation_and_flip" = "Rotation & Flip";
 "menu_rotation" = "Rotation";
 "menu_rotate_clockwise" = "Rotate 90° Right";
 "menu_rotate_counterclockwise" = "Rotate 90° Left";
@@ -117,7 +117,7 @@
 "menu_edit_memo" = "Edit Memo";
 "menu_edit_archive_memo" = "Edit Archive Memo";
 "menu_edit_image_memo" = "Edit Image Memo";
-"menu_sort" = "Sort Order";
+"menu_sort" = "Arrange";
 
 // MARK: - Memo
 
@@ -219,7 +219,7 @@
 
 // MARK: - Display Order
 
-"menu_display_order" = "Display Order";
+"menu_display_order" = "Change Display Order";
 "menu_mark_for_move" = "Mark for Move";
 "menu_page_marked" = "Marked";
 "menu_insert_before" = "Insert Before This Image";

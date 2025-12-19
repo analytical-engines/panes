@@ -50,7 +50,7 @@ struct ImageViewerApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "main") {
             ContentView()
                 .environment(historyManager)
                 .environment(imageCatalogManager)
@@ -91,6 +91,22 @@ struct ImageViewerApp: App {
                 .disabled(focusedViewModel?.hasOpenFile != true)
 
                 Divider()
+
+                Menu(L("menu_page_settings")) {
+                    Button(action: {
+                        exportPageSettings()
+                    }) {
+                        Label(L("menu_export_page_settings"), systemImage: "square.and.arrow.up")
+                    }
+                    .disabled(focusedViewModel?.hasOpenFile != true)
+
+                    Button(action: {
+                        importPageSettings()
+                    }) {
+                        Label(L("menu_import_page_settings"), systemImage: "square.and.arrow.down")
+                    }
+                    .disabled(focusedViewModel?.hasOpenFile != true)
+                }
 
                 Menu(L("menu_history")) {
                     Button(action: {
@@ -160,8 +176,25 @@ struct ImageViewerApp: App {
                 }
                 .disabled(focusedViewModel == nil)
 
-                // フィッティングモード
-                Menu(L("menu_fitting_mode")) {
+                // 整列メニュー
+                Menu(L("menu_sort")) {
+                    ForEach(ImageSortMethod.allCases, id: \.self) { method in
+                        Button(action: {
+                            focusedViewModel?.applySort(method)
+                        }) {
+                            Label(
+                                method.displayName,
+                                systemImage: focusedViewModel?.sortMethod == method
+                                    ? "checkmark"
+                                    : ""
+                            )
+                        }
+                    }
+                }
+                .disabled(focusedViewModel == nil)
+
+                // 表示サイズ（フィッティング + ズーム統合）
+                Menu(L("menu_display_size")) {
                     Button(action: {
                         focusedViewModel?.fittingMode = .window
                     }) {
@@ -192,9 +225,6 @@ struct ImageViewerApp: App {
                                 : ""
                         )
                     }
-
-                    Divider()
-
                     Button(action: {
                         focusedViewModel?.fittingMode = .originalSize
                     }) {
@@ -206,11 +236,9 @@ struct ImageViewerApp: App {
                         )
                     }
                     .disabled(focusedViewModel?.viewMode == .spread)
-                }
-                .disabled(focusedViewModel == nil)
 
-                // ズーム
-                Menu(L("menu_zoom")) {
+                    Divider()
+
                     Button(action: {
                         focusedViewModel?.zoomIn()
                     }) {
@@ -224,8 +252,6 @@ struct ImageViewerApp: App {
                         Label(L("menu_zoom_out"), systemImage: "minus.magnifyingglass")
                     }
                     .keyboardShortcut("-", modifiers: .command)
-
-                    Divider()
 
                     Button(action: {
                         focusedViewModel?.resetZoom()
@@ -242,6 +268,20 @@ struct ImageViewerApp: App {
                 }
                 .disabled(focusedViewModel == nil)
 
+                Divider()
+
+                // ページ設定リセット
+                Button(action: {
+                    resetPageSettings()
+                }) {
+                    Label(L("menu_reset_page_settings"), systemImage: "arrow.counterclockwise")
+                }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .disabled(focusedViewModel == nil)
+
+                Divider()
+
+                // ステータスバー表示切替（フルスクリーンの上）
                 Button(action: {
                     focusedViewModel?.toggleStatusBar()
                 }) {
@@ -255,87 +295,7 @@ struct ImageViewerApp: App {
                     )
                 }
                 .keyboardShortcut("b", modifiers: .command)
-                .disabled(focusedViewModel == nil)
-
-                Divider()
-
-                // ページ設定メニュー（階層化）
-                Menu(L("menu_page_settings")) {
-                    Button(action: {
-                        focusedViewModel?.toggleCurrentPageSingleDisplay()
-                    }) {
-                        Label(
-                            focusedViewModel?.isCurrentPageForcedSingle == true
-                                ? L("menu_remove_single_page_attribute")
-                                : L("menu_force_single_page"),
-                            systemImage: focusedViewModel?.isCurrentPageForcedSingle == true
-                                ? "checkmark.square"
-                                : "square"
-                        )
-                    }
-
-                    // 単ページ配置設定
-                    Menu(L("menu_single_page_alignment")) {
-                        Button(action: {
-                            focusedViewModel?.setCurrentPageAlignment(.right)
-                        }) {
-                            Label(
-                                L("menu_align_right"),
-                                systemImage: focusedViewModel?.currentPageAlignment == .right
-                                    ? "checkmark"
-                                    : ""
-                            )
-                        }
-
-                        Button(action: {
-                            focusedViewModel?.setCurrentPageAlignment(.left)
-                        }) {
-                            Label(
-                                L("menu_align_left"),
-                                systemImage: focusedViewModel?.currentPageAlignment == .left
-                                    ? "checkmark"
-                                    : ""
-                            )
-                        }
-
-                        Button(action: {
-                            focusedViewModel?.setCurrentPageAlignment(.center)
-                        }) {
-                            Label(
-                                L("menu_align_center"),
-                                systemImage: focusedViewModel?.currentPageAlignment == .center
-                                    ? "checkmark"
-                                    : ""
-                            )
-                        }
-                    }
-
-                    Divider()
-
-                    Button(action: {
-                        exportPageSettings()
-                    }) {
-                        Label(L("menu_export_page_settings"), systemImage: "square.and.arrow.up")
-                    }
-                    .keyboardShortcut("e", modifiers: [.command, .shift])
-
-                    Button(action: {
-                        importPageSettings()
-                    }) {
-                        Label(L("menu_import_page_settings"), systemImage: "square.and.arrow.down")
-                    }
-                    .keyboardShortcut("i", modifiers: [.command, .shift])
-
-                    Divider()
-
-                    Button(action: {
-                        resetPageSettings()
-                    }) {
-                        Label(L("menu_reset_page_settings"), systemImage: "arrow.counterclockwise")
-                    }
-                    .keyboardShortcut("r", modifiers: [.command, .shift])
-                }
-                .disabled(focusedViewModel == nil)
+                .disabled(focusedViewModel?.hasOpenFile != true)
             }
 
             // ウィンドウメニューにセッション保存を追加
