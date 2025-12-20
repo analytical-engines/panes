@@ -93,23 +93,33 @@ class BookViewModel {
     // 現在のソート方法
     var sortMethod: ImageSortMethod = .name
 
+    // ソートを逆順にするか
+    var isSortReversed: Bool = false
+
     /// 表示ページ番号からソースインデックスに変換
     private func sourceIndex(for displayPage: Int) -> Int {
         guard displayPage >= 0 && displayPage < pages.count else {
             return displayPage // フォールバック
         }
-        return pages[displayPage].sourceIndex
+        // 逆順の場合はインデックスを反転
+        let effectivePage = isSortReversed ? (pages.count - 1 - displayPage) : displayPage
+        return pages[effectivePage].sourceIndex
     }
 
     /// ソースインデックスから表示ページ番号に変換
     private func displayPage(for sourceIndex: Int) -> Int? {
-        return pages.firstIndex { $0.sourceIndex == sourceIndex }
+        guard let index = pages.firstIndex(where: { $0.sourceIndex == sourceIndex }) else {
+            return nil
+        }
+        // 逆順の場合はインデックスを反転
+        return isSortReversed ? (pages.count - 1 - index) : index
     }
 
     /// ページ配列を初期化（ソートなし = identity mapping）
     private func initializePages(count: Int) {
         pages = (0..<count).map { PageData(sourceIndex: $0) }
         sortMethod = .name  // デフォルトのソート方法にリセット
+        isSortReversed = false
         debugLog("Pages initialized: \(pages.count) pages, sortMethod reset to .name", level: .verbose)
     }
 
@@ -134,34 +144,19 @@ class BookViewModel {
                 return name1.localizedStandardCompare(name2) == .orderedAscending
             }
 
-        case .nameReverse:
-            // 名前逆順
-            sortedIndices = indices.sorted { i1, i2 in
-                let name1 = source.fileName(at: i1) ?? ""
-                let name2 = source.fileName(at: i2) ?? ""
-                return name1.localizedStandardCompare(name2) == .orderedDescending
-            }
-
         case .natural:
-            // 自然順（数字を数値として比較）- 後で実装
+            // 自然順（数字を数値として比較）
             sortedIndices = indices.sorted { i1, i2 in
                 let name1 = source.fileName(at: i1) ?? ""
                 let name2 = source.fileName(at: i2) ?? ""
                 return name1.localizedStandardCompare(name2) == .orderedAscending
             }
 
-        case .dateAscending:
+        case .date:
             // 日付順（古い順）- 事前にキャッシュしてからソート
             let dates = indices.map { source.fileDate(at: $0) ?? Date.distantPast }
             sortedIndices = indices.sorted { i1, i2 in
                 dates[i1] < dates[i2]
-            }
-
-        case .dateDescending:
-            // 日付順（新しい順）- 事前にキャッシュしてからソート
-            let dates = indices.map { source.fileDate(at: $0) ?? Date.distantPast }
-            sortedIndices = indices.sorted { i1, i2 in
-                dates[i1] > dates[i2]
             }
 
         case .random:
@@ -193,6 +188,27 @@ class BookViewModel {
 
         // 表示を更新
         loadCurrentPage()
+    }
+
+    /// ソートの逆順設定をトグル
+    func toggleSortReverse() {
+        guard sortMethod.supportsReverse else { return }
+
+        // 現在表示中の画像のソースインデックスを記憶
+        let currentSourceIndex = sourceIndex(for: currentPage)
+
+        isSortReversed.toggle()
+
+        // 元の画像を表示し続けるようにcurrentPageを更新
+        if let newDisplayPage = displayPage(for: currentSourceIndex) {
+            currentPage = newDisplayPage
+        }
+
+        debugLog("Sort reverse toggled: \(isSortReversed)", level: .normal)
+
+        // 表示を更新
+        loadCurrentPage()
+        saveViewState()
     }
 
     // MARK: - カスタム表示順序の操作
@@ -283,6 +299,7 @@ class BookViewModel {
 
         // 名前順に戻す
         sortMethod = .name
+        isSortReversed = false
         applySort(.name)
     }
 
@@ -291,6 +308,7 @@ class BookViewModel {
     private let currentPageKey = "currentPage"
     private let readingDirectionKey = "readingDirection"
     private let sortMethodKey = "sortMethod"
+    private let sortReversedKey = "sortReversed"
 
     // 履歴管理（外部から注入される）
     var historyManager: FileHistoryManager?
@@ -1799,6 +1817,7 @@ class BookViewModel {
 
         // ソート方法を保存（エントリIDベース）
         UserDefaults.standard.set(sortMethod.rawValue, forKey: "\(sortMethodKey)-\(entryId)")
+        UserDefaults.standard.set(isSortReversed, forKey: "\(sortReversedKey)-\(entryId)")
 
         // ページ表示設定を保存（ファイル名も考慮してエントリを特定）
         historyManager?.savePageDisplaySettings(pageDisplaySettings, forFileName: source.sourceName, fileKey: fileKey)
@@ -1849,24 +1868,27 @@ class BookViewModel {
         // なければデフォルトのまま
 
         // ソート方法を復元（pages配列を先に更新する必要があるため、ページ復元より先に行う）
-        if let sortString = UserDefaults.standard.string(forKey: "\(sortMethodKey)-\(entryId)"),
-           let savedSortMethod = ImageSortMethod(rawValue: sortString) {
+        if let sortString = UserDefaults.standard.string(forKey: "\(sortMethodKey)-\(entryId)") {
+            // 旧形式からの互換性対応（nameReverse, dateAscending, dateDescending）
+            let (restoredMethod, restoredReversed) = ImageSortMethod.fromLegacy(sortString)
+            sortMethod = restoredMethod
+
+            // 逆順設定を復元（新形式で保存されていればそちらを優先）
+            if UserDefaults.standard.object(forKey: "\(sortReversedKey)-\(entryId)") != nil {
+                isSortReversed = UserDefaults.standard.bool(forKey: "\(sortReversedKey)-\(entryId)")
+            } else {
+                isSortReversed = restoredReversed
+            }
+
             // ソートを適用（pages配列を更新、ただしページ読み込みはスキップ）
-            sortMethod = savedSortMethod
             let indices = Array(0..<totalPages)
             let sortedIndices: [Int]
-            switch savedSortMethod {
+            switch restoredMethod {
             case .name:
                 sortedIndices = indices.sorted { i1, i2 in
                     let name1 = imageSource?.fileName(at: i1) ?? ""
                     let name2 = imageSource?.fileName(at: i2) ?? ""
                     return name1.localizedStandardCompare(name2) == .orderedAscending
-                }
-            case .nameReverse:
-                sortedIndices = indices.sorted { i1, i2 in
-                    let name1 = imageSource?.fileName(at: i1) ?? ""
-                    let name2 = imageSource?.fileName(at: i2) ?? ""
-                    return name1.localizedStandardCompare(name2) == .orderedDescending
                 }
             case .natural:
                 sortedIndices = indices.sorted { i1, i2 in
@@ -1874,17 +1896,11 @@ class BookViewModel {
                     let name2 = imageSource?.fileName(at: i2) ?? ""
                     return name1.localizedStandardCompare(name2) == .orderedAscending
                 }
-            case .dateAscending:
+            case .date:
                 // 事前にキャッシュしてからソート
                 let dates = indices.map { imageSource?.fileDate(at: $0) ?? Date.distantPast }
                 sortedIndices = indices.sorted { i1, i2 in
                     dates[i1] < dates[i2]
-                }
-            case .dateDescending:
-                // 事前にキャッシュしてからソート
-                let dates = indices.map { imageSource?.fileDate(at: $0) ?? Date.distantPast }
-                sortedIndices = indices.sorted { i1, i2 in
-                    dates[i1] > dates[i2]
                 }
             case .random:
                 sortedIndices = indices.shuffled()

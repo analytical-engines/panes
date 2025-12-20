@@ -254,12 +254,11 @@
 // MARK: - Sort Methods
 
 "sort_name" = "Name";
-"sort_name_reverse" = "Name (Reverse)";
 "sort_natural" = "Natural";
-"sort_date_ascending" = "Date (Old→New)";
-"sort_date_descending" = "Date (New→Old)";
+"sort_date" = "Date";
 "sort_random" = "Random";
 "sort_custom" = "Custom";
+"menu_sort_reverse" = "Reverse Order";
 
 // MARK: - Display Order
 

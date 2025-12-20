@@ -254,12 +254,11 @@
 // MARK: - Sort Methods
 
 "sort_name" = "名前順";
-"sort_name_reverse" = "名前逆順";
 "sort_natural" = "自然順";
-"sort_date_ascending" = "日付（古→新）";
-"sort_date_descending" = "日付（新→古）";
+"sort_date" = "日付順";
 "sort_random" = "ランダム";
 "sort_custom" = "カスタム";
+"menu_sort_reverse" = "逆順";
 
 // MARK: - Display Order
 

@@ -4,23 +4,41 @@ import CryptoKit
 
 /// 画像のソート方法
 enum ImageSortMethod: String, CaseIterable, Codable {
-    case name = "name"                      // 名前順（localizedStandardCompare）
-    case nameReverse = "nameReverse"        // 名前逆順
-    case natural = "natural"                // 自然順（数字を数値として比較）
-    case dateAscending = "dateAscending"    // 日付順（古い順）
-    case dateDescending = "dateDescending"  // 日付順（新しい順）
-    case random = "random"                  // ランダム順
-    case custom = "custom"                  // カスタム順（ユーザー定義）
+    case name = "name"          // 名前順（localizedStandardCompare）
+    case natural = "natural"    // 自然順（数字を数値として比較）
+    case date = "date"          // 日付順
+    case random = "random"      // ランダム順
+    case custom = "custom"      // カスタム順（ユーザー定義）
 
     var displayName: String {
         switch self {
         case .name: return L("sort_name")
-        case .nameReverse: return L("sort_name_reverse")
         case .natural: return L("sort_natural")
-        case .dateAscending: return L("sort_date_ascending")
-        case .dateDescending: return L("sort_date_descending")
+        case .date: return L("sort_date")
         case .random: return L("sort_random")
         case .custom: return L("sort_custom")
+        }
+    }
+
+    /// 逆順をサポートするか（random, customは逆順の概念がない）
+    var supportsReverse: Bool {
+        switch self {
+        case .name, .natural, .date: return true
+        case .random, .custom: return false
+        }
+    }
+
+    /// 旧形式からの変換（互換性対応）
+    static func fromLegacy(_ rawValue: String) -> (method: ImageSortMethod, reversed: Bool) {
+        switch rawValue {
+        case "nameReverse":
+            return (.name, true)
+        case "dateAscending":
+            return (.date, false)
+        case "dateDescending":
+            return (.date, true)
+        default:
+            return (ImageSortMethod(rawValue: rawValue) ?? .name, false)
         }
     }
 }

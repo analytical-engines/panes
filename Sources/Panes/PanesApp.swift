@@ -190,6 +190,21 @@ struct ImageViewerApp: App {
                             )
                         }
                     }
+
+                    Divider()
+
+                    // 逆順トグル
+                    Button(action: {
+                        focusedViewModel?.toggleSortReverse()
+                    }) {
+                        Label(
+                            L("menu_sort_reverse"),
+                            systemImage: focusedViewModel?.isSortReversed == true
+                                ? "checkmark"
+                                : ""
+                        )
+                    }
+                    .disabled(focusedViewModel?.sortMethod.supportsReverse != true)
                 }
                 .disabled(focusedViewModel == nil)
 
