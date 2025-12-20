@@ -15,6 +15,28 @@ enum HistoryTab: String, CaseIterable {
     case images
 }
 
+/// 初期画面で選択可能なアイテムの種類
+enum SelectableHistoryItem: Equatable, Hashable {
+    case archive(id: String, filePath: String)
+    case standaloneImage(id: String, filePath: String)
+    case archiveContentImage(id: String, parentPath: String, relativePath: String)
+    case session(id: UUID)
+
+    var id: String {
+        switch self {
+        case .archive(let id, _): return id
+        case .standaloneImage(let id, _): return id
+        case .archiveContentImage(let id, _, _): return id
+        case .session(let id): return id.uuidString
+        }
+    }
+
+    var sessionId: UUID? {
+        if case .session(let id) = self { return id }
+        return nil
+    }
+}
+
 struct ContentView: View {
     @State private var viewModel = BookViewModel()
     @Environment(FileHistoryManager.self) private var historyManager
@@ -87,6 +109,11 @@ struct ContentView: View {
 
     // メインビューのフォーカス管理
     @FocusState private var isMainViewFocused: Bool
+
+    // 初期画面のキーボードナビゲーション用
+    @State private var selectedHistoryItem: SelectableHistoryItem?
+    @State private var visibleHistoryItems: [SelectableHistoryItem] = []
+    @FocusState private var isHistorySearchFocused: Bool
 
     @ViewBuilder
     private var mainContent: some View {
@@ -164,6 +191,8 @@ struct ContentView: View {
                 lastOpenedImageId: $lastOpenedImageId,
                 showHistory: $showHistory,
                 scrollTrigger: scrollTrigger,
+                selectedItem: $selectedHistoryItem,
+                isSearchFocused: $isHistorySearchFocused,
                 onOpenFile: openFilePicker,
                 onOpenHistoryFile: openHistoryFile,
                 onOpenInNewWindow: openInNewWindow,
@@ -181,6 +210,15 @@ struct ContentView: View {
                 onRestoreSession: { session in
                     sessionGroupManager.updateLastAccessed(id: session.id)
                     sessionManager.restoreSessionGroup(session)
+                },
+                onVisibleItemsChange: { items in
+                    visibleHistoryItems = items
+                },
+                onExitSearch: {
+                    isMainViewFocused = true
+                    if selectedHistoryItem == nil, let first = visibleHistoryItems.first {
+                        selectedHistoryItem = first
+                    }
                 }
             )
             .contextMenu { initialScreenContextMenu }
@@ -818,6 +856,12 @@ struct ContentView: View {
         }
         .onKeyPress(keys: [.leftArrow]) { handleLeftArrow($0) }
         .onKeyPress(keys: [.rightArrow]) { handleRightArrow($0) }
+        .onKeyPress(keys: [.upArrow]) { handleUpArrow($0) }
+        .onKeyPress(keys: [.downArrow]) { handleDownArrow($0) }
+        .onKeyPress(keys: [.pageUp]) { handlePageUp($0) }
+        .onKeyPress(keys: [.pageDown]) { handlePageDown($0) }
+        .onKeyPress(keys: [.return]) { handleReturn($0) }
+        .onKeyPress(characters: CharacterSet(charactersIn: "mM")) { handleMemoEdit($0) }
         .onKeyPress(keys: [.space]) { press in
             // ファイルを開いている時のみページ送り（検索フィールドへの入力を妨げない）
             guard viewModel.hasOpenFile else { return .ignored }
@@ -830,12 +874,9 @@ struct ContentView: View {
                 toggleFullScreen()
                 return .handled
             }
-            // ⌘F でフィルタ表示/非表示（初期画面のみ）
+            // ⌘F で検索フィールドにフォーカス（初期画面のみ）
             if press.modifiers.contains(.command) && !press.modifiers.contains(.control) && !viewModel.hasOpenFile {
-                showHistoryFilter.toggle()
-                if !showHistoryFilter {
-                    historyFilterText = ""  // 非表示時にクリア
-                }
+                isHistorySearchFocused = true
                 return .handled
             }
             return .ignored
@@ -1428,6 +1469,133 @@ struct ContentView: View {
         return .handled
     }
 
+    private func handleUpArrow(_ press: KeyPress) -> KeyPress.Result {
+        // 初期画面でのみ履歴ナビゲーション
+        guard !viewModel.hasOpenFile else { return .ignored }
+        guard !isHistorySearchFocused else { return .ignored }  // 検索フィールドにフォーカス中は無視
+        guard !visibleHistoryItems.isEmpty else { return .ignored }
+
+        if let current = selectedHistoryItem,
+           let currentIndex = visibleHistoryItems.firstIndex(where: { $0.id == current.id }) {
+            if currentIndex > 0 {
+                selectedHistoryItem = visibleHistoryItems[currentIndex - 1]
+            }
+        } else {
+            // 選択がなければ最後のアイテムを選択
+            selectedHistoryItem = visibleHistoryItems.last
+        }
+        return .handled
+    }
+
+    private func handleDownArrow(_ press: KeyPress) -> KeyPress.Result {
+        // 初期画面でのみ履歴ナビゲーション
+        guard !viewModel.hasOpenFile else { return .ignored }
+        guard !visibleHistoryItems.isEmpty else { return .ignored }
+
+        // 検索フィールドにフォーカス中は、フォーカスを外してリストの先頭を選択
+        if isHistorySearchFocused {
+            isHistorySearchFocused = false
+            isMainViewFocused = true
+            selectedHistoryItem = visibleHistoryItems.first
+            return .handled
+        }
+
+        if let current = selectedHistoryItem,
+           let currentIndex = visibleHistoryItems.firstIndex(where: { $0.id == current.id }) {
+            if currentIndex < visibleHistoryItems.count - 1 {
+                selectedHistoryItem = visibleHistoryItems[currentIndex + 1]
+            }
+        } else {
+            // 選択がなければ最初のアイテムを選択
+            selectedHistoryItem = visibleHistoryItems.first
+        }
+        return .handled
+    }
+
+    /// PageUp/PageDownで移動するアイテム数
+    private let pageScrollCount = 10
+
+    private func handlePageUp(_ press: KeyPress) -> KeyPress.Result {
+        // 初期画面でのみ履歴ナビゲーション
+        guard !viewModel.hasOpenFile else { return .ignored }
+        guard !isHistorySearchFocused else { return .ignored }
+        guard !visibleHistoryItems.isEmpty else { return .ignored }
+
+        if let current = selectedHistoryItem,
+           let currentIndex = visibleHistoryItems.firstIndex(where: { $0.id == current.id }) {
+            let newIndex = max(0, currentIndex - pageScrollCount)
+            selectedHistoryItem = visibleHistoryItems[newIndex]
+        } else {
+            selectedHistoryItem = visibleHistoryItems.first
+        }
+        return .handled
+    }
+
+    private func handlePageDown(_ press: KeyPress) -> KeyPress.Result {
+        // 初期画面でのみ履歴ナビゲーション
+        guard !viewModel.hasOpenFile else { return .ignored }
+        guard !isHistorySearchFocused else { return .ignored }
+        guard !visibleHistoryItems.isEmpty else { return .ignored }
+
+        if let current = selectedHistoryItem,
+           let currentIndex = visibleHistoryItems.firstIndex(where: { $0.id == current.id }) {
+            let newIndex = min(visibleHistoryItems.count - 1, currentIndex + pageScrollCount)
+            selectedHistoryItem = visibleHistoryItems[newIndex]
+        } else {
+            selectedHistoryItem = visibleHistoryItems.first
+        }
+        return .handled
+    }
+
+    private func handleReturn(_ press: KeyPress) -> KeyPress.Result {
+        // 初期画面でのみ履歴アイテムを開く
+        guard !viewModel.hasOpenFile else { return .ignored }
+        guard let selected = selectedHistoryItem else { return .ignored }
+
+        switch selected {
+        case .archive(_, let filePath):
+            openHistoryFile(path: filePath)
+        case .standaloneImage(_, let filePath):
+            openImageCatalogFile(path: filePath, relativePath: nil)
+        case .archiveContentImage(_, let parentPath, let relativePath):
+            openImageCatalogFile(path: parentPath, relativePath: relativePath.isEmpty ? nil : relativePath)
+        case .session(let sessionId):
+            if let session = sessionGroupManager.sessionGroups.first(where: { $0.id == sessionId }) {
+                sessionGroupManager.updateLastAccessed(id: session.id)
+                sessionManager.restoreSessionGroup(session)
+            }
+        }
+        return .handled
+    }
+
+    private func handleMemoEdit(_ press: KeyPress) -> KeyPress.Result {
+        // 初期画面でのみメモ編集
+        guard !viewModel.hasOpenFile else { return .ignored }
+        guard !isHistorySearchFocused else { return .ignored }  // 検索フィールド入力中は無視
+        guard let selected = selectedHistoryItem else { return .ignored }
+
+        switch selected {
+        case .archive(let id, _):
+            // 履歴エントリからidとmemoを取得（updateMemoはidで検索する）
+            if let entry = historyManager.history.first(where: { $0.id == id }) {
+                editingMemoFileKey = entry.id
+                editingMemoText = entry.memo ?? ""
+                showMemoEdit = true
+            }
+        case .standaloneImage(let id, _), .archiveContentImage(let id, _, _):
+            // 画像カタログエントリからmemoを取得
+            if let entry = imageCatalogManager.catalog.first(where: { $0.id == id }) {
+                editingImageCatalogId = id
+                editingMemoText = entry.memo ?? ""
+                showMemoEdit = true
+            }
+        case .session:
+            // セッションにはメモ機能なし
+            return .ignored
+        }
+        return .handled
+    }
+
     private func openFilePicker() {
         let openPanel = NSOpenPanel()
         openPanel.canChooseFiles = true
@@ -1619,6 +1787,8 @@ struct InitialScreenView: View {
     @Binding var lastOpenedImageId: String?
     @Binding var showHistory: Bool  // セッション中の履歴表示状態
     let scrollTrigger: Int
+    @Binding var selectedItem: SelectableHistoryItem?
+    var isSearchFocused: FocusState<Bool>.Binding
     let onOpenFile: () -> Void
     let onOpenHistoryFile: (String) -> Void
     let onOpenInNewWindow: (String) -> Void  // filePath
@@ -1626,6 +1796,8 @@ struct InitialScreenView: View {
     let onEditImageMemo: (String, String?) -> Void  // (id, currentMemo) for image catalog
     let onOpenImageCatalogFile: (String, String?) -> Void  // (filePath, relativePath) for image catalog
     var onRestoreSession: ((SessionGroup) -> Void)? = nil
+    var onVisibleItemsChange: (([SelectableHistoryItem]) -> Void)? = nil
+    var onExitSearch: (() -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 20) {
@@ -1648,7 +1820,7 @@ struct InitialScreenView: View {
             .buttonStyle(.borderedProminent)
 
             // 履歴表示
-            HistoryListView(filterText: $filterText, showFilterField: $showFilterField, selectedTab: $selectedTab, lastOpenedArchiveId: $lastOpenedArchiveId, lastOpenedImageId: $lastOpenedImageId, showHistory: $showHistory, scrollTrigger: scrollTrigger, onOpenHistoryFile: onOpenHistoryFile, onOpenInNewWindow: onOpenInNewWindow, onEditMemo: onEditMemo, onEditImageMemo: onEditImageMemo, onOpenImageFile: onOpenImageCatalogFile, onRestoreSession: onRestoreSession)
+            HistoryListView(filterText: $filterText, showFilterField: $showFilterField, selectedTab: $selectedTab, lastOpenedArchiveId: $lastOpenedArchiveId, lastOpenedImageId: $lastOpenedImageId, showHistory: $showHistory, scrollTrigger: scrollTrigger, selectedItem: $selectedItem, isSearchFocused: isSearchFocused, onOpenHistoryFile: onOpenHistoryFile, onOpenInNewWindow: onOpenInNewWindow, onEditMemo: onEditMemo, onEditImageMemo: onEditImageMemo, onOpenImageFile: onOpenImageCatalogFile, onRestoreSession: onRestoreSession, onVisibleItemsChange: onVisibleItemsChange, onExitSearch: onExitSearch)
         }
     }
 }
@@ -1666,7 +1838,8 @@ struct HistoryListView: View {
     @Binding var lastOpenedImageId: String?
     @Binding var showHistory: Bool  // セッション中の履歴表示状態
     let scrollTrigger: Int
-    @FocusState private var isFilterFocused: Bool
+    @Binding var selectedItem: SelectableHistoryItem?
+    var isSearchFocused: FocusState<Bool>.Binding
     @State private var dismissedError = false
     /// セクションの折りたたみ状態
     @State private var isArchivesSectionCollapsed = false
@@ -1674,6 +1847,8 @@ struct HistoryListView: View {
     @State private var isStandaloneSectionCollapsed = false
     @State private var isArchiveContentSectionCollapsed = false
     @State private var isSessionsSectionCollapsed = false
+    /// 表示中の全アイテムリスト（キーボードナビゲーション用）
+    @State private var visibleItems: [SelectableHistoryItem] = []
 
     let onOpenHistoryFile: (String) -> Void
     let onOpenInNewWindow: (String) -> Void  // filePath
@@ -1681,6 +1856,8 @@ struct HistoryListView: View {
     let onEditImageMemo: (String, String?) -> Void  // (id, currentMemo) for image catalog
     let onOpenImageFile: (String, String?) -> Void  // (filePath, relativePath) - 画像ファイルを開く
     var onRestoreSession: ((SessionGroup) -> Void)? = nil
+    var onVisibleItemsChange: (([SelectableHistoryItem]) -> Void)? = nil
+    var onExitSearch: (() -> Void)? = nil
 
     var body: some View {
         Group {
@@ -1784,10 +1961,10 @@ struct HistoryListView: View {
                         )
                         .textFieldStyle(.plain)
                         .foregroundColor(.white)
-                        .focused($isFilterFocused)
+                        .focused(isSearchFocused)
                         .onExitCommand {
-                            filterText = ""
-                            isFilterFocused = false
+                            isSearchFocused.wrappedValue = false
+                            onExitSearch?()
                         }
                         // 検索種別インジケーター
                         if !filterText.isEmpty && parsedQuery.targetType != .all {
@@ -1842,25 +2019,26 @@ struct HistoryListView: View {
                     .padding(.top, 20)
 
                     // 検索結果のセクション表示
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 12) {
-                            // 書庫セクション
-                            if parsedQuery.includesArchives && !searchResult.archives.isEmpty {
-                                archivesSectionView(
-                                    archives: searchResult.archives,
-                                    totalCount: recentHistory.count,
-                                    isFiltering: parsedQuery.hasKeyword
-                                )
-                            }
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 12) {
+                                // 書庫セクション
+                                if parsedQuery.includesArchives && !searchResult.archives.isEmpty {
+                                    archivesSectionView(
+                                        archives: searchResult.archives,
+                                        totalCount: recentHistory.count,
+                                        isFiltering: parsedQuery.hasKeyword
+                                    )
+                                }
 
-                            // 画像セクション
-                            if parsedQuery.includesImages && !searchResult.images.isEmpty {
-                                imagesSectionView(
-                                    images: searchResult.images,
-                                    totalCount: imageCatalog.count,
-                                    isFiltering: parsedQuery.hasKeyword
-                                )
-                            }
+                                // 画像セクション
+                                if parsedQuery.includesImages && !searchResult.images.isEmpty {
+                                    imagesSectionView(
+                                        images: searchResult.images,
+                                        totalCount: imageCatalog.count,
+                                        isFiltering: parsedQuery.hasKeyword
+                                    )
+                                }
 
                             // セッションセクション
                             if parsedQuery.includesSessions && !searchResult.sessions.isEmpty {
@@ -1884,11 +2062,88 @@ struct HistoryListView: View {
                     .scrollIndicators(.visible)
                     .preferredColorScheme(.dark)
                     .frame(maxHeight: 400)
+                    .onChange(of: selectedItem?.id) { _, newId in
+                        if let id = newId {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                proxy.scrollTo(id, anchor: .center)
+                            }
+                        }
+                    }
+                    }
                 }
                 .frame(maxWidth: 500)
                 .padding(.horizontal, 20)
+                .onChange(of: searchResult.archives.count) { _, _ in
+                    updateVisibleItems(archives: searchResult.archives, images: searchResult.images, sessions: searchResult.sessions, parsedQuery: parsedQuery)
+                }
+                .onChange(of: searchResult.images.count) { _, _ in
+                    updateVisibleItems(archives: searchResult.archives, images: searchResult.images, sessions: searchResult.sessions, parsedQuery: parsedQuery)
+                }
+                .onChange(of: searchResult.sessions.count) { _, _ in
+                    updateVisibleItems(archives: searchResult.archives, images: searchResult.images, sessions: searchResult.sessions, parsedQuery: parsedQuery)
+                }
+                .onChange(of: isArchivesSectionCollapsed) { _, _ in
+                    updateVisibleItems(archives: searchResult.archives, images: searchResult.images, sessions: searchResult.sessions, parsedQuery: parsedQuery)
+                }
+                .onChange(of: isImagesSectionCollapsed) { _, _ in
+                    updateVisibleItems(archives: searchResult.archives, images: searchResult.images, sessions: searchResult.sessions, parsedQuery: parsedQuery)
+                }
+                .onChange(of: isStandaloneSectionCollapsed) { _, _ in
+                    updateVisibleItems(archives: searchResult.archives, images: searchResult.images, sessions: searchResult.sessions, parsedQuery: parsedQuery)
+                }
+                .onChange(of: isArchiveContentSectionCollapsed) { _, _ in
+                    updateVisibleItems(archives: searchResult.archives, images: searchResult.images, sessions: searchResult.sessions, parsedQuery: parsedQuery)
+                }
+                .onChange(of: isSessionsSectionCollapsed) { _, _ in
+                    updateVisibleItems(archives: searchResult.archives, images: searchResult.images, sessions: searchResult.sessions, parsedQuery: parsedQuery)
+                }
+                .onAppear {
+                    updateVisibleItems(archives: searchResult.archives, images: searchResult.images, sessions: searchResult.sessions, parsedQuery: parsedQuery)
+                }
             }
         }
+    }
+
+    /// 表示中のアイテムリストを更新
+    private func updateVisibleItems(archives: [FileHistoryEntry], images: [ImageCatalogEntry], sessions: [SessionGroup], parsedQuery: ParsedSearchQuery) {
+        var items: [SelectableHistoryItem] = []
+
+        // 書庫セクション
+        if parsedQuery.includesArchives && !archives.isEmpty && !isArchivesSectionCollapsed {
+            for entry in archives {
+                items.append(.archive(id: entry.id, filePath: entry.filePath))
+            }
+        }
+
+        // 画像セクション
+        if parsedQuery.includesImages && !images.isEmpty && !isImagesSectionCollapsed {
+            let standaloneImages = images.filter { $0.catalogType == .standalone }
+            let archiveContentImages = images.filter { $0.catalogType == .archiveContent }
+
+            // 個別画像
+            if !standaloneImages.isEmpty && !isStandaloneSectionCollapsed {
+                for entry in standaloneImages {
+                    items.append(.standaloneImage(id: entry.id, filePath: entry.filePath))
+                }
+            }
+
+            // 書庫内画像
+            if !archiveContentImages.isEmpty && !isArchiveContentSectionCollapsed {
+                for entry in archiveContentImages {
+                    items.append(.archiveContentImage(id: entry.id, parentPath: entry.filePath, relativePath: entry.relativePath ?? ""))
+                }
+            }
+        }
+
+        // セッションセクション
+        if parsedQuery.includesSessions && !sessions.isEmpty && !isSessionsSectionCollapsed {
+            for session in sessions {
+                items.append(.session(id: session.id))
+            }
+        }
+
+        visibleItems = items
+        onVisibleItemsChange?(items)
     }
 
     /// 検索対象種別のラベル
@@ -1975,6 +2230,10 @@ struct HistoryListView: View {
                     onOpenInNewWindow: onOpenInNewWindow,
                     onEditMemo: onEditMemo
                 )
+                .padding(.horizontal, 4)
+                .padding(.vertical, 2)
+                .background(selectedItem?.id == entry.id ? Color.accentColor.opacity(0.3) : Color.clear)
+                .cornerRadius(4)
                 .id(entry.id)
             }
         }
@@ -2084,6 +2343,10 @@ struct HistoryListView: View {
                     },
                     onEditMemo: onEditImageMemo
                 )
+                .padding(.horizontal, 4)
+                .padding(.vertical, 2)
+                .background(selectedItem?.id == entry.id ? Color.accentColor.opacity(0.3) : Color.clear)
+                .cornerRadius(4)
                 .id(entry.id)
             }
         }
@@ -2137,6 +2400,10 @@ struct HistoryListView: View {
                     },
                     onEditMemo: onEditImageMemo
                 )
+                .padding(.horizontal, 4)
+                .padding(.vertical, 2)
+                .background(selectedItem?.id == entry.id ? Color.accentColor.opacity(0.3) : Color.clear)
+                .cornerRadius(4)
                 .id(entry.id)
             }
         }
@@ -2190,6 +2457,10 @@ struct HistoryListView: View {
                         sessionGroupManager.deleteSessionGroup(id: session.id)
                     }
                 )
+                .padding(.horizontal, 4)
+                .padding(.vertical, 2)
+                .background(selectedItem?.sessionId == session.id ? Color.accentColor.opacity(0.3) : Color.clear)
+                .cornerRadius(4)
             }
         }
     }
