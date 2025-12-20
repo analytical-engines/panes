@@ -1,8 +1,10 @@
 import Foundation
 import AppKit
+import Observation
 
 /// カスタムショートカットで実行可能なアクション
-enum ShortcutAction: String, CaseIterable, Codable {
+enum ShortcutAction: String, CaseIterable, Codable, Identifiable {
+    var id: String { rawValue }
     case nextPage = "nextPage"
     case previousPage = "previousPage"
     case skipForward = "skipForward"
@@ -149,6 +151,7 @@ struct KeyBinding: Codable, Equatable, Hashable {
 
 /// カスタムショートカットの管理
 @MainActor
+@Observable
 final class CustomShortcutManager {
     /// シングルトン
     static let shared = CustomShortcutManager()
@@ -193,6 +196,16 @@ final class CustomShortcutManager {
                 if binding.matches(event) {
                     return action
                 }
+            }
+        }
+        return nil
+    }
+
+    /// KeyBindingに対応するアクションを検索（衝突チェック用）
+    func findAction(for binding: KeyBinding) -> ShortcutAction? {
+        for (action, bindings) in shortcuts {
+            if bindings.contains(binding) {
+                return action
             }
         }
         return nil

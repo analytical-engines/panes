@@ -24,6 +24,31 @@
 
 "tab_general" = "一般";
 "tab_history" = "履歴";
+"tab_shortcut" = "ショートカット";
+
+// MARK: - SettingsView - Shortcut Settings
+
+"section_shortcut" = "キーボードショートカット";
+"shortcut_next_page" = "次のページ";
+"shortcut_previous_page" = "前のページ";
+"shortcut_skip_forward" = "ページを進む";
+"shortcut_skip_backward" = "ページを戻る";
+"shortcut_first_page" = "最初のページ";
+"shortcut_last_page" = "最後のページ";
+"shortcut_fullscreen" = "フルスクリーン切替";
+"shortcut_view_mode" = "表示モード切替";
+"shortcut_reading_direction" = "読み方向切替";
+"shortcut_zoom_in" = "拡大";
+"shortcut_zoom_out" = "縮小";
+"shortcut_reset_zoom" = "ズームリセット";
+"shortcut_close_file" = "ファイルを閉じる";
+"shortcut_add_button" = "追加";
+"shortcut_press_key" = "キーを入力してください";
+"shortcut_press_key_description" = "ショートカットに設定するキーを押してください\n（Escでキャンセル）";
+"shortcut_cancel" = "キャンセル";
+"shortcut_conflict_title" = "キーの重複";
+"shortcut_conflict_message" = "「%@」は既に「%@」に割り当てられています。上書きしますか？";
+"shortcut_overwrite" = "上書き";
 
 // MARK: - SettingsView - Display Settings
 

@@ -22,8 +22,13 @@ struct SettingsView: View {
                 .tabItem {
                     Label(L("tab_history"), systemImage: "clock")
                 }
+
+            ShortcutSettingsTab()
+                .tabItem {
+                    Label(L("tab_shortcut"), systemImage: "keyboard")
+                }
         }
-        .frame(width: 450, height: 380)
+        .frame(width: 500, height: 420)
     }
 }
 
@@ -275,3 +280,216 @@ struct HistorySettingsTab: View {
     }
 }
 
+/// ショートカット設定タブ
+struct ShortcutSettingsTab: View {
+    @State private var shortcutManager = CustomShortcutManager.shared
+    @State private var capturingAction: ShortcutAction?
+
+    var body: some View {
+        Form {
+            Section(L("section_shortcut")) {
+                ForEach(ShortcutAction.allCases, id: \.self) { action in
+                    ShortcutRow(
+                        action: action,
+                        shortcutManager: shortcutManager,
+                        onAddPressed: {
+                            capturingAction = action
+                        }
+                    )
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+        .sheet(item: $capturingAction) { action in
+            KeyCaptureView(
+                action: action,
+                shortcutManager: shortcutManager,
+                onCapture: { binding in
+                    shortcutManager.addShortcut(binding, for: action)
+                    capturingAction = nil
+                },
+                onCancel: {
+                    capturingAction = nil
+                }
+            )
+        }
+    }
+}
+
+/// ショートカット行
+struct ShortcutRow: View {
+    let action: ShortcutAction
+    let shortcutManager: CustomShortcutManager
+    let onAddPressed: () -> Void
+
+    private var bindings: [KeyBinding] {
+        shortcutManager.shortcuts[action] ?? []
+    }
+
+    var body: some View {
+        HStack {
+            Text(action.displayName)
+                .frame(minWidth: 120, alignment: .leading)
+
+            Spacer()
+
+            // 割り当てられたキーをチップで表示
+            HStack(spacing: 4) {
+                ForEach(Array(bindings.enumerated()), id: \.offset) { _, binding in
+                    KeyBindingChip(binding: binding) {
+                        shortcutManager.removeShortcut(binding, from: action)
+                    }
+                }
+
+                // 追加ボタン
+                Button(action: onAddPressed) {
+                    Image(systemName: "plus.circle")
+                        .foregroundColor(.accentColor)
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+            }
+        }
+    }
+}
+
+/// キーバインディングのチップ表示
+struct KeyBindingChip: View {
+    let binding: KeyBinding
+    let onDelete: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Text(binding.displayString)
+                .font(.system(.caption, design: .monospaced))
+
+            if isHovering {
+                Button(action: onDelete) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(Color.secondary.opacity(0.2))
+        .cornerRadius(4)
+        .onHover { hovering in
+            isHovering = hovering
+        }
+    }
+}
+
+/// キーキャプチャモーダル
+struct KeyCaptureView: View {
+    let action: ShortcutAction
+    let shortcutManager: CustomShortcutManager
+    let onCapture: (KeyBinding) -> Void
+    let onCancel: () -> Void
+
+    @State private var capturedKey: String = ""
+    @State private var eventMonitor: Any?
+    @State private var showConflictAlert = false
+    @State private var conflictBinding: KeyBinding?
+    @State private var conflictAction: ShortcutAction?
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text(L("shortcut_press_key"))
+                .font(.headline)
+
+            Text(action.displayName)
+                .font(.title2)
+                .foregroundColor(.accentColor)
+
+            if capturedKey.isEmpty {
+                Text(L("shortcut_press_key_description"))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            } else {
+                Text(capturedKey)
+                    .font(.system(.title, design: .monospaced))
+                    .padding()
+                    .background(Color.secondary.opacity(0.2))
+                    .cornerRadius(8)
+            }
+
+            Button(L("shortcut_cancel")) {
+                onCancel()
+            }
+            .keyboardShortcut(.cancelAction)
+        }
+        .padding(40)
+        .frame(minWidth: 300)
+        .onAppear {
+            startCapturing()
+        }
+        .onDisappear {
+            stopCapturing()
+        }
+        .alert(L("shortcut_conflict_title"), isPresented: $showConflictAlert) {
+            Button(L("shortcut_overwrite"), role: .destructive) {
+                if let binding = conflictBinding, let existingAction = conflictAction {
+                    // 既存のショートカットを削除して新しいものを追加
+                    shortcutManager.removeShortcut(binding, from: existingAction)
+                    onCapture(binding)
+                }
+            }
+            Button(L("shortcut_cancel"), role: .cancel) {
+                // キャプチャ画面に戻る
+                capturedKey = ""
+                startCapturing()
+            }
+        } message: {
+            if let binding = conflictBinding, let existingAction = conflictAction {
+                Text(String(format: L("shortcut_conflict_message"), binding.displayString, existingAction.displayName))
+            }
+        }
+    }
+
+    private func startCapturing() {
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            // Escでキャンセル
+            if event.keyCode == 53 {
+                onCancel()
+                return nil
+            }
+
+            // モディファイアのみは無視
+            let modifierOnlyKeyCodes: Set<UInt16> = [54, 55, 56, 57, 58, 59, 60, 61, 62, 63]
+            if modifierOnlyKeyCodes.contains(event.keyCode) {
+                return nil
+            }
+
+            // キーをキャプチャ
+            let binding = KeyBinding(from: event)
+            capturedKey = binding.displayString
+
+            // 衝突チェック
+            if let existingAction = shortcutManager.findAction(for: binding), existingAction != action {
+                // 衝突あり - イベントモニターを停止して確認ダイアログを表示
+                self.stopCapturing()
+                conflictBinding = binding
+                conflictAction = existingAction
+                showConflictAlert = true
+            } else {
+                // 衝突なし - そのまま登録
+                onCapture(binding)
+            }
+            return nil
+        }
+    }
+
+    private func stopCapturing() {
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            eventMonitor = nil
+        }
+    }
+}

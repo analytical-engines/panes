@@ -24,6 +24,31 @@
 
 "tab_general" = "General";
 "tab_history" = "History";
+"tab_shortcut" = "Shortcuts";
+
+// MARK: - SettingsView - Shortcut Settings
+
+"section_shortcut" = "Keyboard Shortcuts";
+"shortcut_next_page" = "Next Page";
+"shortcut_previous_page" = "Previous Page";
+"shortcut_skip_forward" = "Skip Forward";
+"shortcut_skip_backward" = "Skip Backward";
+"shortcut_first_page" = "First Page";
+"shortcut_last_page" = "Last Page";
+"shortcut_fullscreen" = "Toggle Fullscreen";
+"shortcut_view_mode" = "Toggle View Mode";
+"shortcut_reading_direction" = "Toggle Reading Direction";
+"shortcut_zoom_in" = "Zoom In";
+"shortcut_zoom_out" = "Zoom Out";
+"shortcut_reset_zoom" = "Reset Zoom";
+"shortcut_close_file" = "Close File";
+"shortcut_add_button" = "Add";
+"shortcut_press_key" = "Press a key";
+"shortcut_press_key_description" = "Press the key you want to assign\n(Esc to cancel)";
+"shortcut_cancel" = "Cancel";
+"shortcut_conflict_title" = "Key Conflict";
+"shortcut_conflict_message" = "\"%@\" is already assigned to \"%@\". Do you want to overwrite?";
+"shortcut_overwrite" = "Overwrite";
 
 // MARK: - SettingsView - Display Settings
 
