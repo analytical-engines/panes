@@ -114,6 +114,7 @@ struct ContentView: View {
     @State private var selectedHistoryItem: SelectableHistoryItem?
     @State private var visibleHistoryItems: [SelectableHistoryItem] = []
     @FocusState private var isHistorySearchFocused: Bool
+    @State private var isShowingSuggestions: Bool = false  // 入力補完候補表示中
 
     @ViewBuilder
     private var mainContent: some View {
@@ -193,6 +194,7 @@ struct ContentView: View {
                 scrollTrigger: scrollTrigger,
                 selectedItem: $selectedHistoryItem,
                 isSearchFocused: $isHistorySearchFocused,
+                isShowingSuggestions: $isShowingSuggestions,
                 onOpenFile: openFilePicker,
                 onOpenHistoryFile: openHistoryFile,
                 onOpenInNewWindow: openInNewWindow,
@@ -782,6 +784,9 @@ struct ContentView: View {
                     historyManager.reloadHistoryIfNeeded()
                     imageCatalogManager.reloadCatalogIfNeeded()
                 }
+
+                // 初期画面に戻ったのでフォーカスを復元
+                isMainViewFocused = true
             }
         }
         .onChange(of: viewModel.currentPage) { _, newPage in
@@ -877,13 +882,19 @@ struct ContentView: View {
             // ⌘F で検索フィールドにフォーカス（初期画面のみ）
             if press.modifiers.contains(.command) && !press.modifiers.contains(.control) && !viewModel.hasOpenFile {
                 isHistorySearchFocused = true
+                selectedHistoryItem = nil  // 選択解除（IME変換確定との干渉を防ぐ）
                 return .handled
             }
             return .ignored
         }
         .onKeyPress(.home) { viewModel.goToFirstPage(); return .handled }
         .onKeyPress(.end) { viewModel.goToLastPage(); return .handled }
-        .onKeyPress(keys: [.tab]) { _ in viewModel.skipForward(pages: appSettings.pageJumpCount); return .handled }
+        .onKeyPress(keys: [.tab]) { _ in
+            // 候補表示中はTextField側で処理（補完確定）
+            if isShowingSuggestions { return .ignored }
+            viewModel.skipForward(pages: appSettings.pageJumpCount)
+            return .handled
+        }
         .onKeyPress(characters: CharacterSet(charactersIn: "iI")) { press in
             // ⌘I で画像情報表示
             if press.modifiers.contains(.command) && viewModel.hasOpenFile {
@@ -1473,12 +1484,17 @@ struct ContentView: View {
         // 初期画面でのみ履歴ナビゲーション
         guard !viewModel.hasOpenFile else { return .ignored }
         guard !isHistorySearchFocused else { return .ignored }  // 検索フィールドにフォーカス中は無視
+        guard !isShowingSuggestions else { return .ignored }  // 候補表示中は無視（TextField側で処理）
         guard !visibleHistoryItems.isEmpty else { return .ignored }
 
         if let current = selectedHistoryItem,
            let currentIndex = visibleHistoryItems.firstIndex(where: { $0.id == current.id }) {
             if currentIndex > 0 {
                 selectedHistoryItem = visibleHistoryItems[currentIndex - 1]
+            } else {
+                // 先頭にいる場合は検索フィールドにフォーカス
+                selectedHistoryItem = nil
+                isHistorySearchFocused = true
             }
         } else {
             // 選択がなければ最後のアイテムを選択
@@ -1491,6 +1507,11 @@ struct ContentView: View {
         // 初期画面でのみ履歴ナビゲーション
         guard !viewModel.hasOpenFile else { return .ignored }
         guard !visibleHistoryItems.isEmpty else { return .ignored }
+
+        // 候補表示中は無視（TextField側で処理）
+        if isShowingSuggestions {
+            return .ignored
+        }
 
         // 検索フィールドにフォーカス中は、フォーカスを外してリストの先頭を選択
         if isHistorySearchFocused {
@@ -1550,6 +1571,7 @@ struct ContentView: View {
     private func handleReturn(_ press: KeyPress) -> KeyPress.Result {
         // 初期画面でのみ履歴アイテムを開く
         guard !viewModel.hasOpenFile else { return .ignored }
+        guard !isHistorySearchFocused else { return .ignored }  // 検索フィールドにフォーカス中は無視（IME変換確定と干渉するため）
         guard let selected = selectedHistoryItem else { return .ignored }
 
         switch selected {
@@ -1789,6 +1811,7 @@ struct InitialScreenView: View {
     let scrollTrigger: Int
     @Binding var selectedItem: SelectableHistoryItem?
     var isSearchFocused: FocusState<Bool>.Binding
+    @Binding var isShowingSuggestions: Bool
     let onOpenFile: () -> Void
     let onOpenHistoryFile: (String) -> Void
     let onOpenInNewWindow: (String) -> Void  // filePath
@@ -1820,7 +1843,7 @@ struct InitialScreenView: View {
             .buttonStyle(.borderedProminent)
 
             // 履歴表示
-            HistoryListView(filterText: $filterText, showFilterField: $showFilterField, selectedTab: $selectedTab, lastOpenedArchiveId: $lastOpenedArchiveId, lastOpenedImageId: $lastOpenedImageId, showHistory: $showHistory, scrollTrigger: scrollTrigger, selectedItem: $selectedItem, isSearchFocused: isSearchFocused, onOpenHistoryFile: onOpenHistoryFile, onOpenInNewWindow: onOpenInNewWindow, onEditMemo: onEditMemo, onEditImageMemo: onEditImageMemo, onOpenImageFile: onOpenImageCatalogFile, onRestoreSession: onRestoreSession, onVisibleItemsChange: onVisibleItemsChange, onExitSearch: onExitSearch)
+            HistoryListView(filterText: $filterText, showFilterField: $showFilterField, selectedTab: $selectedTab, lastOpenedArchiveId: $lastOpenedArchiveId, lastOpenedImageId: $lastOpenedImageId, showHistory: $showHistory, scrollTrigger: scrollTrigger, selectedItem: $selectedItem, isSearchFocused: isSearchFocused, isShowingSuggestions: $isShowingSuggestions, onOpenHistoryFile: onOpenHistoryFile, onOpenInNewWindow: onOpenInNewWindow, onEditMemo: onEditMemo, onEditImageMemo: onEditImageMemo, onOpenImageFile: onOpenImageCatalogFile, onRestoreSession: onRestoreSession, onVisibleItemsChange: onVisibleItemsChange, onExitSearch: onExitSearch)
         }
     }
 }
@@ -1840,6 +1863,7 @@ struct HistoryListView: View {
     let scrollTrigger: Int
     @Binding var selectedItem: SelectableHistoryItem?
     var isSearchFocused: FocusState<Bool>.Binding
+    @Binding var isShowingSuggestions: Bool  // 親に候補表示状態を伝える
     @State private var dismissedError = false
     /// セクションの折りたたみ状態
     @State private var isArchivesSectionCollapsed = false
@@ -1849,6 +1873,10 @@ struct HistoryListView: View {
     @State private var isSessionsSectionCollapsed = false
     /// 表示中の全アイテムリスト（キーボードナビゲーション用）
     @State private var visibleItems: [SelectableHistoryItem] = []
+
+    /// 入力補完用（isShowingSuggestionsはisShowingSuggestionsバインディングを使用）
+    @State private var selectedSuggestionIndex: Int = 0
+    @State private var suggestions: [String] = []
 
     let onOpenHistoryFile: (String) -> Void
     let onOpenInNewWindow: (String) -> Void  // filePath
@@ -1952,70 +1980,159 @@ struct HistoryListView: View {
             if showHistory && (!recentHistory.isEmpty || !imageCatalog.isEmpty || !sessionGroups.isEmpty) {
                 VStack(alignment: .leading, spacing: 8) {
                     // 検索フィールド（常に表示、⌘+Fでフォーカス）
-                    HStack {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundColor(.gray)
-                        TextField(
-                            L("unified_search_placeholder"),
-                            text: $filterText
-                        )
-                        .textFieldStyle(.plain)
-                        .foregroundColor(.white)
-                        .focused(isSearchFocused)
-                        .onExitCommand {
-                            isSearchFocused.wrappedValue = false
-                            onExitSearch?()
-                        }
-                        // 検索種別インジケーター
-                        if !filterText.isEmpty && parsedQuery.targetType != .all {
-                            Text(searchTargetLabel(parsedQuery.targetType))
-                                .font(.caption2)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.accentColor.opacity(0.3))
-                                .cornerRadius(4)
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundColor(.gray)
+                            // インライン補完付きテキストフィールド
+                            ZStack(alignment: .leading) {
+                                // インライン補完テキスト（グレー表示）
+                                if let completion = getInlineCompletion(for: filterText), isSearchFocused.wrappedValue {
+                                    HStack(spacing: 0) {
+                                        Text(filterText)
+                                            .foregroundColor(.clear)
+                                        Text(completion)
+                                            .foregroundColor(.gray.opacity(0.6))
+                                    }
+                                }
+                                TextField(
+                                    L("unified_search_placeholder"),
+                                    text: $filterText
+                                )
+                                .textFieldStyle(.plain)
                                 .foregroundColor(.white)
-                        }
-                        // クリアボタン
-                        if !filterText.isEmpty {
-                            Button(action: { filterText = "" }) {
-                                Image(systemName: "xmark.circle.fill")
+                                .focused(isSearchFocused)
+                                .onExitCommand {
+                                    isShowingSuggestions = false
+                                    isSearchFocused.wrappedValue = false
+                                    onExitSearch?()
+                                }
+                                .onChange(of: filterText) { _, newValue in
+                                    // 候補を更新
+                                    suggestions = computeSuggestions(from: searchResult, query: newValue)
+                                    isShowingSuggestions = !suggestions.isEmpty && isSearchFocused.wrappedValue
+                                    selectedSuggestionIndex = 0
+                                }
+                                .onKeyPress(.tab) {
+                                    // Tabで補完を適用
+                                    if isShowingSuggestions && !suggestions.isEmpty {
+                                        applySuggestion(suggestions[selectedSuggestionIndex])
+                                        return .handled
+                                    }
+                                    return .ignored
+                                }
+                                .onKeyPress(.upArrow) {
+                                    // 候補リスト内で上に移動
+                                    if isShowingSuggestions && !suggestions.isEmpty {
+                                        selectedSuggestionIndex = max(0, selectedSuggestionIndex - 1)
+                                        return .handled
+                                    }
+                                    return .ignored
+                                }
+                                .onKeyPress(.downArrow) {
+                                    // 候補リスト内で下に移動
+                                    if isShowingSuggestions && !suggestions.isEmpty {
+                                        if selectedSuggestionIndex < suggestions.count - 1 {
+                                            selectedSuggestionIndex += 1
+                                        }
+                                        return .handled
+                                    }
+                                    return .ignored
+                                }
+                                .onKeyPress(.escape) {
+                                    // Escapeで候補リストを閉じる
+                                    if isShowingSuggestions {
+                                        isShowingSuggestions = false
+                                        return .handled
+                                    }
+                                    return .ignored
+                                }
+                            }
+                            // 検索種別インジケーター
+                            if !filterText.isEmpty && parsedQuery.targetType != .all {
+                                Text(searchTargetLabel(parsedQuery.targetType))
+                                    .font(.caption2)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.accentColor.opacity(0.3))
+                                    .cornerRadius(4)
+                                    .foregroundColor(.white)
+                            }
+                            // クリアボタン
+                            if !filterText.isEmpty {
+                                Button(action: {
+                                    filterText = ""
+                                    isShowingSuggestions = false
+                                }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.gray)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            // フィルタードロップダウンメニュー
+                            Menu {
+                                Button(action: { insertSearchFilter("") }) {
+                                    Label(L("search_filter_all"), systemImage: "square.grid.2x2")
+                                }
+                                Divider()
+                                Button(action: { insertSearchFilter("type:archive ") }) {
+                                    Label(L("search_type_archive"), systemImage: "archivebox")
+                                }
+                                Button(action: { insertSearchFilter("type:image ") }) {
+                                    Label(L("search_type_image"), systemImage: "photo.stack")
+                                }
+                                Button(action: { insertSearchFilter("type:session ") }) {
+                                    Label(L("search_type_session"), systemImage: "square.stack.3d.up")
+                                }
+                                Divider()
+                                Button(action: { insertSearchFilter("type:standalone ") }) {
+                                    Label(L("search_type_standalone"), systemImage: "photo")
+                                }
+                                Button(action: { insertSearchFilter("type:content ") }) {
+                                    Label(L("search_type_content"), systemImage: "photo.on.rectangle")
+                                }
+                            } label: {
+                                Image(systemName: "line.3.horizontal.decrease.circle")
                                     .foregroundColor(.gray)
                             }
-                            .buttonStyle(.plain)
+                            .menuStyle(.borderlessButton)
+                            .fixedSize()
                         }
-                        // フィルタードロップダウンメニュー
-                        Menu {
-                            Button(action: { insertSearchFilter("") }) {
-                                Label(L("search_filter_all"), systemImage: "square.grid.2x2")
+                        .padding(8)
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(6)
+
+                        // ドロップダウン候補リスト
+                        if isShowingSuggestions && !suggestions.isEmpty {
+                            VStack(alignment: .leading, spacing: 0) {
+                                ForEach(Array(suggestions.enumerated()), id: \.offset) { index, suggestion in
+                                    HStack {
+                                        Text(suggestion)
+                                            .foregroundColor(.white)
+                                        Spacer()
+                                        if index == selectedSuggestionIndex {
+                                            Text("Tab")
+                                                .font(.caption2)
+                                                .foregroundColor(.gray)
+                                                .padding(.horizontal, 4)
+                                                .padding(.vertical, 2)
+                                                .background(Color.white.opacity(0.1))
+                                                .cornerRadius(3)
+                                        }
+                                    }
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 6)
+                                    .background(index == selectedSuggestionIndex ? Color.accentColor.opacity(0.3) : Color.clear)
+                                    .onTapGesture {
+                                        applySuggestion(suggestion)
+                                    }
+                                }
                             }
-                            Divider()
-                            Button(action: { insertSearchFilter("type:archive ") }) {
-                                Label(L("search_type_archive"), systemImage: "archivebox")
-                            }
-                            Button(action: { insertSearchFilter("type:image ") }) {
-                                Label(L("search_type_image"), systemImage: "photo.stack")
-                            }
-                            Button(action: { insertSearchFilter("type:session ") }) {
-                                Label(L("search_type_session"), systemImage: "square.stack.3d.up")
-                            }
-                            Divider()
-                            Button(action: { insertSearchFilter("type:standalone ") }) {
-                                Label(L("search_type_standalone"), systemImage: "photo")
-                            }
-                            Button(action: { insertSearchFilter("type:content ") }) {
-                                Label(L("search_type_content"), systemImage: "photo.on.rectangle")
-                            }
-                        } label: {
-                            Image(systemName: "line.3.horizontal.decrease.circle")
-                                .foregroundColor(.gray)
+                            .background(Color.black.opacity(0.8))
+                            .cornerRadius(6)
+                            .padding(.top, 2)
                         }
-                        .menuStyle(.borderlessButton)
-                        .fixedSize()
                     }
-                    .padding(8)
-                    .background(Color.white.opacity(0.1))
-                    .cornerRadius(6)
                     .padding(.top, 20)
 
                     // 検索結果のセクション表示
@@ -2177,6 +2294,70 @@ struct HistoryListView: View {
             // 新しいフィルターを先頭に追加
             filterText = filter + cleanedText
         }
+    }
+
+    /// type:プレフィックスの候補リスト
+    private let typeFilterSuggestions = [
+        "type:archive ",
+        "type:image ",
+        "type:session ",
+        "type:standalone ",
+        "type:content "
+    ]
+
+    /// 入力補完候補を計算する（type:プレフィックス用）
+    private func computeSuggestions(
+        from searchResult: UnifiedSearchResult,
+        query: String
+    ) -> [String] {
+        guard !query.isEmpty else { return [] }
+
+        let lowercaseQuery = query.lowercased()
+
+        // 既にtype:プレフィックスが完成している場合は候補なし
+        if lowercaseQuery.hasPrefix("type:") && lowercaseQuery.contains(" ") {
+            return []
+        }
+
+        // "t", "ty", "typ", "type", "type:" などで始まる場合にtype:候補を表示
+        let typePrefix = "type:"
+        if typePrefix.hasPrefix(lowercaseQuery) || lowercaseQuery.hasPrefix("type:") {
+            // type:の後の部分でフィルタリング
+            if lowercaseQuery.hasPrefix("type:") {
+                let afterType = String(lowercaseQuery.dropFirst(5))  // "type:" の後
+                return typeFilterSuggestions.filter {
+                    let suggestionAfterType = String($0.dropFirst(5).dropLast())  // "type:" と末尾スペースを除去
+                    return suggestionAfterType.hasPrefix(afterType)
+                }
+            } else {
+                // "t", "ty", "typ", "type" の場合は全候補
+                return typeFilterSuggestions
+            }
+        }
+
+        return []
+    }
+
+    /// インライン補完テキストを取得（最初の候補の残り部分）
+    private func getInlineCompletion(for query: String) -> String? {
+        guard !query.isEmpty, !suggestions.isEmpty else { return nil }
+
+        let firstSuggestion = suggestions[selectedSuggestionIndex]
+        let lowercaseQuery = query.lowercased()
+
+        // 大文字小文字を無視して先頭一致を確認
+        if firstSuggestion.lowercased().hasPrefix(lowercaseQuery) {
+            // 元の候補から残りの部分を返す
+            return String(firstSuggestion.dropFirst(query.count))
+        }
+
+        return nil
+    }
+
+    /// 補完を適用する
+    private func applySuggestion(_ suggestion: String) {
+        filterText = suggestion
+        isShowingSuggestions = false
     }
 
     /// 書庫セクションビュー
