@@ -9,14 +9,16 @@ struct PendingFileOpen {
     let currentPage: Int
     let frame: CGRect?
     let isSessionRestore: Bool  // セッション復元かどうか
+    let forceNewWindow: Bool  // 空ウィンドウがあっても新規作成を強制
 
     /// 「このアプリケーションで開く」用の初期化
-    init(url: URL) {
+    init(url: URL, forceNewWindow: Bool = false) {
         self.filePath = url.path
         self.fileKey = nil
         self.currentPage = 0
         self.frame = nil
         self.isSessionRestore = false
+        self.forceNewWindow = forceNewWindow
     }
 
     /// セッション復元用の初期化
@@ -26,6 +28,7 @@ struct PendingFileOpen {
         self.currentPage = entry.currentPage
         self.frame = entry.frame
         self.isSessionRestore = true
+        self.forceNewWindow = true  // セッション復元は常に新規ウィンドウ
     }
 }
 
@@ -77,7 +80,7 @@ class SessionManager {
     /// 新しいウィンドウでファイルを開く（履歴から「新しいウィンドウで開く」用）
     func openInNewWindow(url: URL) {
         DebugLogger.log("🆕 openInNewWindow called", level: .normal)
-        let item = PendingFileOpen(url: url)
+        let item = PendingFileOpen(url: url, forceNewWindow: true)
         addToQueue([item])
     }
 

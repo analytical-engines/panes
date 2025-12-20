@@ -865,7 +865,7 @@ struct ContentView: View {
         .onKeyPress(keys: [.downArrow]) { handleDownArrow($0) }
         .onKeyPress(keys: [.pageUp]) { handlePageUp($0) }
         .onKeyPress(keys: [.pageDown]) { handlePageDown($0) }
-        .onKeyPress(keys: [.return]) { handleReturn($0) }
+        .onKeyPress(characters: .init(charactersIn: "\r\n")) { handleReturn($0) }
         .onKeyPress(characters: CharacterSet(charactersIn: "mM")) { handleMemoEdit($0) }
         .onKeyPress(keys: [.space]) { press in
             // ファイルを開いている時のみページ送り（検索フィールドへの入力を妨げない）
@@ -899,6 +899,14 @@ struct ContentView: View {
             // ⌘I で画像情報表示
             if press.modifiers.contains(.command) && viewModel.hasOpenFile {
                 showImageInfo.toggle()
+                return .handled
+            }
+            return .ignored
+        }
+        .onKeyPress(characters: CharacterSet(charactersIn: "oO")) { press in
+            // ⌘O でファイルを開く
+            if press.modifiers.contains(.command) {
+                openFilePicker()
                 return .handled
             }
             return .ignored
@@ -1176,7 +1184,9 @@ struct ContentView: View {
                 }
 
                 // このウィンドウがファイルを開いていなければ、自分で開く
-                if !self.viewModel.hasOpenFile {
+                // ただし forceNewWindow フラグが立っている場合は新規ウィンドウを作成
+                let forceNew = self.sessionManager.pendingFileOpen?.forceNewWindow ?? false
+                if !self.viewModel.hasOpenFile && !forceNew {
                     DebugLogger.log("📬 Using empty window for file: \(windowID)", level: .normal)
                     self.openPendingFile()
                     return
@@ -1574,14 +1584,29 @@ struct ContentView: View {
         guard !isHistorySearchFocused else { return .ignored }  // 検索フィールドにフォーカス中は無視（IME変換確定と干渉するため）
         guard let selected = selectedHistoryItem else { return .ignored }
 
+        let openInNew = press.modifiers.contains(.shift)  // ⇧+Enterで新しいウィンドウ
+
         switch selected {
         case .archive(_, let filePath):
-            openHistoryFile(path: filePath)
+            if openInNew {
+                openInNewWindow(path: filePath)
+            } else {
+                openHistoryFile(path: filePath)
+            }
         case .standaloneImage(_, let filePath):
-            openImageCatalogFile(path: filePath, relativePath: nil)
+            if openInNew {
+                openInNewWindow(path: filePath)
+            } else {
+                openImageCatalogFile(path: filePath, relativePath: nil)
+            }
         case .archiveContentImage(_, let parentPath, let relativePath):
-            openImageCatalogFile(path: parentPath, relativePath: relativePath.isEmpty ? nil : relativePath)
+            if openInNew {
+                openInNewWindow(path: parentPath)  // 親アーカイブを新しいウィンドウで開く
+            } else {
+                openImageCatalogFile(path: parentPath, relativePath: relativePath.isEmpty ? nil : relativePath)
+            }
         case .session(let sessionId):
+            // セッションは複数ウィンドウを復元するのでShiftは無視
             if let session = sessionGroupManager.sessionGroups.first(where: { $0.id == sessionId }) {
                 sessionGroupManager.updateLastAccessed(id: session.id)
                 sessionManager.restoreSessionGroup(session)
