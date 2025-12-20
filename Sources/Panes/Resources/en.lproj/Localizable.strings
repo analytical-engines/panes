@@ -49,6 +49,25 @@
 "shortcut_conflict_title" = "Key Conflict";
 "shortcut_conflict_message" = "\"%@\" is already assigned to \"%@\". Do you want to overwrite?";
 "shortcut_overwrite" = "Overwrite";
+"shortcut_hardcoded_conflict_title" = "Reserved Key";
+"shortcut_hardcoded_conflict_message" = "\"%@\" is reserved for \"%@\" and cannot be reassigned.";
+"ok" = "OK";
+
+// MARK: - System Shortcuts
+
+"system_shortcut_quit" = "Quit";
+"system_shortcut_close" = "Close Window";
+"system_shortcut_copy" = "Copy";
+"system_shortcut_paste" = "Paste";
+"system_shortcut_cut" = "Cut";
+"system_shortcut_select_all" = "Select All";
+"system_shortcut_undo" = "Undo";
+"system_shortcut_redo" = "Redo";
+"system_shortcut_settings" = "Settings";
+"system_shortcut_hide" = "Hide";
+"system_shortcut_minimize" = "Minimize";
+"system_shortcut_new" = "New Window";
+"system_shortcut_open" = "Open";
 
 // MARK: - SettingsView - Display Settings
 

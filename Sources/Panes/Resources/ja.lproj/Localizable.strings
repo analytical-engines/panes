@@ -49,6 +49,25 @@
 "shortcut_conflict_title" = "キーの重複";
 "shortcut_conflict_message" = "「%@」は既に「%@」に割り当てられています。上書きしますか？";
 "shortcut_overwrite" = "上書き";
+"shortcut_hardcoded_conflict_title" = "予約済みのキー";
+"shortcut_hardcoded_conflict_message" = "「%@」は「%@」に予約されており、変更できません。";
+"ok" = "OK";
+
+// MARK: - System Shortcuts
+
+"system_shortcut_quit" = "終了";
+"system_shortcut_close" = "ウィンドウを閉じる";
+"system_shortcut_copy" = "コピー";
+"system_shortcut_paste" = "ペースト";
+"system_shortcut_cut" = "カット";
+"system_shortcut_select_all" = "すべてを選択";
+"system_shortcut_undo" = "取り消す";
+"system_shortcut_redo" = "やり直す";
+"system_shortcut_settings" = "設定";
+"system_shortcut_hide" = "隠す";
+"system_shortcut_minimize" = "しまう";
+"system_shortcut_new" = "新規ウィンドウ";
+"system_shortcut_open" = "開く";
 
 // MARK: - SettingsView - Display Settings
 

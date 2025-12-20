@@ -426,6 +426,8 @@ struct KeyCaptureView: View {
     @State private var showConflictAlert = false
     @State private var conflictBinding: KeyBinding?
     @State private var conflictAction: ShortcutAction?
+    @State private var showHardcodedConflictAlert = false
+    @State private var hardcodedConflict: HardcodedShortcut?
 
     var body: some View {
         VStack(spacing: 20) {
@@ -480,6 +482,17 @@ struct KeyCaptureView: View {
                 Text(String(format: L("shortcut_conflict_message"), binding.displayString, existingAction.displayName))
             }
         }
+        .alert(L("shortcut_hardcoded_conflict_title"), isPresented: $showHardcodedConflictAlert) {
+            Button(L("ok"), role: .cancel) {
+                // キャプチャ画面に戻る
+                capturedKey = ""
+                startCapturing()
+            }
+        } message: {
+            if let hardcoded = hardcodedConflict {
+                Text(String(format: L("shortcut_hardcoded_conflict_message"), hardcoded.keyDisplay, hardcoded.displayName))
+            }
+        }
     }
 
     private func startCapturing() {
@@ -500,9 +513,16 @@ struct KeyCaptureView: View {
             let binding = KeyBinding(from: event)
             capturedKey = binding.displayString
 
-            // 衝突チェック
+            // 固定ショートカットとの衝突チェック（上書き不可）
+            if let hardcoded = HardcodedShortcut.find(for: binding) {
+                self.stopCapturing()
+                hardcodedConflict = hardcoded
+                showHardcodedConflictAlert = true
+                return nil
+            }
+
+            // カスタムショートカットとの衝突チェック（上書き可能）
             if let existingAction = shortcutManager.findAction(for: binding), existingAction != action {
-                // 衝突あり - イベントモニターを停止して確認ダイアログを表示
                 self.stopCapturing()
                 conflictBinding = binding
                 conflictAction = existingAction

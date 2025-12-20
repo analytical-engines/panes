@@ -301,6 +301,61 @@ struct HardcodedShortcut {
         if keyCode == 48 && modifiers == [.shift] {
             return HardcodedShortcut(displayName: L("shortcut_previous_page"), keyDisplay: "⇧Tab")
         }
+
+        // システムショートカット
+        // ⌘Q (keyCode 12 = Q) - Quit
+        if keyCode == 12 && modifiers == [.command] {
+            return HardcodedShortcut(displayName: L("system_shortcut_quit"), keyDisplay: "⌘Q")
+        }
+        // ⌘W (keyCode 13 = W) - Close Window
+        if keyCode == 13 && modifiers == [.command] {
+            return HardcodedShortcut(displayName: L("system_shortcut_close"), keyDisplay: "⌘W")
+        }
+        // ⌘C (keyCode 8 = C) - Copy
+        if keyCode == 8 && modifiers == [.command] {
+            return HardcodedShortcut(displayName: L("system_shortcut_copy"), keyDisplay: "⌘C")
+        }
+        // ⌘V (keyCode 9 = V) - Paste
+        if keyCode == 9 && modifiers == [.command] {
+            return HardcodedShortcut(displayName: L("system_shortcut_paste"), keyDisplay: "⌘V")
+        }
+        // ⌘X (keyCode 7 = X) - Cut
+        if keyCode == 7 && modifiers == [.command] {
+            return HardcodedShortcut(displayName: L("system_shortcut_cut"), keyDisplay: "⌘X")
+        }
+        // ⌘A (keyCode 0 = A) - Select All
+        if keyCode == 0 && modifiers == [.command] {
+            return HardcodedShortcut(displayName: L("system_shortcut_select_all"), keyDisplay: "⌘A")
+        }
+        // ⌘Z (keyCode 6 = Z) - Undo
+        if keyCode == 6 && modifiers == [.command] {
+            return HardcodedShortcut(displayName: L("system_shortcut_undo"), keyDisplay: "⌘Z")
+        }
+        // ⇧⌘Z (keyCode 6 = Z) - Redo
+        if keyCode == 6 && modifiers == [.shift, .command] {
+            return HardcodedShortcut(displayName: L("system_shortcut_redo"), keyDisplay: "⇧⌘Z")
+        }
+        // ⌘, (keyCode 43 = ,) - Settings
+        if keyCode == 43 && modifiers == [.command] {
+            return HardcodedShortcut(displayName: L("system_shortcut_settings"), keyDisplay: "⌘,")
+        }
+        // ⌘H (keyCode 4 = H) - Hide
+        if keyCode == 4 && modifiers == [.command] {
+            return HardcodedShortcut(displayName: L("system_shortcut_hide"), keyDisplay: "⌘H")
+        }
+        // ⌘M (keyCode 46 = M) - Minimize
+        if keyCode == 46 && modifiers == [.command] {
+            return HardcodedShortcut(displayName: L("system_shortcut_minimize"), keyDisplay: "⌘M")
+        }
+        // ⌘N (keyCode 45 = N) - New
+        if keyCode == 45 && modifiers == [.command] {
+            return HardcodedShortcut(displayName: L("system_shortcut_new"), keyDisplay: "⌘N")
+        }
+        // ⌘O (keyCode 31 = O) - Open
+        if keyCode == 31 && modifiers == [.command] {
+            return HardcodedShortcut(displayName: L("system_shortcut_open"), keyDisplay: "⌘O")
+        }
+
         return nil
     }
 
