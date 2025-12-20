@@ -37,6 +37,25 @@ enum ShortcutAction: String, CaseIterable, Codable, Identifiable {
         case .closeFile: return L("shortcut_close_file")
         }
     }
+
+    /// 固定ショートカット（メニューバー等で定義済み、変更不可）
+    var hardcodedShortcuts: [String] {
+        switch self {
+        case .nextPage: return []
+        case .previousPage: return ["⇧Tab"]
+        case .skipForward: return []
+        case .skipBackward: return []
+        case .goToFirstPage: return []
+        case .goToLastPage: return []
+        case .toggleFullScreen: return []
+        case .toggleViewMode: return ["⇧⌘M"]
+        case .toggleReadingDirection: return ["⇧⌘R"]
+        case .zoomIn: return ["⌘+"]
+        case .zoomOut: return ["⌘-"]
+        case .resetZoom: return ["⌘0"]
+        case .closeFile: return ["⇧⌘W"]
+        }
+    }
 }
 
 /// キーバインディング（キー + モディファイア）
@@ -232,5 +251,61 @@ final class CustomShortcutManager {
     func clearAll() {
         shortcuts = [:]
         saveShortcuts()
+    }
+}
+
+/// ハードコーディングされた（変更不可の）ショートカット
+struct HardcodedShortcut {
+    let displayName: String
+    let keyDisplay: String
+
+    /// キーコードとモディファイアからハードコーディングされたショートカットを検索
+    static func find(keyCode: UInt16, modifiers: KeyBinding.ModifierFlags) -> HardcodedShortcut? {
+        // ⇧⌘W (keyCode 13 = W)
+        if keyCode == 13 && modifiers == [.shift, .command] {
+            return HardcodedShortcut(displayName: L("menu_close_file"), keyDisplay: "⇧⌘W")
+        }
+        // ⇧⌘M (keyCode 46 = M)
+        if keyCode == 46 && modifiers == [.shift, .command] {
+            return HardcodedShortcut(displayName: L("shortcut_view_mode"), keyDisplay: "⇧⌘M")
+        }
+        // ⇧⌘H (keyCode 4 = H)
+        if keyCode == 4 && modifiers == [.shift, .command] {
+            return HardcodedShortcut(displayName: L("menu_show_history"), keyDisplay: "⇧⌘H")
+        }
+        // ⌘+ (keyCode 24 = +/=)
+        if keyCode == 24 && modifiers == [.command] {
+            return HardcodedShortcut(displayName: L("shortcut_zoom_in"), keyDisplay: "⌘+")
+        }
+        // ⌘- (keyCode 27 = -)
+        if keyCode == 27 && modifiers == [.command] {
+            return HardcodedShortcut(displayName: L("shortcut_zoom_out"), keyDisplay: "⌘-")
+        }
+        // ⌘0 (keyCode 29 = 0)
+        if keyCode == 29 && modifiers == [.command] {
+            return HardcodedShortcut(displayName: L("shortcut_reset_zoom"), keyDisplay: "⌘0")
+        }
+        // ⇧⌘R (keyCode 15 = R)
+        if keyCode == 15 && modifiers == [.shift, .command] {
+            return HardcodedShortcut(displayName: L("shortcut_reading_direction"), keyDisplay: "⇧⌘R")
+        }
+        // ⌘B (keyCode 11 = B)
+        if keyCode == 11 && modifiers == [.command] {
+            return HardcodedShortcut(displayName: L("menu_show_status_bar"), keyDisplay: "⌘B")
+        }
+        // ⇧⌘S (keyCode 1 = S)
+        if keyCode == 1 && modifiers == [.shift, .command] {
+            return HardcodedShortcut(displayName: L("menu_save_session"), keyDisplay: "⇧⌘S")
+        }
+        // ⇧Tab (keyCode 48 = Tab)
+        if keyCode == 48 && modifiers == [.shift] {
+            return HardcodedShortcut(displayName: L("shortcut_previous_page"), keyDisplay: "⇧Tab")
+        }
+        return nil
+    }
+
+    /// KeyBindingからハードコーディングされたショートカットを検索
+    static func find(for binding: KeyBinding) -> HardcodedShortcut? {
+        return find(keyCode: binding.keyCode, modifiers: binding.modifiers)
     }
 }

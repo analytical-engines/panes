@@ -336,6 +336,18 @@ struct ShortcutRow: View {
 
             // 割り当てられたキーをチップで表示
             HStack(spacing: 4) {
+                // 固定ショートカット（変更不可）
+                ForEach(action.hardcodedShortcuts, id: \.self) { key in
+                    HardcodedKeyChip(keyDisplay: key)
+                }
+
+                // 固定とカスタムの間にスペース
+                if !action.hardcodedShortcuts.isEmpty {
+                    Spacer()
+                        .frame(width: 12)
+                }
+
+                // カスタムショートカット（削除可能）
                 ForEach(Array(bindings.enumerated()), id: \.offset) { _, binding in
                     KeyBindingChip(binding: binding) {
                         shortcutManager.removeShortcut(binding, from: action)
@@ -382,6 +394,23 @@ struct KeyBindingChip: View {
         .onHover { hovering in
             isHovering = hovering
         }
+    }
+}
+
+/// 固定ショートカットの表示（変更不可）
+struct HardcodedKeyChip: View {
+    let keyDisplay: String
+
+    var body: some View {
+        Text(keyDisplay)
+            .font(.system(.caption, design: .monospaced))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .foregroundColor(.secondary)
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(Color.secondary.opacity(0.5), lineWidth: 1)
+            )
     }
 }
 
