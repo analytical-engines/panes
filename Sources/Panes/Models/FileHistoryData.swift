@@ -24,6 +24,23 @@ final class FileHistoryData {
     /// ユーザーメモ
     var memo: String?
 
+    // MARK: - 表示状態設定（UserDefaultsから移行）
+
+    /// 表示モード（"single" or "spread"）
+    var viewMode: String?
+
+    /// 現在ページ（ソースインデックスとして保存）
+    var savedPage: Int?
+
+    /// 読み方向（"rightToLeft" or "leftToRight"）
+    var readingDirection: String?
+
+    /// ソート方法（ImageSortMethodのrawValue）
+    var sortMethod: String?
+
+    /// ソート逆順
+    var sortReversed: Bool?
+
     init(fileKey: String, filePath: String, fileName: String) {
         self.id = FileHistoryData.generateId(fileName: fileName, fileKey: fileKey)
         self.fileKey = fileKey
@@ -68,7 +85,12 @@ final class FileHistoryData {
             fileName: fileName,
             lastAccessDate: lastAccessDate,
             accessCount: accessCount,
-            memo: memo
+            memo: memo,
+            viewMode: viewMode,
+            savedPage: savedPage,
+            readingDirection: readingDirection,
+            sortMethod: sortMethod,
+            sortReversed: sortReversed
         )
     }
 

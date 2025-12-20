@@ -15,6 +15,19 @@ struct FileHistoryEntry: Codable, Identifiable {
     var accessCount: Int
     var memo: String?
 
+    // MARK: - 表示状態設定
+
+    /// 表示モード（"single" or "spread"）
+    var viewMode: String?
+    /// 現在ページ（ソースインデックスとして保存）
+    var savedPage: Int?
+    /// 読み方向（"rightToLeft" or "leftToRight"）
+    var readingDirection: String?
+    /// ソート方法（ImageSortMethodのrawValue）
+    var sortMethod: String?
+    /// ソート逆順
+    var sortReversed: Bool?
+
     /// ファイルがアクセス可能かどうか（表示時にチェック、LazyVStackにより表示行のみ）
     var isAccessible: Bool {
         FileManager.default.fileExists(atPath: filePath)
@@ -23,6 +36,7 @@ struct FileHistoryEntry: Codable, Identifiable {
     // Codable用のCodingKeys
     private enum CodingKeys: String, CodingKey {
         case id, fileKey, pageSettingsRef, filePath, fileName, lastAccessDate, accessCount, memo
+        case viewMode, savedPage, readingDirection, sortMethod, sortReversed
     }
 
     init(fileKey: String, filePath: String, fileName: String) {
@@ -34,9 +48,15 @@ struct FileHistoryEntry: Codable, Identifiable {
         self.lastAccessDate = Date()
         self.accessCount = 1
         self.memo = nil
+        self.viewMode = nil
+        self.savedPage = nil
+        self.readingDirection = nil
+        self.sortMethod = nil
+        self.sortReversed = nil
     }
 
-    init(id: String, fileKey: String, pageSettingsRef: String?, filePath: String, fileName: String, lastAccessDate: Date, accessCount: Int, memo: String? = nil) {
+    init(id: String, fileKey: String, pageSettingsRef: String?, filePath: String, fileName: String, lastAccessDate: Date, accessCount: Int, memo: String? = nil,
+         viewMode: String? = nil, savedPage: Int? = nil, readingDirection: String? = nil, sortMethod: String? = nil, sortReversed: Bool? = nil) {
         self.id = id
         self.fileKey = fileKey
         self.pageSettingsRef = pageSettingsRef
@@ -45,6 +65,11 @@ struct FileHistoryEntry: Codable, Identifiable {
         self.lastAccessDate = lastAccessDate
         self.accessCount = accessCount
         self.memo = memo
+        self.viewMode = viewMode
+        self.savedPage = savedPage
+        self.readingDirection = readingDirection
+        self.sortMethod = sortMethod
+        self.sortReversed = sortReversed
     }
 
     // Decodable
@@ -58,6 +83,11 @@ struct FileHistoryEntry: Codable, Identifiable {
         self.lastAccessDate = try container.decode(Date.self, forKey: .lastAccessDate)
         self.accessCount = try container.decode(Int.self, forKey: .accessCount)
         self.memo = try container.decodeIfPresent(String.self, forKey: .memo)
+        self.viewMode = try container.decodeIfPresent(String.self, forKey: .viewMode)
+        self.savedPage = try container.decodeIfPresent(Int.self, forKey: .savedPage)
+        self.readingDirection = try container.decodeIfPresent(String.self, forKey: .readingDirection)
+        self.sortMethod = try container.decodeIfPresent(String.self, forKey: .sortMethod)
+        self.sortReversed = try container.decodeIfPresent(Bool.self, forKey: .sortReversed)
     }
 
     /// エントリIDを生成（ファイル名+fileKeyのハッシュ）
@@ -110,6 +140,7 @@ class FileHistoryManager {
     private let legacyHistoryKey = "fileHistory"
     private let migrationCompletedKey = "historyMigrationToSwiftDataCompleted"
     private let pageSettingsMigrationCompletedKey = "pageSettingsMigrationToSwiftDataCompleted"
+    private let viewStateMigrationCompletedKey = "viewStateMigrationToSwiftDataCompleted"
     private let schemaVersionKey = "historySchemaVersion"
     private let storeLocationMigrationKey = "storeLocationMigrationCompleted"
 
@@ -186,6 +217,7 @@ class FileHistoryManager {
         if isInitialized {
             migrateFromUserDefaultsIfNeeded()
             migratePageSettingsFromUserDefaultsIfNeeded()
+            migrateViewStateFromUserDefaultsIfNeeded()
             migrateEntryIdsToNewFormatIfNeeded()
             migrateCorruptedFolderFileKeysIfNeeded()
             loadHistory()
@@ -451,6 +483,100 @@ class FileHistoryManager {
             DebugLogger.log("✅ Page settings migration completed: \(migratedCount) settings migrated", level: .minimal)
         } catch {
             DebugLogger.log("❌ Page settings migration failed: \(error)", level: .minimal)
+        }
+    }
+
+    /// ビューステート（表示モード、ページ番号等）をUserDefaultsからSwiftDataへ移行
+    private func migrateViewStateFromUserDefaultsIfNeeded() {
+        guard !UserDefaults.standard.bool(forKey: viewStateMigrationCompletedKey) else {
+            return
+        }
+
+        guard let context = modelContext else {
+            DebugLogger.log("❌ View state migration skipped: ModelContext not available", level: .minimal)
+            return
+        }
+
+        DebugLogger.log("📦 Migrating view state from UserDefaults to SwiftData", level: .minimal)
+
+        // UserDefaultsのキープレフィックス（BookViewModelと同じ）
+        let viewModeKey = "viewMode"
+        let currentPageKey = "currentPage"
+        let readingDirectionKey = "readingDirection"
+        let sortMethodKey = "sortMethod"
+        let sortReversedKey = "sortReversed"
+
+        do {
+            // 既存のSwiftData履歴を取得
+            let descriptor = FetchDescriptor<FileHistoryData>()
+            let historyEntries = try context.fetch(descriptor)
+
+            var migratedCount = 0
+            var keysToRemove: [String] = []
+
+            for entry in historyEntries {
+                // 既にビューステートがある場合はスキップ
+                guard entry.viewMode == nil else { continue }
+
+                let entryId = entry.id
+
+                // UserDefaultsからビューステートを読み込み
+                let viewModeUserDefaultsKey = "\(viewModeKey)-\(entryId)"
+                let currentPageUserDefaultsKey = "\(currentPageKey)-\(entryId)"
+                let readingDirectionUserDefaultsKey = "\(readingDirectionKey)-\(entryId)"
+                let sortMethodUserDefaultsKey = "\(sortMethodKey)-\(entryId)"
+                let sortReversedUserDefaultsKey = "\(sortReversedKey)-\(entryId)"
+
+                var hasData = false
+
+                if let modeString = UserDefaults.standard.string(forKey: viewModeUserDefaultsKey) {
+                    entry.viewMode = modeString
+                    keysToRemove.append(viewModeUserDefaultsKey)
+                    hasData = true
+                }
+
+                if UserDefaults.standard.object(forKey: currentPageUserDefaultsKey) != nil {
+                    entry.savedPage = UserDefaults.standard.integer(forKey: currentPageUserDefaultsKey)
+                    keysToRemove.append(currentPageUserDefaultsKey)
+                    hasData = true
+                }
+
+                if let directionString = UserDefaults.standard.string(forKey: readingDirectionUserDefaultsKey) {
+                    entry.readingDirection = directionString
+                    keysToRemove.append(readingDirectionUserDefaultsKey)
+                    hasData = true
+                }
+
+                if let sortString = UserDefaults.standard.string(forKey: sortMethodUserDefaultsKey) {
+                    entry.sortMethod = sortString
+                    keysToRemove.append(sortMethodUserDefaultsKey)
+                    hasData = true
+                }
+
+                if UserDefaults.standard.object(forKey: sortReversedUserDefaultsKey) != nil {
+                    entry.sortReversed = UserDefaults.standard.bool(forKey: sortReversedUserDefaultsKey)
+                    keysToRemove.append(sortReversedUserDefaultsKey)
+                    hasData = true
+                }
+
+                if hasData {
+                    migratedCount += 1
+                }
+            }
+
+            if migratedCount > 0 {
+                try context.save()
+            }
+
+            // UserDefaultsから削除
+            for key in keysToRemove {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+
+            UserDefaults.standard.set(true, forKey: viewStateMigrationCompletedKey)
+            DebugLogger.log("✅ View state migration completed: \(migratedCount) entries migrated, \(keysToRemove.count) keys removed", level: .minimal)
+        } catch {
+            DebugLogger.log("❌ View state migration failed: \(error)", level: .minimal)
         }
     }
 
@@ -1358,6 +1484,89 @@ class FileHistoryManager {
             }
         } catch {
             DebugLogger.log("❌ Failed to save page settings by id: \(error)", level: .minimal)
+        }
+    }
+
+    // MARK: - View State (DB Storage)
+
+    /// ビューステートを表す構造体
+    struct ViewState {
+        var viewMode: String?
+        var savedPage: Int?
+        var readingDirection: String?
+        var sortMethod: String?
+        var sortReversed: Bool?
+    }
+
+    /// 指定したエントリIDのビューステートを保存
+    func saveViewState(_ state: ViewState, for entryId: String) {
+        guard isInitialized else {
+            DebugLogger.log("⚠️ saveViewState skipped: SwiftData not initialized", level: .normal)
+            return
+        }
+        saveViewStateToSwiftData(state, for: entryId)
+    }
+
+    /// SwiftDataにビューステートを保存
+    private func saveViewStateToSwiftData(_ state: ViewState, for entryId: String) {
+        guard let context = modelContext else { return }
+        do {
+            let searchId = entryId
+            var descriptor = FetchDescriptor<FileHistoryData>(
+                predicate: #Predicate<FileHistoryData> { $0.id == searchId }
+            )
+            descriptor.fetchLimit = 1
+            let results = try context.fetch(descriptor)
+
+            if let historyData = results.first {
+                // pageSettingsRefがある場合も、ビューステートは自身に保存
+                historyData.viewMode = state.viewMode
+                historyData.savedPage = state.savedPage
+                historyData.readingDirection = state.readingDirection
+                historyData.sortMethod = state.sortMethod
+                historyData.sortReversed = state.sortReversed
+                try context.save()
+                DebugLogger.log("💾 saveViewState: saved to entry \(entryId)", level: .verbose)
+            } else {
+                DebugLogger.log("⚠️ No history entry found for id: \(entryId)", level: .normal)
+            }
+        } catch {
+            DebugLogger.log("❌ Failed to save view state: \(error)", level: .minimal)
+        }
+    }
+
+    /// 指定したエントリIDのビューステートを読み込む
+    func loadViewState(for entryId: String) -> ViewState? {
+        guard isInitialized else {
+            return nil
+        }
+        return loadViewStateFromSwiftData(for: entryId)
+    }
+
+    /// SwiftDataからビューステートを読み込む
+    private func loadViewStateFromSwiftData(for entryId: String) -> ViewState? {
+        guard let context = modelContext else { return nil }
+        do {
+            let searchId = entryId
+            var descriptor = FetchDescriptor<FileHistoryData>(
+                predicate: #Predicate<FileHistoryData> { $0.id == searchId }
+            )
+            descriptor.fetchLimit = 1
+            let results = try context.fetch(descriptor)
+
+            guard let entry = results.first else { return nil }
+
+            // viewMode等がnilでも構造体を返す（部分的に設定がある場合に対応）
+            return ViewState(
+                viewMode: entry.viewMode,
+                savedPage: entry.savedPage,
+                readingDirection: entry.readingDirection,
+                sortMethod: entry.sortMethod,
+                sortReversed: entry.sortReversed
+            )
+        } catch {
+            DebugLogger.log("❌ Failed to load view state: \(error)", level: .minimal)
+            return nil
         }
     }
 

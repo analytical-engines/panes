@@ -643,20 +643,8 @@ class BookViewModel {
                 choice: choice
             )
 
-            // 「別のファイルとして扱う」の場合、デフォルト設定を保存してフォールバックを防ぐ
-            if choice == .treatAsDifferent {
-                let entryId = FileHistoryEntry.generateId(fileName: info.newFileName, fileKey: info.fileKey)
-                // デフォルト値でマーカーを保存（restoreViewStateでのフォールバックを防ぐ）
-                let defaultMode = appSettings?.defaultViewMode ?? .spread
-                let modeString = defaultMode == .spread ? "spread" : "single"
-                UserDefaults.standard.set(modeString, forKey: "\(viewModeKey)-\(entryId)")
-                UserDefaults.standard.set(0, forKey: "\(currentPageKey)-\(entryId)")
-                let defaultDirection = appSettings?.defaultReadingDirection ?? .rightToLeft
-                let directionString = defaultDirection == .rightToLeft ? "rightToLeft" : "leftToRight"
-                UserDefaults.standard.set(directionString, forKey: "\(readingDirectionKey)-\(entryId)")
-            }
-
             // ソースを開く（履歴は既に記録済み）
+            // 「別のファイルとして扱う」の場合はデフォルト設定が自然に適用される
             completeOpenSource(info.pendingSource, recordAccess: false)
         }
         // キャンセルの場合は何もしない（ファイルを開かない）
@@ -1803,21 +1791,19 @@ class BookViewModel {
             debugLog("💾 saveViewState: generated new entry id=\(entryId)", level: .verbose)
         }
 
-        // 表示モードを保存（エントリIDベース）
+        // ビューステートをDBに保存
         let modeString = viewMode == .spread ? "spread" : "single"
-        UserDefaults.standard.set(modeString, forKey: "\(viewModeKey)-\(entryId)")
-
-        // 現在のページ番号を保存（ソースインデックスで保存、エントリIDベース）
         let currentSourceIndex = sourceIndex(for: currentPage)
-        UserDefaults.standard.set(currentSourceIndex, forKey: "\(currentPageKey)-\(entryId)")
-
-        // 読み方向を保存（エントリIDベース）
         let directionString = readingDirection == .rightToLeft ? "rightToLeft" : "leftToRight"
-        UserDefaults.standard.set(directionString, forKey: "\(readingDirectionKey)-\(entryId)")
 
-        // ソート方法を保存（エントリIDベース）
-        UserDefaults.standard.set(sortMethod.rawValue, forKey: "\(sortMethodKey)-\(entryId)")
-        UserDefaults.standard.set(isSortReversed, forKey: "\(sortReversedKey)-\(entryId)")
+        let viewState = FileHistoryManager.ViewState(
+            viewMode: modeString,
+            savedPage: currentSourceIndex,
+            readingDirection: directionString,
+            sortMethod: sortMethod.rawValue,
+            sortReversed: isSortReversed
+        )
+        historyManager?.saveViewState(viewState, for: entryId)
 
         // ページ表示設定を保存（ファイル名も考慮してエントリを特定）
         historyManager?.savePageDisplaySettings(pageDisplaySettings, forFileName: source.sourceName, fileKey: fileKey)
@@ -1855,83 +1841,86 @@ class BookViewModel {
             debugLog("📂 restoreViewState: no page settings found, using defaults", level: .normal)
         }
 
-        // 表示モードを復元（エントリIDベースのみ）
-        if let modeString = UserDefaults.standard.string(forKey: "\(viewModeKey)-\(entryId)") {
-            viewMode = modeString == "spread" ? .spread : .single
-        }
-        // なければデフォルトのまま
-
-        // 読み方向を復元（エントリIDベースのみ）
-        if let directionString = UserDefaults.standard.string(forKey: "\(readingDirectionKey)-\(entryId)") {
-            readingDirection = directionString == "rightToLeft" ? .rightToLeft : .leftToRight
-        }
-        // なければデフォルトのまま
-
-        // ソート方法を復元（pages配列を先に更新する必要があるため、ページ復元より先に行う）
-        if let sortString = UserDefaults.standard.string(forKey: "\(sortMethodKey)-\(entryId)") {
-            // 旧形式からの互換性対応（nameReverse, dateAscending, dateDescending）
-            let (restoredMethod, restoredReversed) = ImageSortMethod.fromLegacy(sortString)
-            sortMethod = restoredMethod
-
-            // 逆順設定を復元（新形式で保存されていればそちらを優先）
-            if UserDefaults.standard.object(forKey: "\(sortReversedKey)-\(entryId)") != nil {
-                isSortReversed = UserDefaults.standard.bool(forKey: "\(sortReversedKey)-\(entryId)")
-            } else {
-                isSortReversed = restoredReversed
+        // DBからビューステートを復元
+        if let viewState = historyManager?.loadViewState(for: entryId) {
+            // 表示モードを復元
+            if let modeString = viewState.viewMode {
+                viewMode = modeString == "spread" ? .spread : .single
             }
 
-            // ソートを適用（pages配列を更新、ただしページ読み込みはスキップ）
-            let indices = Array(0..<totalPages)
-            let sortedIndices: [Int]
-            switch restoredMethod {
-            case .name:
-                sortedIndices = indices.sorted { i1, i2 in
-                    let name1 = imageSource?.fileName(at: i1) ?? ""
-                    let name2 = imageSource?.fileName(at: i2) ?? ""
-                    return name1.localizedStandardCompare(name2) == .orderedAscending
-                }
-            case .natural:
-                sortedIndices = indices.sorted { i1, i2 in
-                    let name1 = imageSource?.fileName(at: i1) ?? ""
-                    let name2 = imageSource?.fileName(at: i2) ?? ""
-                    return name1.localizedStandardCompare(name2) == .orderedAscending
-                }
-            case .date:
-                // 事前にキャッシュしてからソート
-                let dates = indices.map { imageSource?.fileDate(at: $0) ?? Date.distantPast }
-                sortedIndices = indices.sorted { i1, i2 in
-                    dates[i1] < dates[i2]
-                }
-            case .random:
-                sortedIndices = indices.shuffled()
-            case .custom:
-                // カスタム順: 保存された順序を使用
-                if pageDisplaySettings.hasCustomDisplayOrder {
-                    sortedIndices = pageDisplaySettings.customDisplayOrder
+            // 読み方向を復元
+            if let directionString = viewState.readingDirection {
+                readingDirection = directionString == "rightToLeft" ? .rightToLeft : .leftToRight
+            }
+
+            // ソート方法を復元（pages配列を先に更新する必要があるため、ページ復元より先に行う）
+            if let sortString = viewState.sortMethod {
+                // 旧形式からの互換性対応（nameReverse, dateAscending, dateDescending）
+                let (restoredMethod, restoredReversed) = ImageSortMethod.fromLegacy(sortString)
+                sortMethod = restoredMethod
+
+                // 逆順設定を復元（新形式で保存されていればそちらを優先）
+                if let savedReversed = viewState.sortReversed {
+                    isSortReversed = savedReversed
                 } else {
-                    // 保存順序がない場合は現在のまま（name順）
+                    isSortReversed = restoredReversed
+                }
+
+                // ソートを適用（pages配列を更新、ただしページ読み込みはスキップ）
+                let indices = Array(0..<totalPages)
+                let sortedIndices: [Int]
+                switch restoredMethod {
+                case .name:
                     sortedIndices = indices.sorted { i1, i2 in
                         let name1 = imageSource?.fileName(at: i1) ?? ""
                         let name2 = imageSource?.fileName(at: i2) ?? ""
                         return name1.localizedStandardCompare(name2) == .orderedAscending
                     }
+                case .natural:
+                    sortedIndices = indices.sorted { i1, i2 in
+                        let name1 = imageSource?.fileName(at: i1) ?? ""
+                        let name2 = imageSource?.fileName(at: i2) ?? ""
+                        return name1.localizedStandardCompare(name2) == .orderedAscending
+                    }
+                case .date:
+                    // 事前にキャッシュしてからソート
+                    let dates = indices.map { imageSource?.fileDate(at: $0) ?? Date.distantPast }
+                    sortedIndices = indices.sorted { i1, i2 in
+                        dates[i1] < dates[i2]
+                    }
+                case .random:
+                    sortedIndices = indices.shuffled()
+                case .custom:
+                    // カスタム順: 保存された順序を使用
+                    if pageDisplaySettings.hasCustomDisplayOrder {
+                        sortedIndices = pageDisplaySettings.customDisplayOrder
+                    } else {
+                        // 保存順序がない場合は現在のまま（name順）
+                        sortedIndices = indices.sorted { i1, i2 in
+                            let name1 = imageSource?.fileName(at: i1) ?? ""
+                            let name2 = imageSource?.fileName(at: i2) ?? ""
+                            return name1.localizedStandardCompare(name2) == .orderedAscending
+                        }
+                    }
+                }
+                pages = sortedIndices.map { PageData(sourceIndex: $0) }
+            }
+
+            // ページ番号を復元（ソースインデックスとして保存されている）
+            if let savedSourceIndex = viewState.savedPage,
+               savedSourceIndex > 0 && savedSourceIndex < totalPages {
+                // ソースインデックスを表示ページに変換
+                if let restoredDisplayPage = displayPage(for: savedSourceIndex) {
+                    currentPage = restoredDisplayPage
+                } else {
+                    currentPage = savedSourceIndex  // フォールバック
                 }
             }
-            pages = sortedIndices.map { PageData(sourceIndex: $0) }
-        }
-        // なければデフォルト（.name）のまま
 
-        // ページ番号を復元（ソースインデックスとして保存されている、エントリIDベースのみ）
-        let savedSourceIndex = UserDefaults.standard.integer(forKey: "\(currentPageKey)-\(entryId)")
-        if savedSourceIndex > 0 && savedSourceIndex < totalPages {
-            // ソースインデックスを表示ページに変換
-            if let restoredDisplayPage = displayPage(for: savedSourceIndex) {
-                currentPage = restoredDisplayPage
-            } else {
-                currentPage = savedSourceIndex  // フォールバック
-            }
+            debugLog("📂 restoreViewState: loaded from DB - viewMode=\(viewState.viewMode ?? "nil"), page=\(viewState.savedPage ?? 0)", level: .normal)
+        } else {
+            debugLog("📂 restoreViewState: no view state found in DB, using defaults", level: .normal)
         }
-        // なければ0（先頭）のまま
     }
 
     /// 単ページ表示属性インジケーター（表示用）
