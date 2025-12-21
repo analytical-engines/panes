@@ -15,6 +15,9 @@ final class WindowCoordinator {
     private var showHistoryGetters: [Int: () -> Bool] = [:]
     private var showHistorySetters: [Int: (Bool) -> Void] = [:]
 
+    /// 現在アクティブなウィンドウ番号（markAsActiveで明示的に設定）
+    private var activeWindowNumber: Int?
+
     private init() {}
 
     // MARK: - Registration
@@ -22,7 +25,17 @@ final class WindowCoordinator {
     /// ViewModelを登録する
     func register(windowNumber: Int, viewModel: BookViewModel) {
         windowViewModels[windowNumber] = viewModel
+        // 登録時にアクティブウィンドウとして記録
+        activeWindowNumber = windowNumber
         DebugLogger.log("📋 WindowCoordinator: registered viewModel for window \(windowNumber)", level: .verbose)
+    }
+
+    /// ウィンドウをアクティブとしてマークする（D&D、フォーカス取得時に呼び出す）
+    func markAsActive(windowNumber: Int) {
+        if windowViewModels[windowNumber] != nil {
+            activeWindowNumber = windowNumber
+            DebugLogger.log("📋 WindowCoordinator: marked window \(windowNumber) as active", level: .verbose)
+        }
     }
 
     /// showHistoryのgetter/setterを登録する
@@ -42,10 +55,35 @@ final class WindowCoordinator {
 
     // MARK: - Access
 
-    /// 現在のキーウィンドウのViewModelを取得する
+    /// 現在アクティブなウィンドウのViewModelを取得する
     var keyWindowViewModel: BookViewModel? {
-        guard let keyWindow = NSApp.keyWindow else { return nil }
-        return windowViewModels[keyWindow.windowNumber]
+        // markAsActive で明示的に設定されたウィンドウを優先使用
+        if let active = activeWindowNumber,
+           let viewModel = windowViewModels[active] {
+            return viewModel
+        }
+
+        // フォールバック: NSApp.keyWindow を試す
+        if let keyWindow = NSApp.keyWindow {
+            let windowNumber = keyWindow.windowNumber
+            if let viewModel = windowViewModels[windowNumber] {
+                activeWindowNumber = windowNumber
+                return viewModel
+            }
+        }
+
+        // ウィンドウが1つだけ登録されている場合はそれを使用
+        if windowViewModels.count == 1,
+           let (windowNumber, viewModel) = windowViewModels.first {
+            activeWindowNumber = windowNumber
+            return viewModel
+        }
+
+        // ウィンドウが登録されている場合のみ警告（起動時は無視）
+        if !windowViewModels.isEmpty {
+            DebugLogger.log("⚠️ WindowCoordinator: No window available (active=\(activeWindowNumber ?? -1), registered=\(Array(windowViewModels.keys)))", level: .normal)
+        }
+        return nil
     }
 
     /// 現在のキーウィンドウのshowHistory値を取得する
@@ -63,5 +101,13 @@ final class WindowCoordinator {
     /// キーウィンドウがファイルを開いているかどうか
     var keyWindowHasOpenFile: Bool {
         keyWindowViewModel?.hasOpenFile ?? false
+    }
+
+    /// 現在の登録状態をログ出力（デバッグ用）
+    func logCurrentState() {
+        let keyWindowNum = NSApp.keyWindow?.windowNumber
+        let registeredWindows = Array(windowViewModels.keys).sorted()
+        let hasOpenFiles = windowViewModels.map { ($0.key, $0.value.hasOpenFile) }
+        DebugLogger.log("📋 WindowCoordinator state: active=\(activeWindowNumber ?? -1), keyWindow=\(keyWindowNum ?? -1), registered=\(registeredWindows), hasOpenFile=\(hasOpenFiles)", level: .verbose)
     }
 }

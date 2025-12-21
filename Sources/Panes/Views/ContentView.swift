@@ -1067,16 +1067,20 @@ struct ContentView: View {
             }
         }
 
-        // ウィンドウがフォーカスされた時に履歴/カタログを更新
+        // ウィンドウがフォーカスされた時の処理
         let viewModel = self.viewModel
         let historyManager = self.historyManager
         let imageCatalogManager = self.imageCatalogManager
+        let windowNumber = window.windowNumber
         NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeKeyNotification,
             object: window,
             queue: .main
         ) { _ in
             MainActor.assumeIsolated {
+                // このウィンドウをアクティブとしてマーク
+                WindowCoordinator.shared.markAsActive(windowNumber: windowNumber)
+
                 // 初期画面を表示中（ファイルを開いていない）場合のみ更新
                 if !viewModel.hasOpenFile {
                     historyManager.reloadHistoryIfNeeded()
@@ -1711,7 +1715,20 @@ struct ContentView: View {
 
             await MainActor.run {
                 if !urls.isEmpty {
-                    DebugLogger.log("📬 Opening file via D&D: \(urls.first?.lastPathComponent ?? "unknown")", level: .normal)
+                    // D&Dターゲットウィンドウを明示的にアクティブとして記録
+                    // （NSApp.keyWindowがnilでもメニューが正しく機能するように）
+                    if let windowNumber = self.myWindowNumber {
+                        WindowCoordinator.shared.markAsActive(windowNumber: windowNumber)
+                    }
+
+                    // ウィンドウをキーウィンドウにする
+                    if let windowNumber = self.myWindowNumber,
+                       let window = NSApp.windows.first(where: { $0.windowNumber == windowNumber }) {
+                        window.makeKeyAndOrderFront(nil)
+                        NSApp.activate(ignoringOtherApps: true)
+                    }
+
+                    DebugLogger.log("📬 D&D: \(urls.first?.lastPathComponent ?? "unknown") (window=\(self.myWindowNumber ?? -1))", level: .normal)
                     // 既にファイルが開いている場合は一度閉じる
                     if viewModel.hasOpenFile {
                         viewModel.closeFile()

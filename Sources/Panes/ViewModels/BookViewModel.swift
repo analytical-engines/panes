@@ -709,6 +709,10 @@ class BookViewModel {
 
         let totalTime = (CFAbsoluteTimeGetCurrent() - totalStart) * 1000
         DebugLogger.log("⏱️ completeOpenSource total: \(String(format: "%.1f", totalTime))ms", level: .normal)
+
+        // デバッグ：読み込み完了時のWindowCoordinator状態を確認
+        DebugLogger.log("📬 File opened: hasOpenFile=\(hasOpenFile)", level: .verbose)
+        WindowCoordinator.shared.logCurrentState()
     }
 
     /// zipファイルを開く（互換性のため残す）
