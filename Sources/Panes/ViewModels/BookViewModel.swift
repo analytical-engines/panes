@@ -713,6 +713,9 @@ class BookViewModel {
         // デバッグ：読み込み完了時のWindowCoordinator状態を確認
         DebugLogger.log("📬 File opened: hasOpenFile=\(hasOpenFile)", level: .verbose)
         WindowCoordinator.shared.logCurrentState()
+
+        // メニュー状態更新のトリガー（historyVersionの変更でCommandsが再評価される）
+        historyManager?.notifyHistoryUpdate()
     }
 
     /// zipファイルを開く（互換性のため残す）

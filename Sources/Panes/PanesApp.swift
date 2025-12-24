@@ -74,6 +74,9 @@ struct ImageViewerApp: App {
         .commands {
             // ファイルメニューにClose/履歴Export/Importを追加
             CommandGroup(after: .newItem) {
+                // historyVersionを監視することで、ファイル開閉時にメニュー状態が更新される
+                let _ = historyManager.historyVersion
+
                 Button(action: {
                     focusedViewModel?.closeFile()
                 }) {
