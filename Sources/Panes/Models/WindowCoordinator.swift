@@ -60,6 +60,7 @@ final class WindowCoordinator {
         // markAsActive で明示的に設定されたウィンドウを優先使用
         if let active = activeWindowNumber,
            let viewModel = windowViewModels[active] {
+            DebugLogger.log("📋 keyWindowViewModel: active=\(active), hasOpenFile=\(viewModel.hasOpenFile)", level: .verbose)
             return viewModel
         }
 
@@ -68,6 +69,7 @@ final class WindowCoordinator {
             let windowNumber = keyWindow.windowNumber
             if let viewModel = windowViewModels[windowNumber] {
                 activeWindowNumber = windowNumber
+                DebugLogger.log("📋 keyWindowViewModel: fallback keyWindow=\(windowNumber), hasOpenFile=\(viewModel.hasOpenFile)", level: .verbose)
                 return viewModel
             }
         }
@@ -76,6 +78,7 @@ final class WindowCoordinator {
         if windowViewModels.count == 1,
            let (windowNumber, viewModel) = windowViewModels.first {
             activeWindowNumber = windowNumber
+            DebugLogger.log("📋 keyWindowViewModel: single window=\(windowNumber), hasOpenFile=\(viewModel.hasOpenFile)", level: .verbose)
             return viewModel
         }
 

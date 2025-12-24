@@ -159,8 +159,8 @@
 "menu_reveal_in_finder" = "Finderで表示";
 "menu_open_in_new_window" = "新しいウィンドウで開く";
 "menu_edit_memo" = "メモを編集";
-"menu_edit_archive_memo" = "書庫のメモを編集";
-"menu_edit_image_memo" = "画像のメモを編集";
+"menu_edit_archive_memo" = "書庫メモを編集";
+"menu_edit_image_memo" = "画像メモを編集";
 "menu_sort" = "整列";
 
 // MARK: - Memo

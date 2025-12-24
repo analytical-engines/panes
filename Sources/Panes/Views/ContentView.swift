@@ -377,6 +377,16 @@ struct ContentView: View {
 
         Divider()
 
+        // 画像メモを編集（書庫のメモは履歴リストから編集）
+        Button(action: {
+            editingImageCatalogId = viewModel.getCurrentImageCatalogId()
+            editingMemoText = viewModel.getCurrentImageMemo() ?? ""
+            showMemoEdit = true
+        }) {
+            Label(L("menu_edit_image_memo"), systemImage: "photo")
+        }
+        .disabled(!viewModel.hasCurrentImageInCatalog())
+
         // 画像をクリップボードにコピー
         Button(action: {
             viewModel.copyImageToClipboard(at: pageIndex)
@@ -479,43 +489,6 @@ struct ContentView: View {
 
         Divider()
 
-        // メモ編集
-        if viewModel.isViewingArchiveContent {
-            // 書庫/フォルダ内画像の場合は書庫メモと画像メモの両方を編集可能
-            Button(action: {
-                editingMemoFileKey = viewModel.currentFileKey
-                editingMemoText = viewModel.getCurrentMemo() ?? ""
-                showMemoEdit = true
-            }) {
-                Label(L("menu_edit_archive_memo"), systemImage: "archivebox")
-            }
-
-            Button(action: {
-                editingImageCatalogId = viewModel.getCurrentImageCatalogId()
-                editingMemoText = viewModel.getCurrentImageMemo() ?? ""
-                showMemoEdit = true
-            }) {
-                Label(L("menu_edit_image_memo"), systemImage: "photo")
-            }
-            .disabled(!viewModel.hasCurrentImageInCatalog())
-        } else {
-            // 個別画像の場合は従来通り
-            Button(action: {
-                if viewModel.hasCurrentImageInCatalog() {
-                    editingImageCatalogId = viewModel.getCurrentImageCatalogId()
-                    editingMemoText = viewModel.getCurrentImageMemo() ?? ""
-                } else {
-                    editingMemoFileKey = viewModel.currentFileKey
-                    editingMemoText = viewModel.getCurrentMemo() ?? ""
-                }
-                showMemoEdit = true
-            }) {
-                Label(L("menu_edit_memo"), systemImage: "square.and.pencil")
-            }
-        }
-
-        Divider()
-
         // ステータスバー表示切替
         Button(action: {
             viewModel.toggleStatusBar()
@@ -592,39 +565,13 @@ struct ContentView: View {
 
         Divider()
 
-        // メモ編集
-        if viewModel.isViewingArchiveContent {
-            // 書庫/フォルダ内画像の場合は書庫メモと画像メモの両方を編集可能
-            Button(action: {
-                editingMemoFileKey = viewModel.currentFileKey
-                editingMemoText = viewModel.getCurrentMemo() ?? ""
-                showMemoEdit = true
-            }) {
-                Label(L("menu_edit_archive_memo"), systemImage: "archivebox")
-            }
-
-            Button(action: {
-                editingImageCatalogId = viewModel.getCurrentImageCatalogId()
-                editingMemoText = viewModel.getCurrentImageMemo() ?? ""
-                showMemoEdit = true
-            }) {
-                Label(L("menu_edit_image_memo"), systemImage: "photo")
-            }
-            .disabled(!viewModel.hasCurrentImageInCatalog())
-        } else {
-            // 個別画像の場合は従来通り
-            Button(action: {
-                if viewModel.hasCurrentImageInCatalog() {
-                    editingImageCatalogId = viewModel.getCurrentImageCatalogId()
-                    editingMemoText = viewModel.getCurrentImageMemo() ?? ""
-                } else {
-                    editingMemoFileKey = viewModel.currentFileKey
-                    editingMemoText = viewModel.getCurrentMemo() ?? ""
-                }
-                showMemoEdit = true
-            }) {
-                Label(L("menu_edit_memo"), systemImage: "square.and.pencil")
-            }
+        // 書庫のメモ編集（書庫ファイル属性）
+        Button(action: {
+            editingMemoFileKey = viewModel.currentFileKey
+            editingMemoText = viewModel.getCurrentMemo() ?? ""
+            showMemoEdit = true
+        }) {
+            Label(L("menu_edit_archive_memo"), systemImage: "archivebox")
         }
 
         Divider()
@@ -724,6 +671,11 @@ struct ContentView: View {
             if hasFile {
                 // ファイルが開かれたらローディング状態を解除
                 isWaitingForFile = false
+
+                // このウィンドウをアクティブとしてマーク（メニュー状態の更新に必要）
+                if let windowNumber = myWindowNumber {
+                    WindowCoordinator.shared.markAsActive(windowNumber: windowNumber)
+                }
 
                 // 画像カタログからの相対パス指定があれば、該当ページにジャンプ
                 if let relativePath = pendingRelativePath {
