@@ -781,8 +781,8 @@ struct ContentView: View {
 
                 // 初期画面に戻ったので、必要に応じて履歴とカタログを再読み込み
                 if showHistory {
-                    historyManager.reloadHistoryIfNeeded()
-                    imageCatalogManager.reloadCatalogIfNeeded()
+                    historyManager.notifyHistoryUpdate()
+                    imageCatalogManager.notifyCatalogUpdate()
                 }
 
                 // 初期画面に戻ったのでフォーカスを復元
@@ -847,8 +847,8 @@ struct ContentView: View {
         .onChange(of: showHistory) { _, newValue in
             // 履歴表示が有効になったら、必要に応じて履歴とカタログを再読み込み
             if newValue {
-                historyManager.reloadHistoryIfNeeded()
-                imageCatalogManager.reloadCatalogIfNeeded()
+                historyManager.notifyHistoryUpdate()
+                imageCatalogManager.notifyCatalogUpdate()
             }
         }
         .onChange(of: showMemoEdit) { _, newValue in
@@ -1083,8 +1083,8 @@ struct ContentView: View {
 
                 // 初期画面を表示中（ファイルを開いていない）場合のみ更新
                 if !viewModel.hasOpenFile {
-                    historyManager.reloadHistoryIfNeeded()
-                    imageCatalogManager.reloadCatalogIfNeeded()
+                    historyManager.notifyHistoryUpdate()
+                    imageCatalogManager.notifyCatalogUpdate()
                 }
             }
         }
@@ -2003,6 +2003,11 @@ struct HistoryListView: View {
                 .cornerRadius(8)
                 .padding(.top, 20)
             }
+
+            // バージョントリガーを監視することで、配列更新時に再描画される
+            // (history/catalogは@ObservationIgnoredなので直接監視されない)
+            let _ = historyManager.historyVersion
+            let _ = imageCatalogManager.catalogVersion
 
             let recentHistory = historyManager.getRecentHistory(limit: appSettings.maxHistoryCount)
             let imageCatalog = imageCatalogManager.catalog

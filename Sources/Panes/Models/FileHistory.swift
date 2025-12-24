@@ -178,11 +178,14 @@ class FileHistoryManager {
         appSettings?.maxHistoryCount ?? 50
     }
 
+    /// 履歴の全エントリ（最終アクセス日時順）
+    /// @ObservationIgnored: 配列の変更で全ウィンドウが再評価されるのを防ぐ
+    /// 初期画面はhistoryVersionを監視して再描画する
+    @ObservationIgnored
     var history: [FileHistoryEntry] = []
 
-    /// 履歴の再読み込みが必要かどうか（パフォーマンス改善用）
-    @ObservationIgnored
-    private var historyNeedsReload: Bool = false
+    /// 履歴更新通知用（初期画面がこれを監視する）
+    private(set) var historyVersion: Int = 0
 
     /// SwiftData初期化エラー（nilなら成功）
     private(set) var initializationError: Error?
@@ -735,18 +738,16 @@ class FileHistoryManager {
             )
             let historyData = try context.fetch(descriptor)
             history = historyData.map { $0.toEntry() }
-            historyNeedsReload = false
             DebugLogger.log("📦 Loaded \(history.count) history entries from SwiftData", level: .normal)
         } catch {
             DebugLogger.log("❌ Failed to load history: \(error)", level: .minimal)
         }
     }
 
-    /// 必要な場合のみ履歴を再読み込み（初期画面表示時に呼ぶ）
-    func reloadHistoryIfNeeded() {
-        if historyNeedsReload {
-            loadHistory()
-        }
+    /// 初期画面の再描画をトリガーする（フォーカス復帰時に呼ぶ）
+    /// 配列は updateHistoryArrayDirectly で常に最新なのでDBリロード不要
+    func notifyHistoryUpdate() {
+        historyVersion += 1
     }
 
     /// メモリ上の履歴配列を直接更新する（DBリロード不要）

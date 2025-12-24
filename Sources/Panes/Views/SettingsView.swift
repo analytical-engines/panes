@@ -236,6 +236,10 @@ struct HistorySettingsTab: View {
             }
 
             Section(L("section_history_management")) {
+                // バージョントリガーを監視（配列は@ObservationIgnored）
+                let _ = historyManager.historyVersion
+                let _ = imageCatalogManager.catalogVersion
+
                 HStack {
                     Text(L("current_history_count_format", historyManager.history.count))
                     Spacer()

@@ -102,11 +102,13 @@ class ImageCatalogManager {
     }
 
     /// カタログの全エントリ（最終アクセス日時順）
+    /// @ObservationIgnored: 配列の変更で全ウィンドウが再評価されるのを防ぐ
+    /// 初期画面はcatalogVersionを監視して再描画する
+    @ObservationIgnored
     var catalog: [ImageCatalogEntry] = []
 
-    /// カタログの再読み込みが必要かどうか（パフォーマンス改善用）
-    @ObservationIgnored
-    private var catalogNeedsReload: Bool = false
+    /// カタログ更新通知用（初期画面がこれを監視する）
+    private(set) var catalogVersion: Int = 0
 
     /// 初期化エラー
     private(set) var initializationError: Error?
@@ -259,18 +261,16 @@ class ImageCatalogManager {
             entries.sort { $0.lastAccessDate > $1.lastAccessDate }
 
             catalog = entries
-            catalogNeedsReload = false
             DebugLogger.log("📦 Loaded \(standaloneData.count) standalone + \(archiveData.count) archive = \(catalog.count) total entries", level: .normal)
         } catch {
             DebugLogger.log("❌ Failed to load image catalog: \(error)", level: .minimal)
         }
     }
 
-    /// 必要な場合のみカタログを再読み込み（履歴画面表示時に呼ぶ）
-    func reloadCatalogIfNeeded() {
-        if catalogNeedsReload {
-            loadCatalog()
-        }
+    /// 初期画面の再描画をトリガーする（フォーカス復帰時に呼ぶ）
+    /// 配列は updateCatalogArrayDirectly で常に最新なのでDBリロード不要
+    func notifyCatalogUpdate() {
+        catalogVersion += 1
     }
 
     /// メモリ上のカタログ配列を直接更新する（DBリロード不要）
