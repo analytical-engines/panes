@@ -595,6 +595,7 @@ class ImageCatalogManager {
 
             try context.save()
             loadCatalog()
+            notifyCatalogUpdate()
         } catch {
             DebugLogger.log("❌ Failed to remove image catalog entry: \(error)", level: .minimal)
         }
@@ -621,6 +622,7 @@ class ImageCatalogManager {
 
             try context.save()
             catalog.removeAll()
+            notifyCatalogUpdate()
         } catch {
             DebugLogger.log("❌ Failed to clear image catalog: \(error)", level: .minimal)
         }

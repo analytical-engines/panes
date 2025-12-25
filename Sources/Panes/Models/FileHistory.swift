@@ -1157,6 +1157,7 @@ class FileHistoryManager {
             }
             try context.save()
             loadHistory()
+            notifyHistoryUpdate()
         } catch {
             DebugLogger.log("❌ Failed to remove entry by id: \(error)", level: .minimal)
         }
@@ -1180,6 +1181,7 @@ class FileHistoryManager {
             }
             try context.save()
             loadHistory()
+            notifyHistoryUpdate()
         } catch {
             DebugLogger.log("❌ Failed to remove entry: \(error)", level: .minimal)
         }
@@ -1199,6 +1201,7 @@ class FileHistoryManager {
             }
             try context.save()
             history.removeAll()
+            notifyHistoryUpdate()
         } catch {
             DebugLogger.log("❌ Failed to clear history: \(error)", level: .minimal)
         }
