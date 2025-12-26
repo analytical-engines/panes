@@ -7,12 +7,17 @@ class RarImageSource: ImageSource {
     private let rarReader: RarReader
     private let archiveURL: URL
 
+    /// パスワードが必要かどうか
+    var needsPassword: Bool {
+        return rarReader.needsPassword
+    }
+
     /// 進捗報告用のコールバック型
     typealias PhaseCallback = @Sendable (String) async -> Void
 
-    /// 非同期ファクトリメソッド（進捗報告付き）
-    static func create(url: URL, onPhaseChange: PhaseCallback? = nil) async -> RarImageSource? {
-        guard let reader = await RarReader.create(url: url, onPhaseChange: onPhaseChange) else {
+    /// 非同期ファクトリメソッド（進捗報告付き、パスワード対応）
+    static func create(url: URL, password: String? = nil, onPhaseChange: PhaseCallback? = nil) async -> RarImageSource? {
+        guard let reader = await RarReader.create(url: url, password: password, onPhaseChange: onPhaseChange) else {
             return nil
         }
         return RarImageSource(reader: reader, url: url)
@@ -24,9 +29,9 @@ class RarImageSource: ImageSource {
         self.archiveURL = url
     }
 
-    /// 同期的な初期化（後方互換性のため）
-    init?(url: URL) {
-        guard let reader = RarReader(url: url) else {
+    /// 同期的な初期化（後方互換性のため、パスワード対応）
+    init?(url: URL, password: String? = nil) {
+        guard let reader = RarReader(url: url, password: password) else {
             return nil
         }
         self.rarReader = reader

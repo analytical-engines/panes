@@ -181,6 +181,16 @@
 "error_cannot_open_file" = "Could not open file";
 "error_7z_unsupported_compression" = "This 7z file uses unsupported compression format";
 "error_image_load_failed_format" = "Failed to load image\nFile: %@\nPage: %d/%d";
+"error_wrong_password" = "Incorrect password";
+
+// MARK: - Password Dialog
+
+"password_dialog_title" = "Enter Password";
+"password_dialog_message" = "This archive is password protected";
+"password_dialog_placeholder" = "Password";
+"password_dialog_open" = "Open";
+"password_dialog_cancel" = "Cancel";
+"password_dialog_remember" = "Remember password";
 
 // MARK: - Page Settings Export/Import
 

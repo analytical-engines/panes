@@ -181,6 +181,16 @@
 "error_cannot_open_file" = "ファイルを開けませんでした";
 "error_7z_unsupported_compression" = "この7zファイルは未対応の圧縮形式です";
 "error_image_load_failed_format" = "画像の読み込みに失敗しました\nファイル: %@\nページ: %d/%d";
+"error_wrong_password" = "パスワードが正しくありません";
+
+// MARK: - Password Dialog
+
+"password_dialog_title" = "パスワードを入力";
+"password_dialog_message" = "このアーカイブはパスワードで保護されています";
+"password_dialog_placeholder" = "パスワード";
+"password_dialog_open" = "開く";
+"password_dialog_cancel" = "キャンセル";
+"password_dialog_remember" = "パスワードを保存";
 
 // MARK: - Page Settings Export/Import
 

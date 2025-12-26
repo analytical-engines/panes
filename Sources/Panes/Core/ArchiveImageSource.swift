@@ -7,12 +7,17 @@ class ArchiveImageSource: ImageSource {
     private let archiveReader: ArchiveReader
     private let archiveURL: URL
 
+    /// パスワードが必要かどうか
+    var needsPassword: Bool {
+        return archiveReader.needsPassword
+    }
+
     /// 進捗報告用のコールバック型
     typealias PhaseCallback = @Sendable (String) async -> Void
 
-    /// 非同期ファクトリメソッド（進捗報告付き）
-    static func create(url: URL, onPhaseChange: PhaseCallback? = nil) async -> ArchiveImageSource? {
-        guard let reader = await ArchiveReader.create(url: url, onPhaseChange: onPhaseChange) else {
+    /// 非同期ファクトリメソッド（進捗報告付き、パスワード対応）
+    static func create(url: URL, password: String? = nil, onPhaseChange: PhaseCallback? = nil) async -> ArchiveImageSource? {
+        guard let reader = await ArchiveReader.create(url: url, password: password, onPhaseChange: onPhaseChange) else {
             return nil
         }
         return ArchiveImageSource(reader: reader, url: url)

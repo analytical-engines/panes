@@ -933,6 +933,39 @@ struct ContentView: View {
                 }
             )
         }
+
+        // パスワード入力ダイアログ
+        if viewModel.showPasswordDialog,
+           let info = viewModel.passwordDialogInfo {
+            Color.black.opacity(0.3)
+                .ignoresSafeArea()
+                .onTapGesture { }  // 背景タップでは閉じない
+
+            PasswordDialog(
+                fileName: info.fileName,
+                errorMessage: info.errorMessage,
+                onSubmit: { password, shouldSave in
+                    viewModel.handlePasswordSubmit(password: password, shouldSave: shouldSave)
+                    // フォーカスを復元
+                    DispatchQueue.main.async {
+                        isMainViewFocused = true
+                    }
+                },
+                onCancel: {
+                    viewModel.handlePasswordCancel()
+                    // ローディング状態をリセット
+                    isWaitingForFile = false
+                    // キュー処理中の場合は完了を通知
+                    if sessionManager.isProcessing {
+                        sessionManager.windowDidFinishLoading(id: windowID)
+                    }
+                    // フォーカスを復元
+                    DispatchQueue.main.async {
+                        isMainViewFocused = true
+                    }
+                }
+            )
+        }
     }
 
     private func handleOnAppear() {

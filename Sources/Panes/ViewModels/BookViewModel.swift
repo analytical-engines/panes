@@ -391,6 +391,21 @@ class BookViewModel {
     /// ダイアログに表示する情報（ダイアログ表示中のみ有効）
     var fileIdentityDialogInfo: FileIdentityDialogInfo?
 
+    // MARK: - Password Dialog
+
+    /// パスワード入力ダイアログを表示するかどうか
+    var showPasswordDialog: Bool = false
+
+    /// パスワードダイアログ用の情報
+    struct PasswordDialogInfo {
+        let url: URL
+        let fileName: String
+        var errorMessage: String?
+    }
+
+    /// ダイアログに表示する情報（ダイアログ表示中のみ有効）
+    var passwordDialogInfo: PasswordDialogInfo?
+
     /// 現在開いているファイルのキー（セッション保存用）
     var currentFileKey: String? {
         imageSource?.generateFileKey()
@@ -564,7 +579,38 @@ class BookViewModel {
         let openSourceStart = CFAbsoluteTimeGetCurrent()
 
         guard source.imageCount > 0 else {
-            // 暗号化されたアーカイブかどうかをチェック
+            // パスワードが必要なアーカイブかどうかをチェック
+            if let archiveSource = source as? ArchiveImageSource,
+               archiveSource.needsPassword,
+               let url = source.sourceURL {
+                // Keychainに保存されたパスワードを試す
+                if let savedPassword = PasswordStorage.shared.getPassword(forArchive: url.path) {
+                    Task {
+                        await retryOpenWithPassword(url: url, password: savedPassword)
+                    }
+                } else {
+                    // パスワードダイアログを表示
+                    showPasswordDialogFor(url: url)
+                }
+                return
+            }
+
+            if let rarSource = source as? RarImageSource,
+               rarSource.needsPassword,
+               let url = source.sourceURL {
+                // Keychainに保存されたパスワードを試す
+                if let savedPassword = PasswordStorage.shared.getPassword(forArchive: url.path) {
+                    Task {
+                        await retryOpenWithPassword(url: url, password: savedPassword)
+                    }
+                } else {
+                    // パスワードダイアログを表示
+                    showPasswordDialogFor(url: url)
+                }
+                return
+            }
+
+            // 暗号化されているが画像が0の場合（パスワード未対応）
             if let archiveSource = source as? ArchiveImageSource,
                archiveSource.hasEncryptedEntries {
                 errorMessage = L("error_password_protected")
@@ -651,6 +697,75 @@ class BookViewModel {
 
         // 情報をクリア
         fileIdentityDialogInfo = nil
+    }
+
+    // MARK: - Password Dialog Methods
+
+    /// パスワードダイアログを表示
+    private func showPasswordDialogFor(url: URL, errorMessage: String? = nil) {
+        loadingPhase = nil  // ローディング状態をリセット
+        passwordDialogInfo = PasswordDialogInfo(
+            url: url,
+            fileName: url.lastPathComponent,
+            errorMessage: errorMessage
+        )
+        showPasswordDialog = true
+    }
+
+    /// パスワード入力をハンドル
+    /// - Parameters:
+    ///   - password: 入力されたパスワード
+    ///   - shouldSave: パスワードを保存するかどうか
+    func handlePasswordSubmit(password: String, shouldSave: Bool) {
+        guard let info = passwordDialogInfo else { return }
+
+        showPasswordDialog = false
+
+        Task {
+            let success = await retryOpenWithPassword(url: info.url, password: password)
+            if success && shouldSave {
+                // パスワードをKeychainに保存
+                try? PasswordStorage.shared.savePassword(password, forArchive: info.url.path)
+            }
+        }
+    }
+
+    /// パスワードダイアログをキャンセル
+    func handlePasswordCancel() {
+        showPasswordDialog = false
+        passwordDialogInfo = nil
+        loadingPhase = nil  // ローディング状態をリセット
+        errorMessage = L("error_password_protected")
+    }
+
+    /// パスワード付きでアーカイブを再度開く
+    @discardableResult
+    private func retryOpenWithPassword(url: URL, password: String) async -> Bool {
+        let ext = url.pathExtension.lowercased()
+        let source: ImageSource?
+
+        if ext == "zip" || ext == "cbz" {
+            source = await ArchiveImageSource.create(url: url, password: password)
+        } else if ext == "rar" || ext == "cbr" {
+            source = await RarImageSource.create(url: url, password: password)
+        } else {
+            source = nil
+        }
+
+        return await MainActor.run {
+            if let source = source, source.imageCount > 0 {
+                // 成功: ソースを開く
+                openSource(source)
+                return true
+            } else {
+                // 失敗: パスワードが間違っている可能性
+                // 保存されたパスワードを削除
+                try? PasswordStorage.shared.deletePassword(forArchive: url.path)
+                // エラーメッセージ付きでダイアログを再表示
+                showPasswordDialogFor(url: url, errorMessage: L("error_wrong_password"))
+                return false
+            }
+        }
     }
 
     /// ソースを開く処理の完了（共通部分）

@@ -1,22 +1,35 @@
 import Foundation
 import ZIPFoundation
+import ZipArchive
 import AppKit
 
 /// zipアーカイブから画像を読み込むクラス
 class ArchiveReader {
     private let archiveURL: URL
-    private let archive: Archive
+    private let archive: Archive?
     private(set) var imageEntries: [Entry] = []
 
     /// 暗号化されたエントリが存在するか（スキップされたエントリがある場合true）
     private(set) var hasEncryptedEntries: Bool = false
 
+    /// パスワードが必要かどうか（暗号化されていて画像が0の場合）
+    private(set) var needsPassword: Bool = false
+
+    /// パスワード付きZIP用のデータ（SSZipArchive使用時）
+    private var tempDirectoryURL: URL?
+    private var extractedImagePaths: [String] = []
+
     /// 進捗報告用のコールバック型
     typealias PhaseCallback = @Sendable (String) async -> Void
 
-    /// 非同期ファクトリメソッド（進捗報告付き）
-    static func create(url: URL, onPhaseChange: PhaseCallback? = nil) async -> ArchiveReader? {
+    /// 非同期ファクトリメソッド（進捗報告付き、パスワード対応）
+    static func create(url: URL, password: String? = nil, onPhaseChange: PhaseCallback? = nil) async -> ArchiveReader? {
         let startTime = CFAbsoluteTimeGetCurrent()
+
+        // パスワードが指定されている場合はSwiftMiniZipを使用
+        if let password = password {
+            return await createWithPassword(url: url, password: password, onPhaseChange: onPhaseChange)
+        }
 
         // フェーズ1: アーカイブを開く
         await onPhaseChange?(L("loading_phase_opening_archive"))
@@ -41,26 +54,143 @@ class ArchiveReader {
 
         // 暗号化エントリのチェック
         var hasEncryptedEntries = false
+        var needsPassword = false
         if let totalEntries = readTotalEntriesFromZip(url: url) {
             let accessibleEntries = archive.reduce(0) { count, _ in count + 1 }
             if totalEntries > accessibleEntries {
                 hasEncryptedEntries = true
                 print("⚠️ Encrypted entries detected: \(totalEntries) total, \(accessibleEntries) accessible")
+
+                // 画像が0の場合はパスワードが必要
+                if imageEntries.isEmpty {
+                    needsPassword = true
+                    print("🔐 Password required to access encrypted archive")
+                }
             }
         }
 
         let totalTime = CFAbsoluteTimeGetCurrent() - startTime
         print("⏱️ Total init time: \(String(format: "%.3f", totalTime))s")
 
-        return ArchiveReader(url: url, archive: archive, imageEntries: imageEntries, hasEncryptedEntries: hasEncryptedEntries)
+        return ArchiveReader(url: url, archive: archive, imageEntries: imageEntries,
+                            hasEncryptedEntries: hasEncryptedEntries, needsPassword: needsPassword)
     }
 
-    /// 内部初期化（ファクトリメソッドから呼ばれる）
-    private init(url: URL, archive: Archive, imageEntries: [Entry], hasEncryptedEntries: Bool) {
+    /// パスワード付きでアーカイブを開く（SSZipArchive使用）
+    private static func createWithPassword(url: URL, password: String, onPhaseChange: PhaseCallback? = nil) async -> ArchiveReader? {
+        let startTime = CFAbsoluteTimeGetCurrent()
+
+        await onPhaseChange?(L("loading_phase_opening_archive"))
+
+        // 一時ディレクトリを作成
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        do {
+            try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        } catch {
+            print("ERROR: Failed to create temp directory: \(error)")
+            return nil
+        }
+
+        await onPhaseChange?(L("loading_phase_extracting_images"))
+
+        // SSZipArchiveで展開
+        do {
+            try SSZipArchive.unzipFile(
+                atPath: url.path,
+                toDestination: tempDir.path,
+                overwrite: true,
+                password: password
+            )
+        } catch {
+            print("ERROR: Failed to extract password-protected archive: \(error)")
+            // 一時ディレクトリを削除
+            try? FileManager.default.removeItem(at: tempDir)
+            // パスワードが間違っている場合
+            return ArchiveReader(url: url, needsPassword: true, wrongPassword: true)
+        }
+
+        await onPhaseChange?(L("loading_phase_building_image_list"))
+
+        // 画像ファイルを検索（同期的に実行）
+        let imagePaths = findImageFiles(in: tempDir)
+
+        let totalTime = CFAbsoluteTimeGetCurrent() - startTime
+        print("⏱️ Total init time (with password): \(String(format: "%.3f", totalTime))s, \(imagePaths.count) images")
+
+        if imagePaths.isEmpty {
+            // 画像が見つからない場合、一時ディレクトリを削除
+            try? FileManager.default.removeItem(at: tempDir)
+            return nil
+        }
+
+        return ArchiveReader(url: url, tempDirectory: tempDir, extractedImagePaths: imagePaths)
+    }
+
+    /// ディレクトリ内の画像ファイルを検索（同期メソッド）
+    private static func findImageFiles(in directory: URL) -> [String] {
+        let imageExtensions = Set(["jpg", "jpeg", "png", "gif", "webp", "jp2", "j2k"])
+        var imagePaths: [String] = []
+
+        guard let enumerator = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: nil) else {
+            return []
+        }
+
+        while let fileURL = enumerator.nextObject() as? URL {
+            let path = fileURL.path
+            let fileName = fileURL.lastPathComponent
+
+            // 隠しファイルやMac固有ファイルをスキップ
+            guard !path.contains("__MACOSX"),
+                  !fileName.hasPrefix("._"),
+                  !fileName.hasPrefix(".") else {
+                continue
+            }
+
+            let ext = fileURL.pathExtension.lowercased()
+            if imageExtensions.contains(ext) {
+                imagePaths.append(path)
+            }
+        }
+
+        // ソート
+        imagePaths.sort { $0.localizedStandardCompare($1) == .orderedAscending }
+        return imagePaths
+    }
+
+    /// 内部初期化（ファクトリメソッドから呼ばれる）- 通常のZIPFoundation用
+    private init(url: URL, archive: Archive, imageEntries: [Entry], hasEncryptedEntries: Bool, needsPassword: Bool = false) {
         self.archiveURL = url
         self.archive = archive
         self.imageEntries = imageEntries
         self.hasEncryptedEntries = hasEncryptedEntries
+        self.needsPassword = needsPassword
+    }
+
+    /// パスワード付きアーカイブ用の初期化（SSZipArchive使用）
+    private init(url: URL, tempDirectory: URL, extractedImagePaths: [String]) {
+        self.archiveURL = url
+        self.archive = nil
+        self.tempDirectoryURL = tempDirectory
+        self.extractedImagePaths = extractedImagePaths
+        self.hasEncryptedEntries = true
+        self.needsPassword = false
+    }
+
+    deinit {
+        // 一時ディレクトリをクリーンアップ
+        if let tempDir = tempDirectoryURL {
+            try? FileManager.default.removeItem(at: tempDir)
+            print("🗑️ Cleaned up temp directory: \(tempDir.path)")
+        }
+    }
+
+    /// パスワードが必要な場合 or 間違ったパスワードの場合の初期化
+    private init(url: URL, needsPassword: Bool, wrongPassword: Bool = false) {
+        self.archiveURL = url
+        self.archive = nil
+        self.needsPassword = needsPassword
+        self.hasEncryptedEntries = true
+        // wrongPasswordの場合はimageCountが0になるのでエラーとして扱われる
     }
 
     /// 同期的な初期化（後方互換性のため）
@@ -70,8 +200,10 @@ class ArchiveReader {
 
         // zipアーカイブを開く
         let openStart = CFAbsoluteTimeGetCurrent()
+        let openedArchive: Archive
         do {
-            self.archive = try Archive(url: url, accessMode: .read)
+            openedArchive = try Archive(url: url, accessMode: .read)
+            self.archive = openedArchive
         } catch {
             return nil
         }
@@ -80,7 +212,7 @@ class ArchiveReader {
 
         // 画像ファイルのみを抽出してソート
         let extractStart = CFAbsoluteTimeGetCurrent()
-        self.imageEntries = Self.extractImageEntries(from: archive)
+        self.imageEntries = Self.extractImageEntries(from: openedArchive)
         let extractTime = CFAbsoluteTimeGetCurrent() - extractStart
         print("⏱️ Extract & sort time: \(String(format: "%.3f", extractTime))s")
 
@@ -88,9 +220,10 @@ class ArchiveReader {
         // ZIPFoundationは暗号化されたエントリをスキップするため、
         // 全エントリ数とアクセス可能なエントリ数を比較
         if let totalEntries = Self.readTotalEntriesFromZip(url: url) {
-            let accessibleEntries = archive.reduce(0) { count, _ in count + 1 }
+            let accessibleEntries = openedArchive.reduce(0) { count, _ in count + 1 }
             if totalEntries > accessibleEntries {
                 self.hasEncryptedEntries = true
+                self.needsPassword = self.imageEntries.isEmpty
                 print("⚠️ Encrypted entries detected: \(totalEntries) total, \(accessibleEntries) accessible")
             }
         }
@@ -174,6 +307,15 @@ class ArchiveReader {
 
     /// 指定されたインデックスの画像を読み込む
     func loadImage(at index: Int) -> NSImage? {
+        // パスワード付きアーカイブの場合（展開済みファイルから読み込み）
+        if !extractedImagePaths.isEmpty {
+            return loadExtractedImage(at: index)
+        }
+
+        guard let archive = archive else {
+            print("ERROR: Archive not available")
+            return nil
+        }
         guard index >= 0 && index < imageEntries.count else {
             print("ERROR: Index out of range: \(index) (total: \(imageEntries.count))")
             return nil
@@ -204,8 +346,34 @@ class ArchiveReader {
         }
     }
 
+    /// 展開済みファイルから画像を読み込む（パスワード付きアーカイブ用）
+    private func loadExtractedImage(at index: Int) -> NSImage? {
+        guard index >= 0 && index < extractedImagePaths.count else {
+            print("ERROR: Index out of range: \(index) (total: \(extractedImagePaths.count))")
+            return nil
+        }
+
+        let path = extractedImagePaths[index]
+        print("Loading extracted image: \(path)")
+
+        guard let image = NSImage(contentsOfFile: path) else {
+            print("ERROR: Failed to load image from file: \(path)")
+            return nil
+        }
+
+        print("Successfully loaded extracted image: \(path)")
+        return image
+    }
+
     /// 指定されたインデックスの画像データを取得
     func imageData(at index: Int) -> Data? {
+        // パスワード付きアーカイブの場合（展開済みファイルから読み込み）
+        if !extractedImagePaths.isEmpty {
+            guard index >= 0 && index < extractedImagePaths.count else { return nil }
+            return try? Data(contentsOf: URL(fileURLWithPath: extractedImagePaths[index]))
+        }
+
+        guard let archive = archive else { return nil }
         guard index >= 0 && index < imageEntries.count else {
             return nil
         }
@@ -225,11 +393,21 @@ class ArchiveReader {
 
     /// 画像の総数
     var imageCount: Int {
+        // パスワード付きアーカイブの場合はextractedImagePathsを使用
+        if !extractedImagePaths.isEmpty {
+            return extractedImagePaths.count
+        }
         return imageEntries.count
     }
 
     /// 指定されたインデックスのファイル名
     func fileName(at index: Int) -> String? {
+        // パスワード付きアーカイブの場合
+        if !extractedImagePaths.isEmpty {
+            guard index >= 0 && index < extractedImagePaths.count else { return nil }
+            return (extractedImagePaths[index] as NSString).lastPathComponent
+        }
+
         guard index >= 0 && index < imageEntries.count else {
             return nil
         }
@@ -238,6 +416,26 @@ class ArchiveReader {
 
     /// 指定されたインデックスの画像サイズを取得（画像全体を読み込まずに）
     func imageSize(at index: Int) -> CGSize? {
+        // パスワード付きアーカイブの場合（展開済みファイルから読み込み）
+        if !extractedImagePaths.isEmpty {
+            guard index >= 0 && index < extractedImagePaths.count else { return nil }
+            let path = extractedImagePaths[index]
+            if let image = NSImage(contentsOfFile: path) {
+                if let rep = image.representations.first {
+                    let width = rep.pixelsWide
+                    let height = rep.pixelsHigh
+                    if width > 0 && height > 0 {
+                        return CGSize(width: width, height: height)
+                    }
+                }
+                if image.size.width > 0 && image.size.height > 0 {
+                    return image.size
+                }
+            }
+            return nil
+        }
+
+        guard let archive = archive else { return nil }
         guard index >= 0 && index < imageEntries.count else {
             return nil
         }
@@ -305,6 +503,18 @@ class ArchiveReader {
 
     /// 指定されたインデックスの画像ファイルサイズを取得
     func fileSize(at index: Int) -> Int64? {
+        // パスワード付きアーカイブの場合（展開済みファイルから取得）
+        if !extractedImagePaths.isEmpty {
+            guard index >= 0 && index < extractedImagePaths.count else { return nil }
+            let path = extractedImagePaths[index]
+            do {
+                let attrs = try FileManager.default.attributesOfItem(atPath: path)
+                return attrs[.size] as? Int64
+            } catch {
+                return nil
+            }
+        }
+
         guard index >= 0 && index < imageEntries.count else {
             return nil
         }
@@ -313,11 +523,23 @@ class ArchiveReader {
 
     /// 指定されたインデックスの画像フォーマットを取得
     func imageFormat(at index: Int) -> String? {
+        // パスワード付きアーカイブの場合
+        if !extractedImagePaths.isEmpty {
+            guard index >= 0 && index < extractedImagePaths.count else { return nil }
+            let path = extractedImagePaths[index]
+            let ext = (path as NSString).pathExtension.lowercased()
+            return formatFromExtension(ext)
+        }
+
         guard index >= 0 && index < imageEntries.count else {
             return nil
         }
         let path = imageEntries[index].path
         let ext = (path as NSString).pathExtension.lowercased()
+        return formatFromExtension(ext)
+    }
+
+    private func formatFromExtension(_ ext: String) -> String {
 
         switch ext {
         case "jpg", "jpeg":

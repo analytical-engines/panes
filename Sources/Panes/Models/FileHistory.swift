@@ -1212,6 +1212,8 @@ class FileHistoryManager {
             )
             let toDelete = try context.fetch(descriptor)
             for item in toDelete {
+                // 関連するパスワードも削除
+                try? PasswordStorage.shared.deletePassword(forArchive: item.filePath)
                 context.delete(item)
             }
             try context.save()
@@ -1236,6 +1238,8 @@ class FileHistoryManager {
             let toDelete = try context.fetch(descriptor)
 
             for item in toDelete {
+                // 関連するパスワードも削除
+                try? PasswordStorage.shared.deletePassword(forArchive: item.filePath)
                 context.delete(item)
             }
             try context.save()
@@ -1256,6 +1260,8 @@ class FileHistoryManager {
             let descriptor = FetchDescriptor<FileHistoryData>()
             let all = try context.fetch(descriptor)
             for item in all {
+                // 関連するパスワードも削除
+                try? PasswordStorage.shared.deletePassword(forArchive: item.filePath)
                 context.delete(item)
             }
             try context.save()

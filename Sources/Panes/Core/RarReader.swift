@@ -5,14 +5,16 @@ import AppKit
 /// RARアーカイブから画像を読み込むクラス
 class RarReader {
     private let archiveURL: URL
-    private let archive: Archive
+    private let archive: Archive?
     private(set) var imageEntries: [Entry] = []
+    /// パスワードが必要かどうか
+    private(set) var needsPassword: Bool = false
 
     /// 進捗報告用のコールバック型
     typealias PhaseCallback = @Sendable (String) async -> Void
 
-    /// 非同期ファクトリメソッド（進捗報告付き）
-    static func create(url: URL, onPhaseChange: PhaseCallback? = nil) async -> RarReader? {
+    /// 非同期ファクトリメソッド（進捗報告付き、パスワード対応）
+    static func create(url: URL, password: String? = nil, onPhaseChange: PhaseCallback? = nil) async -> RarReader? {
         let startTime = CFAbsoluteTimeGetCurrent()
 
         // フェーズ1: アーカイブを開く
@@ -21,8 +23,16 @@ class RarReader {
         let openStart = CFAbsoluteTimeGetCurrent()
         let archive: Archive
         do {
-            archive = try Archive(path: url.path)
+            archive = try Archive(path: url.path, password: password)
         } catch {
+            let errorString = String(describing: error)
+            // パスワードが必要な場合のエラー検出
+            if errorString.contains("password") || errorString.contains("Password") ||
+               errorString.contains("encrypted") || errorString.contains("missingPassword") {
+                print("⚠️ RAR archive requires password: \(url.lastPathComponent)")
+                // パスワードが必要なことを示すためのダミーRarReaderを返す
+                return RarReader(url: url, needsPassword: true)
+            }
             print("ERROR: Failed to open RAR archive: \(error)")
             return nil
         }
@@ -37,6 +47,14 @@ class RarReader {
         do {
             imageEntries = try extractImageEntries(from: archive)
         } catch {
+            let errorString = String(describing: error)
+            // 展開時にパスワードエラーが発生することもある
+            if errorString.contains("password") || errorString.contains("Password") ||
+               errorString.contains("encrypted") || errorString.contains("CRC") ||
+               errorString.contains("missingPassword") {
+                print("⚠️ RAR archive requires password (detected during extraction): \(url.lastPathComponent)")
+                return RarReader(url: url, needsPassword: true)
+            }
             print("ERROR: Failed to extract entries: \(error)")
             return nil
         }
@@ -54,18 +72,36 @@ class RarReader {
         self.archiveURL = url
         self.archive = archive
         self.imageEntries = imageEntries
+        self.needsPassword = false
     }
 
-    /// 同期的な初期化（後方互換性のため）
-    init?(url: URL) {
+    /// パスワードが必要な場合の初期化
+    private init(url: URL, needsPassword: Bool) {
+        self.archiveURL = url
+        self.archive = nil
+        self.imageEntries = []
+        self.needsPassword = needsPassword
+    }
+
+    /// 同期的な初期化（後方互換性のため、パスワード対応）
+    init?(url: URL, password: String? = nil) {
         let startTime = CFAbsoluteTimeGetCurrent()
         self.archiveURL = url
 
         // RARアーカイブを開く
         let openStart = CFAbsoluteTimeGetCurrent()
         do {
-            self.archive = try Archive(path: url.path)
+            self.archive = try Archive(path: url.path, password: password)
         } catch {
+            let errorString = String(describing: error)
+            if errorString.contains("password") || errorString.contains("Password") ||
+               errorString.contains("encrypted") || errorString.contains("missingPassword") {
+                // パスワードが必要な場合、needsPassword = true で初期化
+                self.archive = nil
+                self.needsPassword = true
+                print("⚠️ RAR archive requires password: \(url.lastPathComponent)")
+                return
+            }
             print("ERROR: Failed to open RAR archive: \(error)")
             return nil
         }
@@ -75,8 +111,16 @@ class RarReader {
         // 画像ファイルのみを抽出してソート
         let extractStart = CFAbsoluteTimeGetCurrent()
         do {
-            self.imageEntries = try Self.extractImageEntries(from: archive)
+            self.imageEntries = try Self.extractImageEntries(from: archive!)
         } catch {
+            let errorString = String(describing: error)
+            if errorString.contains("password") || errorString.contains("Password") ||
+               errorString.contains("encrypted") || errorString.contains("CRC") ||
+               errorString.contains("missingPassword") {
+                self.needsPassword = true
+                print("⚠️ RAR archive requires password (detected during extraction): \(url.lastPathComponent)")
+                return
+            }
             print("ERROR: Failed to extract entries: \(error)")
             return nil
         }
@@ -131,6 +175,10 @@ class RarReader {
 
     /// 指定されたインデックスの画像を読み込む
     func loadImage(at index: Int) -> NSImage? {
+        guard let archive = archive else {
+            print("ERROR: Archive not available (password required?)")
+            return nil
+        }
         guard index >= 0 && index < imageEntries.count else {
             print("ERROR: Index out of range: \(index) (total: \(imageEntries.count))")
             return nil
@@ -160,6 +208,7 @@ class RarReader {
 
     /// 指定されたインデックスの画像データを取得
     func imageData(at index: Int) -> Data? {
+        guard let archive = archive else { return nil }
         guard index >= 0 && index < imageEntries.count else {
             return nil
         }
@@ -188,6 +237,7 @@ class RarReader {
 
     /// 指定されたインデックスの画像サイズを取得
     func imageSize(at index: Int) -> CGSize? {
+        guard let archive = archive else { return nil }
         guard index >= 0 && index < imageEntries.count else {
             return nil
         }
