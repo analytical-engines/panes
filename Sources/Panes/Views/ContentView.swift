@@ -980,6 +980,10 @@ struct ContentView: View {
             setupNotificationObservers()
             setupSessionObservers()
         }
+
+        // 起動時のバックグラウンドアクセス可否チェックを開始（一度だけ実行）
+        historyManager.startInitialAccessibilityCheck()
+        imageCatalogManager.startInitialAccessibilityCheck()
     }
 
     /// ウィンドウフレーム変更の監視を設定

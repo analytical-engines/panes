@@ -134,6 +134,12 @@ class ImageCatalogManager {
     /// isAccessibleのキャッシュ
     private var accessibilityCache: [String: Bool] = [:]
 
+    /// バックグラウンドチェックが実行中かどうか
+    private(set) var isBackgroundCheckRunning: Bool = false
+
+    /// 起動時のバックグラウンドチェックを実行済みかどうか
+    private var hasPerformedInitialCheck: Bool = false
+
     func isAccessible(for entry: ImageCatalogEntry) -> Bool {
         if let cached = accessibilityCache[entry.filePath] {
             return cached
@@ -145,6 +151,59 @@ class ImageCatalogManager {
 
     func clearAccessibilityCache() {
         accessibilityCache.removeAll()
+    }
+
+    /// 起動時のバックグラウンドチェックを開始（一度だけ実行）
+    func startInitialAccessibilityCheck() {
+        guard !hasPerformedInitialCheck else { return }
+        hasPerformedInitialCheck = true
+        startBackgroundAccessibilityCheck()
+    }
+
+    /// 全カタログのアクセス可否をバックグラウンドで再チェック開始
+    func startBackgroundAccessibilityCheck() {
+        // 全パスのコピーを取得（並行アクセス問題を回避）
+        let pathsToCheck = catalog.map { $0.filePath }
+        DebugLogger.log("🔄 Starting background catalog accessibility check: \(pathsToCheck.count) entries", level: .normal)
+
+        guard !pathsToCheck.isEmpty else { return }
+        isBackgroundCheckRunning = true
+
+        Task.detached(priority: .background) { [weak self] in
+            await self?.performBackgroundCheck(paths: pathsToCheck)
+        }
+    }
+
+    /// バックグラウンドでアクセス可否をチェック
+    private func performBackgroundCheck(paths: [String]) async {
+        var changedCount = 0
+
+        for path in paths {
+            let newValue = FileManager.default.fileExists(atPath: path)
+
+            await MainActor.run {
+                let oldValue = accessibilityCache[path]
+                accessibilityCache[path] = newValue
+
+                if oldValue != newValue {
+                    changedCount += 1
+                    DebugLogger.log("📁 Catalog accessibility changed: \(path) -> \(newValue)", level: .verbose)
+                }
+            }
+
+            // 少し間隔を空けて負荷を分散
+            try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
+        }
+
+        await MainActor.run {
+            isBackgroundCheckRunning = false
+            if changedCount > 0 {
+                DebugLogger.log("🔄 Background catalog check completed: \(changedCount) changes", level: .normal)
+                notifyCatalogUpdate()
+            } else {
+                DebugLogger.log("🔄 Background catalog check completed: no changes", level: .normal)
+            }
+        }
     }
 
     init() {

@@ -124,6 +124,7 @@
 "menu_show_history" = "Show History";
 "menu_show_history_toggle" = "Show History";
 "menu_hide_history" = "Hide History";
+"menu_refresh_history" = "Refresh History";
 "menu_single_view" = "Single View";
 "menu_spread_view" = "Spread View";
 "menu_reading_direction_rtl" = "Page Direction: Right to Left";

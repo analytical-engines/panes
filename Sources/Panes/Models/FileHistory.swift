@@ -193,6 +193,12 @@ class FileHistoryManager {
     /// isAccessibleのキャッシュ（filePath -> isAccessible）
     private var accessibilityCache: [String: Bool] = [:]
 
+    /// バックグラウンドチェックが実行中かどうか
+    private(set) var isBackgroundCheckRunning: Bool = false
+
+    /// 起動時のバックグラウンドチェックを実行済みかどうか
+    private var hasPerformedInitialCheck: Bool = false
+
     /// キャッシュ済みのisAccessibleを取得（未キャッシュならチェックしてキャッシュ）
     func isAccessible(for entry: FileHistoryEntry) -> Bool {
         if let cached = accessibilityCache[entry.filePath] {
@@ -207,6 +213,59 @@ class FileHistoryManager {
     /// アクセシビリティキャッシュをクリア（履歴更新時など）
     func clearAccessibilityCache() {
         accessibilityCache.removeAll()
+    }
+
+    /// 起動時のバックグラウンドチェックを開始（一度だけ実行）
+    func startInitialAccessibilityCheck() {
+        guard !hasPerformedInitialCheck else { return }
+        hasPerformedInitialCheck = true
+        startBackgroundAccessibilityCheck()
+    }
+
+    /// 全履歴のアクセス可否をバックグラウンドで再チェック開始
+    func startBackgroundAccessibilityCheck() {
+        // 全パスのコピーを取得（並行アクセス問題を回避）
+        let pathsToCheck = history.map { $0.filePath }
+        DebugLogger.log("🔄 Starting background accessibility check: \(pathsToCheck.count) entries", level: .normal)
+
+        guard !pathsToCheck.isEmpty else { return }
+        isBackgroundCheckRunning = true
+
+        Task.detached(priority: .background) { [weak self] in
+            await self?.performBackgroundCheck(paths: pathsToCheck)
+        }
+    }
+
+    /// バックグラウンドでアクセス可否をチェック
+    private func performBackgroundCheck(paths: [String]) async {
+        var changedCount = 0
+
+        for path in paths {
+            let newValue = FileManager.default.fileExists(atPath: path)
+
+            await MainActor.run {
+                let oldValue = accessibilityCache[path]
+                accessibilityCache[path] = newValue
+
+                if oldValue != newValue {
+                    changedCount += 1
+                    DebugLogger.log("📁 Accessibility changed: \(path) -> \(newValue)", level: .verbose)
+                }
+            }
+
+            // 少し間隔を空けて負荷を分散
+            try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
+        }
+
+        await MainActor.run {
+            isBackgroundCheckRunning = false
+            if changedCount > 0 {
+                DebugLogger.log("🔄 Background check completed: \(changedCount) changes", level: .normal)
+                notifyHistoryUpdate()
+            } else {
+                DebugLogger.log("🔄 Background check completed: no changes", level: .normal)
+            }
+        }
     }
 
     /// SwiftDataが正常に初期化されたかどうか

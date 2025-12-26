@@ -124,6 +124,7 @@
 "menu_show_history" = "履歴を表示";
 "menu_show_history_toggle" = "履歴を表示";
 "menu_hide_history" = "履歴を非表示";
+"menu_refresh_history" = "履歴を更新";
 "menu_single_view" = "単ページ表示";
 "menu_spread_view" = "見開き表示";
 "menu_reading_direction_rtl" = "ページ方向: 右から左";

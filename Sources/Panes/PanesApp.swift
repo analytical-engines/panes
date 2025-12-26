@@ -147,6 +147,14 @@ struct ImageViewerApp: App {
                 ))
                 .keyboardShortcut("h", modifiers: [.command, .shift])
 
+                Button(action: {
+                    historyManager.startBackgroundAccessibilityCheck()
+                    imageCatalogManager.startBackgroundAccessibilityCheck()
+                }) {
+                    Label(L("menu_refresh_history"), systemImage: "arrow.clockwise")
+                }
+                .keyboardShortcut("r", modifiers: [.command])
+
                 Divider()
 
                 Button(action: {
