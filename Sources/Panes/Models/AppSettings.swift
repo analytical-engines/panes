@@ -358,4 +358,7 @@ class AppSettings {
 extension Notification.Name {
     /// 横長判定の閾値が変更された
     static let landscapeThresholdDidChange = Notification.Name("landscapeThresholdDidChange")
+
+    /// ウィンドウがフォーカスを得た（userInfo["windowNumber"]にウィンドウ番号）
+    static let windowDidBecomeKey = Notification.Name("windowDidBecomeKey")
 }

@@ -74,8 +74,8 @@ struct ImageViewerApp: App {
         .commands {
             // ファイルメニューにClose/履歴Export/Importを追加
             CommandGroup(after: .newItem) {
-                // historyVersionを監視することで、ファイル開閉時にメニュー状態が更新される
-                let _ = historyManager.historyVersion
+                // Note: .disabled()はAppDelegateのmenuNeedsUpdateで動的に制御
+                // SwiftUIのCommands内でObservableを監視すると全ウィンドウ再描画が発生するため
 
                 Button(action: {
                     focusedViewModel?.closeFile()
@@ -83,7 +83,6 @@ struct ImageViewerApp: App {
                     Label(L("menu_close_file"), systemImage: "xmark")
                 }
                 .keyboardShortcut("w", modifiers: [.command, .shift])
-                .disabled(focusedViewModel?.hasOpenFile != true)
 
                 Button(action: {
                     editCurrentFileMemo()
@@ -91,7 +90,6 @@ struct ImageViewerApp: App {
                     Label(L("menu_edit_memo"), systemImage: "square.and.pencil")
                 }
                 .keyboardShortcut("m", modifiers: [.command, .shift])
-                .disabled(focusedViewModel?.hasOpenFile != true)
 
                 Divider()
 
@@ -101,14 +99,12 @@ struct ImageViewerApp: App {
                     }) {
                         Label(L("menu_export_page_settings"), systemImage: "square.and.arrow.up")
                     }
-                    .disabled(focusedViewModel?.hasOpenFile != true)
 
                     Button(action: {
                         importPageSettings()
                     }) {
                         Label(L("menu_import_page_settings"), systemImage: "square.and.arrow.down")
                     }
-                    .disabled(focusedViewModel?.hasOpenFile != true)
                 }
 
                 Menu(L("menu_history")) {
@@ -563,7 +559,7 @@ struct ImageViewerApp: App {
 
 // アプリケーションデリゲート
 @MainActor
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var sessionManager: SessionManager?
     var appSettings: AppSettings?
 
@@ -576,6 +572,61 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if let sessionManager = self?.sessionManager,
                let appSettings = self?.appSettings {
                 sessionManager.concurrentLoadingLimit = appSettings.concurrentLoadingLimit
+            }
+        }
+
+        // ファイルメニューのデリゲートを設定（メニュー表示時に状態を更新するため）
+        // SwiftUIのメニュー構築が完了するまで少し待つ
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.setupFileMenuDelegate()
+        }
+    }
+
+    /// ファイルメニューのデリゲートを設定
+    private func setupFileMenuDelegate() {
+        guard let mainMenu = NSApp.mainMenu else {
+            DebugLogger.log("📁 setupFileMenuDelegate: mainMenu is nil", level: .normal)
+            return
+        }
+        // "File" メニューを探す（ローカライズ対応のため複数の名前をチェック）
+        let fileMenuNames = ["File", "ファイル"]
+        for menuItem in mainMenu.items {
+            if let submenu = menuItem.submenu,
+               fileMenuNames.contains(submenu.title) || fileMenuNames.contains(menuItem.title) {
+                submenu.delegate = self
+                // 自動有効化を無効にして手動で制御する
+                submenu.autoenablesItems = false
+                DebugLogger.log("📁 File menu delegate set, autoenablesItems=false", level: .normal)
+                return
+            }
+        }
+        DebugLogger.log("📁 setupFileMenuDelegate: File menu not found in \(mainMenu.items.map { $0.title })", level: .normal)
+    }
+
+    // MARK: - NSMenuDelegate
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        // メニューが表示される直前に呼ばれる
+        let hasOpenFile = WindowCoordinator.shared.keyWindowHasOpenFile
+        DebugLogger.log("📁 menuNeedsUpdate: hasOpenFile=\(hasOpenFile), items=\(menu.items.map { $0.title })", level: .normal)
+
+        // 「ファイルを閉じる」と「メモを編集」の有効/無効を更新
+        let closeFileTitle = L("menu_close_file")
+        let editMemoTitle = L("menu_edit_memo")
+
+        for item in menu.items {
+            if item.title == closeFileTitle || item.title == editMemoTitle {
+                DebugLogger.log("📁 Setting '\(item.title)' isEnabled=\(hasOpenFile)", level: .normal)
+                item.isEnabled = hasOpenFile
+            }
+            // サブメニューも確認（ページ設定メニュー内の項目）
+            if let submenu = item.submenu {
+                let pageSettingsTitle = L("menu_page_settings")
+                if item.title == pageSettingsTitle {
+                    for subItem in submenu.items {
+                        subItem.isEnabled = hasOpenFile
+                    }
+                }
             }
         }
     }

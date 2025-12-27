@@ -18,6 +18,11 @@ final class WindowCoordinator {
     /// 現在アクティブなウィンドウ番号（markAsActiveで明示的に設定）
     private var activeWindowNumber: Int?
 
+    /// フォーカス通知のデバウンス用（ウィンドウ番号 -> 最終通知時刻）
+    private var lastFocusNotificationTime: [Int: Date] = [:]
+    /// デバウンス間隔（秒）- 外部アプリからの復帰時の連続イベントをフィルタ
+    private let focusDebounceInterval: TimeInterval = 0.5
+
     private init() {}
 
     // MARK: - Registration
@@ -104,6 +109,21 @@ final class WindowCoordinator {
     /// キーウィンドウがファイルを開いているかどうか
     var keyWindowHasOpenFile: Bool {
         keyWindowViewModel?.hasOpenFile ?? false
+    }
+
+    /// フォーカス通知を送信すべきかチェック（デバウンス）
+    /// - Returns: trueなら通知を送信すべき、falseなら無視すべき
+    func shouldPostFocusNotification(for windowNumber: Int) -> Bool {
+        let now = Date()
+        if let lastTime = lastFocusNotificationTime[windowNumber] {
+            let elapsed = now.timeIntervalSince(lastTime)
+            if elapsed < focusDebounceInterval {
+                DebugLogger.log("⏱️ Debounce: window \(windowNumber) skipped (elapsed: \(Int(elapsed * 1000))ms < \(Int(focusDebounceInterval * 1000))ms)", level: .normal)
+                return false
+            }
+        }
+        lastFocusNotificationTime[windowNumber] = now
+        return true
     }
 
     /// 現在の登録状態をログ出力（デバッグ用）

@@ -599,7 +599,6 @@ struct ContentView: View {
     }
 
     var body: some View {
-        let _ = DebugLogger.log("🔄 ContentView body: windowID=\(windowID), isMainViewFocused=\(isMainViewFocused)", level: .verbose)
         ZStack {
             Color.black
                 .ignoresSafeArea()
@@ -863,6 +862,16 @@ struct ContentView: View {
             }
             return .ignored
         }
+        .onReceive(NotificationCenter.default.publisher(for: .windowDidBecomeKey)) { notification in
+            let start = CFAbsoluteTimeGetCurrent()
+            // 自分のウィンドウがフォーカスを得た場合のみ履歴を更新
+            guard let windowNumber = notification.userInfo?["windowNumber"] as? Int,
+                  windowNumber == myWindowNumber else { return }
+            // scrollTrigger をインクリメントして HistoryListView を再描画
+            scrollTrigger += 1
+            let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000
+            DebugLogger.log("⏱️ onReceive scrollTrigger update: \(String(format: "%.1f", elapsed))ms", level: .normal)
+        }
         .overlay { modalOverlays }
     }
 
@@ -1015,8 +1024,9 @@ struct ContentView: View {
         }
 
         // 起動時のバックグラウンドアクセス可否チェックを開始（一度だけ実行）
-        historyManager.startInitialAccessibilityCheck()
-        imageCatalogManager.startInitialAccessibilityCheck()
+        // Note: レイテンシ調査のため一時的に無効化
+        // historyManager.startInitialAccessibilityCheck()
+        // imageCatalogManager.startInitialAccessibilityCheck()
     }
 
     /// ウィンドウフレーム変更の監視を設定
@@ -1056,7 +1066,7 @@ struct ContentView: View {
             }
         }
 
-        // ウィンドウがフォーカスされた時の処理
+        // ウィンドウがフォーカスされた時に履歴/カタログを更新
         let viewModel = self.viewModel
         let historyManager = self.historyManager
         let imageCatalogManager = self.imageCatalogManager
@@ -1067,14 +1077,25 @@ struct ContentView: View {
             queue: .main
         ) { _ in
             MainActor.assumeIsolated {
+                let focusStart = CFAbsoluteTimeGetCurrent()
                 // このウィンドウをアクティブとしてマーク
                 WindowCoordinator.shared.markAsActive(windowNumber: windowNumber)
 
-                // 初期画面を表示中（ファイルを開いていない）場合のみ更新
+                // 初期画面を表示中（ファイルを開いていない）場合のみ履歴を更新
+                // 通知を発行し、該当ウィンドウのみが .onReceive で受け取って更新する
+                // デバウンス: 500ms以内の連続イベントは無視
                 if !viewModel.hasOpenFile {
-                    historyManager.notifyHistoryUpdate()
-                    imageCatalogManager.notifyCatalogUpdate()
+                    if WindowCoordinator.shared.shouldPostFocusNotification(for: windowNumber) {
+                        DebugLogger.log("🔵 Posting windowDidBecomeKey for window \(windowNumber)", level: .normal)
+                        NotificationCenter.default.post(
+                            name: .windowDidBecomeKey,
+                            object: nil,
+                            userInfo: ["windowNumber": windowNumber]
+                        )
+                    }
                 }
+                let focusElapsed = (CFAbsoluteTimeGetCurrent() - focusStart) * 1000
+                DebugLogger.log("⏱️ Focus handler total: \(String(format: "%.1f", focusElapsed))ms (window \(windowNumber), hasOpenFile=\(viewModel.hasOpenFile))", level: .normal)
             }
         }
     }
@@ -1997,6 +2018,8 @@ struct HistoryListView: View {
             // (history/catalogは@ObservationIgnoredなので直接監視されない)
             let _ = historyManager.historyVersion
             let _ = imageCatalogManager.catalogVersion
+            // scrollTrigger監視：フォーカス時にそのウィンドウだけ再描画するため
+            let _ = scrollTrigger
 
             let recentHistory = historyManager.getRecentHistory(limit: appSettings.maxHistoryCount)
             let imageCatalog = imageCatalogManager.catalog

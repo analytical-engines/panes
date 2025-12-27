@@ -77,11 +77,44 @@ class BookViewModel {
     private var imageSource: ImageSource?
 
     // 画像キャッシュ（sourceIndexをキーにNSImageを保存）
+    // デコード済み画像を保持し、CA::Transaction::commitでの再デコードを防ぐ
     private let imageCache: NSCache<NSNumber, NSImage> = {
         let cache = NSCache<NSNumber, NSImage>()
         cache.countLimit = 10  // 最大10枚まで保持
         return cache
     }()
+
+    /// 画像を強制デコードしてビットマップ表現を作成
+    /// Core AnimationのテクスチャキャッシュからエビクトされてもCPU側にデコード済みデータを保持
+    private func forceDecodeImage(_ image: NSImage) -> NSImage {
+        let size = image.size
+        guard size.width > 0 && size.height > 0 else { return image }
+
+        // ビットマップコンテキストを作成して描画（これによりデコードが強制される）
+        guard let bitmapRep = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: Int(size.width),
+            pixelsHigh: Int(size.height),
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ) else {
+            return image
+        }
+
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmapRep)
+        image.draw(in: NSRect(origin: .zero, size: size))
+        NSGraphicsContext.restoreGraphicsState()
+
+        let decodedImage = NSImage(size: size)
+        decodedImage.addRepresentation(bitmapRep)
+        return decodedImage
+    }
 
     // プリフェッチ範囲（現在ページ ± prefetchRange）
     private let prefetchRange = 3
@@ -641,6 +674,8 @@ class BookViewModel {
         if let fileKey = fileKey,
            let url = source.sourceURL,
            let manager = historyManager {
+            DebugLogger.log("🔍 checkFileIdentity: manager=\(ObjectIdentifier(manager)), fileKey=\(fileKey), fileName=\(source.sourceName)", level: .normal)
+            DebugLogger.log("🔍 checkFileIdentity: manager.isInitialized=\(manager.isInitialized), historyCount=\(manager.history.count)", level: .normal)
             let checkStart = CFAbsoluteTimeGetCurrent()
             let checkResult = manager.checkFileIdentity(fileKey: fileKey, fileName: source.sourceName)
             let checkTime = (CFAbsoluteTimeGetCurrent() - checkStart) * 1000
@@ -828,9 +863,7 @@ class BookViewModel {
         // デバッグ：読み込み完了時のWindowCoordinator状態を確認
         DebugLogger.log("📬 File opened: hasOpenFile=\(hasOpenFile)", level: .verbose)
         WindowCoordinator.shared.logCurrentState()
-
-        // メニュー状態更新のトリガー（historyVersionの変更でCommandsが再評価される）
-        historyManager?.notifyHistoryUpdate()
+        // Note: メニュー状態はNSMenuDelegateで動的に更新されるため、notifyHistoryUpdate()は不要
     }
 
     /// zipファイルを開く（互換性のため残す）
@@ -1345,9 +1378,11 @@ class BookViewModel {
             return nil
         }
 
-        imageCache.setObject(image, forKey: key)
-        debugLog("💾 Cached image for sourceIndex \(sourceIndex)", level: .verbose)
-        return image
+        // 画像を強制デコードしてキャッシュ（CA::Transaction::commitでの再デコードを防ぐ）
+        let decodedImage = forceDecodeImage(image)
+        imageCache.setObject(decodedImage, forKey: key)
+        debugLog("💾 Cached decoded image for sourceIndex \(sourceIndex)", level: .verbose)
+        return decodedImage
     }
 
     /// 指定ページ周辺をプリフェッチ
@@ -1375,9 +1410,10 @@ class BookViewModel {
                 if self.imageCache.object(forKey: key) != nil {
                     continue
                 }
-                // 画像を読み込んでキャッシュに追加
+                // 画像を読み込んで強制デコードしてキャッシュに追加
                 if let image = source.loadImage(at: srcIndex) {
-                    self.imageCache.setObject(image, forKey: key)
+                    let decodedImage = self.forceDecodeImage(image)
+                    self.imageCache.setObject(decodedImage, forKey: key)
                 }
                 // 他のタスクに実行機会を与える
                 await Task.yield()
