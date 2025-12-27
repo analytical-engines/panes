@@ -87,31 +87,40 @@ class BookViewModel {
     /// 画像を強制デコードしてビットマップ表現を作成
     /// Core AnimationのテクスチャキャッシュからエビクトされてもCPU側にデコード済みデータを保持
     private func forceDecodeImage(_ image: NSImage) -> NSImage {
-        let size = image.size
-        guard size.width > 0 && size.height > 0 else { return image }
+        // 元画像のピクセルサイズを取得（image.sizeはポイント単位なので使わない）
+        guard let srcRep = image.representations.first else { return image }
+        let pixelWidth = srcRep.pixelsWide
+        let pixelHeight = srcRep.pixelsHigh
+        guard pixelWidth > 0 && pixelHeight > 0 else { return image }
 
-        // ビットマップコンテキストを作成して描画（これによりデコードが強制される）
+        // 色空間はデバイスRGBを使用（互換性のため）
+        let colorSpace: NSColorSpaceName = .deviceRGB
+
+        // ビットマップコンテキストを元画像と同じピクセルサイズで作成
         guard let bitmapRep = NSBitmapImageRep(
             bitmapDataPlanes: nil,
-            pixelsWide: Int(size.width),
-            pixelsHigh: Int(size.height),
+            pixelsWide: pixelWidth,
+            pixelsHigh: pixelHeight,
             bitsPerSample: 8,
             samplesPerPixel: 4,
             hasAlpha: true,
             isPlanar: false,
-            colorSpaceName: .deviceRGB,
+            colorSpaceName: colorSpace,
             bytesPerRow: 0,
             bitsPerPixel: 0
         ) else {
             return image
         }
 
+        // ピクセル等倍で描画（これによりデコードが強制される）
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmapRep)
-        image.draw(in: NSRect(origin: .zero, size: size))
+        let drawRect = NSRect(x: 0, y: 0, width: pixelWidth, height: pixelHeight)
+        image.draw(in: drawRect, from: .zero, operation: .copy, fraction: 1.0)
         NSGraphicsContext.restoreGraphicsState()
 
-        let decodedImage = NSImage(size: size)
+        // 元画像と同じ論理サイズを設定（Retinaディスプレイ対応）
+        let decodedImage = NSImage(size: image.size)
         decodedImage.addRepresentation(bitmapRep)
         return decodedImage
     }

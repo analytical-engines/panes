@@ -1068,8 +1068,6 @@ struct ContentView: View {
 
         // ウィンドウがフォーカスされた時に履歴/カタログを更新
         let viewModel = self.viewModel
-        let historyManager = self.historyManager
-        let imageCatalogManager = self.imageCatalogManager
         let windowNumber = window.windowNumber
         NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeKeyNotification,
