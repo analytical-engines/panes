@@ -7,6 +7,10 @@ class RarReader {
     private let archiveURL: URL
     private let archive: Archive?
     private(set) var imageEntries: [Entry] = []
+    /// 入れ子の書庫エントリ（ソート済み）
+    private(set) var nestedArchiveEntries: [Entry] = []
+    /// 全エントリ（画像と書庫を混合してソート済み）- 表示順序用
+    private(set) var allSortedEntryNames: [String] = []
     /// パスワードが必要かどうか
     private(set) var needsPassword: Bool = false
 
@@ -29,49 +33,57 @@ class RarReader {
             // パスワードが必要な場合のエラー検出
             if errorString.contains("password") || errorString.contains("Password") ||
                errorString.contains("encrypted") || errorString.contains("missingPassword") {
-                print("⚠️ RAR archive requires password: \(url.lastPathComponent)")
+                DebugLogger.log("⚠️ RAR archive requires password: \(url.lastPathComponent)", level: .minimal)
                 // パスワードが必要なことを示すためのダミーRarReaderを返す
                 return RarReader(url: url, needsPassword: true)
             }
-            print("ERROR: Failed to open RAR archive: \(error)")
+            DebugLogger.log("ERROR: Failed to open RAR archive: \(error)", level: .minimal)
             return nil
         }
         let openTime = CFAbsoluteTimeGetCurrent() - openStart
-        print("⏱️ RAR Archive open time: \(String(format: "%.3f", openTime))s")
+        DebugLogger.log("⏱️ RAR Archive open time: \(String(format: "%.3f", openTime))s", level: .verbose)
 
         // フェーズ2: 画像リストを作成
         await onPhaseChange?(L("loading_phase_building_image_list"))
 
         let extractStart = CFAbsoluteTimeGetCurrent()
-        let imageEntries: [Entry]
+        let extractResult: ExtractResult
         do {
-            imageEntries = try extractImageEntries(from: archive)
+            extractResult = try extractImageEntries(from: archive)
         } catch {
             let errorString = String(describing: error)
             // 展開時にパスワードエラーが発生することもある
             if errorString.contains("password") || errorString.contains("Password") ||
                errorString.contains("encrypted") || errorString.contains("CRC") ||
                errorString.contains("missingPassword") {
-                print("⚠️ RAR archive requires password (detected during extraction): \(url.lastPathComponent)")
+                DebugLogger.log("⚠️ RAR archive requires password (detected during extraction): \(url.lastPathComponent)", level: .minimal)
                 return RarReader(url: url, needsPassword: true)
             }
-            print("ERROR: Failed to extract entries: \(error)")
+            DebugLogger.log("ERROR: Failed to extract entries: \(error)", level: .minimal)
             return nil
         }
         let extractTime = CFAbsoluteTimeGetCurrent() - extractStart
-        print("⏱️ RAR Extract & sort time: \(String(format: "%.3f", extractTime))s")
+        DebugLogger.log("⏱️ RAR Extract & sort time: \(String(format: "%.3f", extractTime))s", level: .verbose)
+
+        // 画像も入れ子書庫もない場合のみ失敗
+        guard extractResult.imageEntries.count > 0 || extractResult.archiveEntries.count > 0 else {
+            DebugLogger.log("ERROR: RAR: No images or nested archives found in archive", level: .minimal)
+            return nil
+        }
 
         let totalTime = CFAbsoluteTimeGetCurrent() - startTime
-        print("⏱️ RAR Total init time: \(String(format: "%.3f", totalTime))s")
+        DebugLogger.log("⏱️ RAR Total init time: \(String(format: "%.3f", totalTime))s", level: .verbose)
 
-        return RarReader(url: url, archive: archive, imageEntries: imageEntries)
+        return RarReader(url: url, archive: archive, extractResult: extractResult)
     }
 
     /// 内部初期化（ファクトリメソッドから呼ばれる）
-    private init(url: URL, archive: Archive, imageEntries: [Entry]) {
+    private init(url: URL, archive: Archive, extractResult: ExtractResult) {
         self.archiveURL = url
         self.archive = archive
-        self.imageEntries = imageEntries
+        self.imageEntries = extractResult.imageEntries
+        self.nestedArchiveEntries = extractResult.archiveEntries
+        self.allSortedEntryNames = extractResult.allSortedNames
         self.needsPassword = false
     }
 
@@ -99,109 +111,141 @@ class RarReader {
                 // パスワードが必要な場合、needsPassword = true で初期化
                 self.archive = nil
                 self.needsPassword = true
-                print("⚠️ RAR archive requires password: \(url.lastPathComponent)")
+                DebugLogger.log("⚠️ RAR archive requires password: \(url.lastPathComponent)", level: .minimal)
                 return
             }
-            print("ERROR: Failed to open RAR archive: \(error)")
+            DebugLogger.log("ERROR: Failed to open RAR archive: \(error)", level: .minimal)
             return nil
         }
         let openTime = CFAbsoluteTimeGetCurrent() - openStart
-        print("⏱️ RAR Archive open time: \(String(format: "%.3f", openTime))s")
+        DebugLogger.log("⏱️ RAR Archive open time: \(String(format: "%.3f", openTime))s", level: .verbose)
 
         // 画像ファイルのみを抽出してソート
         let extractStart = CFAbsoluteTimeGetCurrent()
+        let extractResult: ExtractResult
         do {
-            self.imageEntries = try Self.extractImageEntries(from: archive!)
+            extractResult = try Self.extractImageEntries(from: archive!)
         } catch {
             let errorString = String(describing: error)
             if errorString.contains("password") || errorString.contains("Password") ||
                errorString.contains("encrypted") || errorString.contains("CRC") ||
                errorString.contains("missingPassword") {
                 self.needsPassword = true
-                print("⚠️ RAR archive requires password (detected during extraction): \(url.lastPathComponent)")
+                DebugLogger.log("⚠️ RAR archive requires password (detected during extraction): \(url.lastPathComponent)", level: .minimal)
                 return
             }
-            print("ERROR: Failed to extract entries: \(error)")
+            DebugLogger.log("ERROR: Failed to extract entries: \(error)", level: .minimal)
             return nil
         }
+
+        self.imageEntries = extractResult.imageEntries
+        self.nestedArchiveEntries = extractResult.archiveEntries
+        self.allSortedEntryNames = extractResult.allSortedNames
+
+        // 画像も入れ子書庫もない場合のみ失敗
+        guard imageEntries.count > 0 || nestedArchiveEntries.count > 0 else {
+            DebugLogger.log("ERROR: RAR: No images or nested archives found in archive", level: .minimal)
+            return nil
+        }
+
         let extractTime = CFAbsoluteTimeGetCurrent() - extractStart
-        print("⏱️ RAR Extract & sort time: \(String(format: "%.3f", extractTime))s")
+        DebugLogger.log("⏱️ RAR Extract & sort time: \(String(format: "%.3f", extractTime))s", level: .verbose)
 
         let totalTime = CFAbsoluteTimeGetCurrent() - startTime
-        print("⏱️ RAR Total init time: \(String(format: "%.3f", totalTime))s")
+        DebugLogger.log("⏱️ RAR Total init time: \(String(format: "%.3f", totalTime))s", level: .verbose)
+    }
+
+    /// 抽出結果の型（画像エントリ、書庫エントリ、全エントリ名）
+    struct ExtractResult {
+        let imageEntries: [Entry]
+        let archiveEntries: [Entry]
+        let allSortedNames: [String]
     }
 
     /// アーカイブ内の画像ファイルエントリを抽出してファイル名でソート
-    private static func extractImageEntries(from archive: Archive) throws -> [Entry] {
+    private static func extractImageEntries(from archive: Archive) throws -> ExtractResult {
         let imageExtensions = Set(["jpg", "jpeg", "png", "gif", "webp", "jp2", "j2k",
                                    "JPG", "JPEG", "PNG", "GIF", "WEBP", "JP2", "J2K"])
 
-        print("=== Extracting image entries from RAR archive ===")
+        DebugLogger.log("=== Extracting image entries from RAR archive ===", level: .verbose)
 
         // 1. エントリ列挙
         let entriesStart = CFAbsoluteTimeGetCurrent()
         let allEntries = try archive.entries()
-        print("⏱️ RAR entries() time: \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - entriesStart))s (count: \(allEntries.count))")
+        DebugLogger.log("⏱️ RAR entries() time: \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - entriesStart))s (count: \(allEntries.count))", level: .verbose)
 
-        // 2. フィルタリング
+        // 2. フィルタリング（画像と書庫を分離）
         let filterStart = CFAbsoluteTimeGetCurrent()
-        let entries = allEntries.filter { entry in
+        var imageList: [Entry] = []
+        var archiveList: [Entry] = []
+
+        for entry in allEntries {
             let path = entry.fileName
             guard !path.contains("__MACOSX"),
                   !path.contains("/._"),
                   !(path as NSString).lastPathComponent.hasPrefix("._"),
                   !(path as NSString).lastPathComponent.hasPrefix(".") else {
-                return false
+                continue
             }
             let ext = (path as NSString).pathExtension
-            return imageExtensions.contains(ext)
-        }
-        print("⏱️ RAR filter time: \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - filterStart))s (filtered: \(entries.count))")
 
-        // 3. ソート
+            if imageExtensions.contains(ext) {
+                imageList.append(entry)
+            } else if archiveExtensions.contains(ext) {
+                archiveList.append(entry)
+            }
+        }
+        DebugLogger.log("⏱️ RAR filter time: \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - filterStart))s (images: \(imageList.count), archives: \(archiveList.count))", level: .verbose)
+
+        // 3. 画像エントリをソート
         let sortStart = CFAbsoluteTimeGetCurrent()
-        let sorted = entries.sorted { entry1, entry2 in
+        let sortedImages = imageList.sorted { entry1, entry2 in
             entry1.fileName.localizedStandardCompare(entry2.fileName) == .orderedAscending
         }
-        print("⏱️ RAR sort time: \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - sortStart))s")
 
-        print("=== First 5 RAR entries after sorting ===")
-        for (index, entry) in sorted.prefix(5).enumerated() {
-            print("[\(index)] \(entry.fileName)")
+        // 4. 書庫エントリをソート
+        let sortedArchives = archiveList.sorted { entry1, entry2 in
+            entry1.fileName.localizedStandardCompare(entry2.fileName) == .orderedAscending
         }
 
-        return sorted
+        // 5. 全エントリ名をソート（表示順序決定用）
+        let allNames = imageList.map { $0.fileName } + archiveList.map { $0.fileName }
+        let allSortedNames = allNames.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+
+        DebugLogger.log("⏱️ RAR sort time: \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - sortStart))s", level: .verbose)
+        DebugLogger.log("📦 RAR: Found \(sortedImages.count) images, \(sortedArchives.count) nested archives", level: .normal)
+
+        return ExtractResult(imageEntries: sortedImages, archiveEntries: sortedArchives, allSortedNames: allSortedNames)
     }
 
     /// 指定されたインデックスの画像を読み込む
     func loadImage(at index: Int) -> NSImage? {
         guard let archive = archive else {
-            print("ERROR: Archive not available (password required?)")
+            DebugLogger.log("ERROR: Archive not available (password required?)", level: .minimal)
             return nil
         }
         guard index >= 0 && index < imageEntries.count else {
-            print("ERROR: Index out of range: \(index) (total: \(imageEntries.count))")
+            DebugLogger.log("ERROR: Index out of range: \(index) (total: \(imageEntries.count))", level: .minimal)
             return nil
         }
 
         let entry = imageEntries[index]
 
-        print("Loading RAR image: \(entry.fileName) (size: \(entry.uncompressedSize) bytes)")
+        DebugLogger.log("Loading RAR image: \(entry.fileName) (size: \(entry.uncompressedSize) bytes)", level: .verbose)
 
         do {
             let imageData = try archive.extract(entry)
 
-            print("Extracted \(imageData.count) bytes from RAR")
+            DebugLogger.log("Extracted \(imageData.count) bytes from RAR", level: .verbose)
 
             guard let image = NSImage(data: imageData) else {
-                print("ERROR: Failed to create NSImage from RAR data. File: \(entry.fileName), Data size: \(imageData.count)")
+                DebugLogger.log("ERROR: Failed to create NSImage from RAR data. File: \(entry.fileName), Data size: \(imageData.count)", level: .minimal)
                 return nil
             }
 
-            print("Successfully loaded RAR image: \(entry.fileName)")
             return image
         } catch {
-            print("ERROR: Failed to extract RAR image at index \(index), file: \(entry.fileName), error: \(error)")
+            DebugLogger.log("ERROR: Failed to extract RAR image at index \(index), file: \(entry.fileName), error: \(error)", level: .minimal)
             return nil
         }
     }
@@ -312,5 +356,73 @@ class RarReader {
         default:
             return ext.uppercased()
         }
+    }
+
+    // MARK: - Nested Archive Extraction
+
+    /// 入れ子書庫を一時ファイルに抽出
+    /// - Parameter index: nestedArchiveEntries内のインデックス
+    /// - Returns: 抽出された一時ファイルのURL（呼び出し側で削除責任あり）
+    func extractNestedArchive(at index: Int) -> URL? {
+        guard let archive = archive else {
+            DebugLogger.log("ERROR: RarReader: Archive not available for nested extraction", level: .minimal)
+            return nil
+        }
+        guard index >= 0 && index < nestedArchiveEntries.count else {
+            DebugLogger.log("ERROR: RarReader: Nested archive index out of range: \(index)", level: .minimal)
+            return nil
+        }
+
+        let entry = nestedArchiveEntries[index]
+        let filename = (entry.fileName as NSString).lastPathComponent
+
+        // 一時ディレクトリにファイルを作成
+        let tempDir = FileManager.default.temporaryDirectory
+        let tempURL = tempDir.appendingPathComponent(UUID().uuidString).appendingPathComponent(filename)
+
+        do {
+            // 親ディレクトリを作成
+            try FileManager.default.createDirectory(at: tempURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+
+            let extractedData = try archive.extract(entry)
+            try extractedData.write(to: tempURL)
+
+            DebugLogger.log("📦 RarReader: Extracted nested archive to \(tempURL.path) (\(extractedData.count) bytes)", level: .verbose)
+            return tempURL
+        } catch {
+            DebugLogger.log("ERROR: RarReader: Failed to extract nested archive \(filename): \(error)", level: .minimal)
+            return nil
+        }
+    }
+
+    /// 入れ子書庫のファイル名を取得
+    func nestedArchiveName(at index: Int) -> String? {
+        guard index >= 0 && index < nestedArchiveEntries.count else { return nil }
+        return nestedArchiveEntries[index].fileName
+    }
+
+    /// 入れ子書庫の数
+    var nestedArchiveCount: Int {
+        return nestedArchiveEntries.count
+    }
+
+    /// 画像エントリ名からインデックスを取得
+    func imageIndex(forName name: String) -> Int? {
+        for i in 0..<imageEntries.count {
+            if imageEntries[i].fileName == name {
+                return i
+            }
+        }
+        return nil
+    }
+
+    /// 入れ子書庫エントリ名からインデックスを取得
+    func nestedArchiveIndex(forName name: String) -> Int? {
+        for i in 0..<nestedArchiveEntries.count {
+            if nestedArchiveEntries[i].fileName == name {
+                return i
+            }
+        }
+        return nil
     }
 }

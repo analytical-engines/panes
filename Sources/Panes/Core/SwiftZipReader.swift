@@ -2,11 +2,19 @@ import Foundation
 import AppKit
 import ZipArchive
 
+/// サポートする書庫拡張子
+let archiveExtensions = Set(["zip", "cbz", "rar", "cbr", "7z", "cb7",
+                              "ZIP", "CBZ", "RAR", "CBR", "7Z", "CB7"])
+
 /// swift-zip-archiveを使用したZIPアーカイブリーダー
 /// 破損アーカイブやパスワード付きアーカイブにも対応
 class SwiftZipReader {
     private let archiveURL: URL
     private var imageEntries: [Zip.FileHeader] = []
+    /// 入れ子の書庫エントリ（ソート済み）
+    private(set) var nestedArchiveEntries: [Zip.FileHeader] = []
+    /// 全エントリ（画像と書庫を混合してソート済み）- 表示順序用
+    private(set) var allSortedEntryNames: [String] = []
     private var password: String?
 
     /// パスワードが必要かどうか
@@ -33,38 +41,60 @@ class SwiftZipReader {
                 let extractStart = CFAbsoluteTimeGetCurrent()
                 let entries = try zipReader.readDirectory()
 
-                // 画像エントリをフィルタリング
+                // 拡張子セット
                 let imageExtensions = Set(["jpg", "jpeg", "png", "gif", "webp", "jp2", "j2k",
                                            "JPG", "JPEG", "PNG", "GIF", "WEBP", "JP2", "J2K"])
 
-                reader.imageEntries = entries.filter { entry in
+                // エントリをフィルタリング（画像と書庫を分離）
+                var imageList: [Zip.FileHeader] = []
+                var archiveList: [Zip.FileHeader] = []
+
+                for entry in entries {
                     let filename = entry.filename.string
                     // __MACOSXやドットファイルを除外
                     guard !filename.contains("__MACOSX"),
                           !filename.contains("/._"),
-                          !(filename as NSString).lastPathComponent.hasPrefix("._") else {
-                        return false
+                          !(filename as NSString).lastPathComponent.hasPrefix("._"),
+                          !(filename as NSString).lastPathComponent.hasPrefix(".") else {
+                        continue
                     }
                     let ext = (filename as NSString).pathExtension
-                    return imageExtensions.contains(ext)
-                }.sorted { entry1, entry2 in
+
+                    if imageExtensions.contains(ext) {
+                        imageList.append(entry)
+                    } else if archiveExtensions.contains(ext) {
+                        archiveList.append(entry)
+                    }
+                }
+
+                // 画像エントリをソート
+                reader.imageEntries = imageList.sorted { entry1, entry2 in
                     entry1.filename.string.localizedStandardCompare(entry2.filename.string) == .orderedAscending
                 }
 
+                // 書庫エントリをソート
+                reader.nestedArchiveEntries = archiveList.sorted { entry1, entry2 in
+                    entry1.filename.string.localizedStandardCompare(entry2.filename.string) == .orderedAscending
+                }
+
+                // 全エントリ名をソート（表示順序決定用）
+                let allNames = imageList.map { $0.filename.string } + archiveList.map { $0.filename.string }
+                reader.allSortedEntryNames = allNames.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+
                 let extractTime = CFAbsoluteTimeGetCurrent() - extractStart
-                print("⏱️ SwiftZipReader: Extract & sort time: \(String(format: "%.3f", extractTime))s")
-                print("📦 SwiftZipReader: Found \(reader.imageEntries.count) images out of \(entries.count) entries")
+                DebugLogger.log("⏱️ SwiftZipReader: Extract & sort time: \(String(format: "%.3f", extractTime))s", level: .verbose)
+                DebugLogger.log("📦 SwiftZipReader: Found \(reader.imageEntries.count) images, \(reader.nestedArchiveEntries.count) nested archives", level: .normal)
 
                 // 暗号化ファイルがあるかチェック
                 let hasEncryptedFiles = entries.contains { $0.flags.contains(.encrypted) }
                 if hasEncryptedFiles && password == nil {
                     reader.needsPassword = true
-                    print("🔐 SwiftZipReader: Password required for encrypted archive")
+                    DebugLogger.log("🔐 SwiftZipReader: Password required for encrypted archive", level: .minimal)
                 }
             }
         } catch {
             let errorString = String(describing: error)
-            print("ERROR: SwiftZipReader failed to open archive: \(error)")
+            DebugLogger.log("ERROR: SwiftZipReader failed to open archive: \(error)", level: .minimal)
             // パスワードが必要な場合
             if errorString.contains("encrypted") || errorString.contains("password") {
                 reader.needsPassword = true
@@ -78,13 +108,14 @@ class SwiftZipReader {
             return reader
         }
 
-        guard reader.imageEntries.count > 0 else {
-            print("ERROR: SwiftZipReader: No images found in archive")
+        // 画像も入れ子書庫もない場合のみ失敗
+        guard reader.imageEntries.count > 0 || reader.nestedArchiveEntries.count > 0 else {
+            DebugLogger.log("ERROR: SwiftZipReader: No images or nested archives found in archive", level: .minimal)
             return nil
         }
 
         let totalTime = CFAbsoluteTimeGetCurrent() - startTime
-        print("⏱️ SwiftZipReader: Total init time: \(String(format: "%.3f", totalTime))s")
+        DebugLogger.log("⏱️ SwiftZipReader: Total init time: \(String(format: "%.3f", totalTime))s", level: .verbose)
 
         return reader
     }
@@ -108,7 +139,7 @@ class SwiftZipReader {
     /// 指定されたインデックスの画像データを取得
     func imageData(at index: Int) -> Data? {
         guard index >= 0 && index < imageEntries.count else {
-            print("ERROR: SwiftZipReader: Index out of range: \(index) (total: \(imageEntries.count))")
+            DebugLogger.log("ERROR: SwiftZipReader: Index out of range: \(index) (total: \(imageEntries.count))", level: .minimal)
             return nil
         }
 
@@ -121,7 +152,7 @@ class SwiftZipReader {
                 // パスワード付きで読み込み
                 let bytes = try reader.readFile(entry, password: password)
                 result = Data(bytes)
-                print("SwiftZipReader: Extracted \(result?.count ?? 0) bytes for \(filename)")
+                DebugLogger.log("SwiftZipReader: Extracted \(result?.count ?? 0) bytes for \(filename)", level: .verbose)
             }
             return result
         } catch {
@@ -129,9 +160,9 @@ class SwiftZipReader {
             // パスワードエラーの判定
             if errorString.contains("encrypted") || errorString.contains("password") {
                 needsPassword = true
-                print("ERROR: SwiftZipReader: Password required for \(filename)")
+                DebugLogger.log("ERROR: SwiftZipReader: Password required for \(filename)", level: .minimal)
             } else {
-                print("ERROR: SwiftZipReader: Failed to extract \(filename): \(error)")
+                DebugLogger.log("ERROR: SwiftZipReader: Failed to extract \(filename): \(error)", level: .minimal)
             }
             return nil
         }
@@ -198,5 +229,78 @@ class SwiftZipReader {
     func fileDate(at index: Int) -> Date? {
         guard index >= 0 && index < imageEntries.count else { return nil }
         return imageEntries[index].fileModification
+    }
+
+    // MARK: - Nested Archive Extraction
+
+    /// 入れ子書庫を一時ファイルに抽出
+    /// - Parameter index: nestedArchiveEntries内のインデックス
+    /// - Returns: 抽出された一時ファイルのURL（呼び出し側で削除責任あり）
+    func extractNestedArchive(at index: Int) -> URL? {
+        guard index >= 0 && index < nestedArchiveEntries.count else {
+            DebugLogger.log("ERROR: SwiftZipReader: Nested archive index out of range: \(index)", level: .minimal)
+            return nil
+        }
+
+        let entry = nestedArchiveEntries[index]
+        let filename = (entry.filename.string as NSString).lastPathComponent
+
+        // 一時ディレクトリにファイルを作成
+        let tempDir = FileManager.default.temporaryDirectory
+        let tempURL = tempDir.appendingPathComponent(UUID().uuidString).appendingPathComponent(filename)
+
+        do {
+            // 親ディレクトリを作成
+            try FileManager.default.createDirectory(at: tempURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+
+            var extractedData: Data?
+            try ZipArchiveReader.withFile(archiveURL.path) { reader in
+                let bytes = try reader.readFile(entry, password: password)
+                extractedData = Data(bytes)
+            }
+
+            guard let data = extractedData else {
+                DebugLogger.log("ERROR: SwiftZipReader: Failed to read nested archive data for \(filename)", level: .minimal)
+                return nil
+            }
+
+            try data.write(to: tempURL)
+            DebugLogger.log("📦 SwiftZipReader: Extracted nested archive to \(tempURL.path) (\(data.count) bytes)", level: .verbose)
+            return tempURL
+        } catch {
+            DebugLogger.log("ERROR: SwiftZipReader: Failed to extract nested archive \(filename): \(error)", level: .minimal)
+            return nil
+        }
+    }
+
+    /// 入れ子書庫のファイル名を取得
+    func nestedArchiveName(at index: Int) -> String? {
+        guard index >= 0 && index < nestedArchiveEntries.count else { return nil }
+        return nestedArchiveEntries[index].filename.string
+    }
+
+    /// 入れ子書庫の数
+    var nestedArchiveCount: Int {
+        return nestedArchiveEntries.count
+    }
+
+    /// 画像エントリ名からインデックスを取得
+    func imageIndex(forName name: String) -> Int? {
+        for i in 0..<imageEntries.count {
+            if imageEntries[i].filename.string == name {
+                return i
+            }
+        }
+        return nil
+    }
+
+    /// 入れ子書庫エントリ名からインデックスを取得
+    func nestedArchiveIndex(forName name: String) -> Int? {
+        for i in 0..<nestedArchiveEntries.count {
+            if nestedArchiveEntries[i].filename.string == name {
+                return i
+            }
+        }
+        return nil
     }
 }

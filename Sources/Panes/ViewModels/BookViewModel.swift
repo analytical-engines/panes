@@ -891,9 +891,19 @@ class BookViewModel {
         let source: ImageSource?
 
         if ext == "zip" || ext == "cbz" {
-            source = await SwiftZipImageSource.create(url: url, password: password)
+            // まず入れ子書庫をチェック
+            if let composite = await NestedArchiveBuilder.build(from: url, password: password) {
+                source = composite
+            } else {
+                source = await SwiftZipImageSource.create(url: url, password: password)
+            }
         } else if ext == "rar" || ext == "cbr" {
-            source = await RarImageSource.create(url: url, password: password)
+            // まず入れ子書庫をチェック
+            if let composite = await NestedArchiveBuilder.build(from: url, password: password) {
+                source = composite
+            } else {
+                source = await RarImageSource.create(url: url, password: password)
+            }
         } else {
             source = nil
         }
@@ -1038,11 +1048,26 @@ class BookViewModel {
         if urls.count == 1 {
             let ext = urls[0].pathExtension.lowercased()
             if ext == "zip" || ext == "cbz" {
+                // まず入れ子書庫またはディレクトリセグメントをチェック
+                if let composite = await NestedArchiveBuilder.build(from: urls[0], onPhaseChange: onPhaseChange) {
+                    DebugLogger.log("📦 BookViewModel: Using CompositeImageSource", level: .normal)
+                    return composite
+                }
                 return await openZipArchive(url: urls[0], onPhaseChange: onPhaseChange)
             } else if ext == "rar" || ext == "cbr" {
+                // まず入れ子書庫またはディレクトリセグメントをチェック
+                if let composite = await NestedArchiveBuilder.build(from: urls[0], onPhaseChange: onPhaseChange) {
+                    DebugLogger.log("📦 BookViewModel: Using CompositeImageSource", level: .normal)
+                    return composite
+                }
                 return await RarImageSource.create(url: urls[0], onPhaseChange: onPhaseChange)
-            } else if ext == "7z" {
-                print("📦 BookViewModel: Detected 7z file, calling SevenZipImageSource.create")
+            } else if ext == "7z" || ext == "cb7" {
+                DebugLogger.log("📦 BookViewModel: Detected 7z file", level: .verbose)
+                // まず入れ子書庫またはディレクトリセグメントをチェック
+                if let composite = await NestedArchiveBuilder.build(from: urls[0], onPhaseChange: onPhaseChange) {
+                    DebugLogger.log("📦 BookViewModel: Using CompositeImageSource", level: .normal)
+                    return composite
+                }
                 return await SevenZipImageSource.create(url: urls[0], onPhaseChange: onPhaseChange, onError: onError)
             } else {
                 // 画像ファイルの場合
@@ -1255,7 +1280,7 @@ class BookViewModel {
         let targetFileName = URL(fileURLWithPath: relativePath).lastPathComponent
         for srcIndex in 0..<source.imageCount {
             if let fileName = source.fileName(at: srcIndex),
-               fileName == targetFileName {
+               (fileName as NSString).lastPathComponent == targetFileName {
                 // ソースインデックスから表示ページに変換
                 if let displayPageNum = displayPage(for: srcIndex) {
                     DebugLogger.log("📖 Found page by fileName: \(targetFileName) -> srcIndex \(srcIndex) -> displayPage \(displayPageNum)", level: .normal)

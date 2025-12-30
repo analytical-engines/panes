@@ -6,6 +6,10 @@ import AppKit
 class SevenZipReader {
     private let archiveURL: URL
     private(set) var imageEntryInfos: [SevenZipEntryInfo] = []
+    /// 入れ子の書庫エントリ（ソート済み）
+    private(set) var nestedArchiveEntries: [SevenZipEntryInfo] = []
+    /// 全エントリ（画像と書庫を混合してソート済み）- 表示順序用
+    private(set) var allSortedEntryNames: [String] = []
     private var archiveData: Data
 
     /// 展開済みデータのキャッシュ（ファイル名 -> Data）
@@ -53,9 +57,9 @@ class SevenZipReader {
         await onPhaseChange?(L("loading_phase_building_image_list"))
 
         let extractStart = CFAbsoluteTimeGetCurrent()
-        let imageEntryInfos: [SevenZipEntryInfo]
+        let extractResult: ExtractResult
         do {
-            imageEntryInfos = try extractImageEntries(from: archiveData)
+            extractResult = try extractImageEntries(from: archiveData)
         } catch {
             print("ERROR: Failed to extract 7z entries: \(error)")
             await onError?(L("error_cannot_open_file"))
@@ -63,6 +67,13 @@ class SevenZipReader {
         }
         let extractTime = CFAbsoluteTimeGetCurrent() - extractStart
         print("⏱️ 7z Extract & sort time: \(String(format: "%.3f", extractTime))s")
+
+        // 画像も入れ子書庫もない場合のみ失敗
+        guard extractResult.imageEntries.count > 0 || extractResult.archiveEntries.count > 0 else {
+            print("ERROR: 7z: No images or nested archives found in archive")
+            await onError?(L("error_no_images_found"))
+            return nil
+        }
 
         // フェーズ3: 展開テスト（圧縮形式がサポートされているか確認）
         await onPhaseChange?(L("loading_phase_extracting_images"))
@@ -84,7 +95,7 @@ class SevenZipReader {
         let totalTime = CFAbsoluteTimeGetCurrent() - startTime
         print("⏱️ 7z Total init time: \(String(format: "%.3f", totalTime))s")
 
-        return SevenZipReader(url: url, archiveData: archiveData, imageEntryInfos: imageEntryInfos, extractedCache: extractedCache)
+        return SevenZipReader(url: url, archiveData: archiveData, extractResult: extractResult, extractedCache: extractedCache)
     }
 
     /// 全エントリを展開
@@ -100,10 +111,12 @@ class SevenZipReader {
     }
 
     /// 内部初期化（ファクトリメソッドから呼ばれる）
-    private init(url: URL, archiveData: Data, imageEntryInfos: [SevenZipEntryInfo], extractedCache: [String: Data]) {
+    private init(url: URL, archiveData: Data, extractResult: ExtractResult, extractedCache: [String: Data]) {
         self.archiveURL = url
         self.archiveData = archiveData
-        self.imageEntryInfos = imageEntryInfos
+        self.imageEntryInfos = extractResult.imageEntries
+        self.nestedArchiveEntries = extractResult.archiveEntries
+        self.allSortedEntryNames = extractResult.allSortedNames
         self.extractedCache = extractedCache
         self.cachePopulated = true
     }
@@ -125,12 +138,24 @@ class SevenZipReader {
 
         // 画像ファイルのみを抽出してソート
         let extractStart = CFAbsoluteTimeGetCurrent()
+        let extractResult: ExtractResult
         do {
-            self.imageEntryInfos = try Self.extractImageEntries(from: archiveData)
+            extractResult = try Self.extractImageEntries(from: archiveData)
         } catch {
             print("ERROR: Failed to extract 7z entries: \(error)")
             return nil
         }
+
+        self.imageEntryInfos = extractResult.imageEntries
+        self.nestedArchiveEntries = extractResult.archiveEntries
+        self.allSortedEntryNames = extractResult.allSortedNames
+
+        // 画像も入れ子書庫もない場合のみ失敗
+        guard imageEntryInfos.count > 0 || nestedArchiveEntries.count > 0 else {
+            print("ERROR: 7z: No images or nested archives found in archive")
+            return nil
+        }
+
         let extractTime = CFAbsoluteTimeGetCurrent() - extractStart
         print("⏱️ 7z Extract & sort time: \(String(format: "%.3f", extractTime))s")
 
@@ -138,8 +163,15 @@ class SevenZipReader {
         print("⏱️ 7z Total init time: \(String(format: "%.3f", totalTime))s")
     }
 
+    /// 抽出結果の型（画像エントリ、書庫エントリ、全エントリ名）
+    struct ExtractResult {
+        let imageEntries: [SevenZipEntryInfo]
+        let archiveEntries: [SevenZipEntryInfo]
+        let allSortedNames: [String]
+    }
+
     /// アーカイブ内の画像ファイルエントリを抽出してファイル名でソート
-    private static func extractImageEntries(from archiveData: Data) throws -> [SevenZipEntryInfo] {
+    private static func extractImageEntries(from archiveData: Data) throws -> ExtractResult {
         let imageExtensions = Set(["jpg", "jpeg", "png", "gif", "webp", "jp2", "j2k",
                                    "JPG", "JPEG", "PNG", "GIF", "WEBP", "JP2", "J2K"])
 
@@ -150,37 +182,57 @@ class SevenZipReader {
         let allEntryInfos = try SevenZipContainer.info(container: archiveData)
         print("⏱️ 7z info() time: \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - entriesStart))s (count: \(allEntryInfos.count))")
 
-        // 2. フィルタリング
+        // 2. フィルタリング（画像と書庫を分離）
         let filterStart = CFAbsoluteTimeGetCurrent()
-        let entries = allEntryInfos.filter { entryInfo in
-                // ディレクトリは除外（名前が/で終わるか、サイズが0でパス拡張子がない場合）
+        var imageList: [SevenZipEntryInfo] = []
+        var archiveList: [SevenZipEntryInfo] = []
+
+        for entryInfo in allEntryInfos {
+            // ディレクトリは除外（名前が/で終わるか、サイズが0でパス拡張子がない場合）
             let path = entryInfo.name
-            if path.hasSuffix("/") { return false }
+            if path.hasSuffix("/") { continue }
 
             guard !path.contains("__MACOSX"),
                   !path.contains("/._"),
                   !(path as NSString).lastPathComponent.hasPrefix("._"),
                   !(path as NSString).lastPathComponent.hasPrefix(".") else {
-                return false
+                continue
             }
             let ext = (path as NSString).pathExtension
-            return imageExtensions.contains(ext)
-        }
-        print("⏱️ 7z filter time: \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - filterStart))s (filtered: \(entries.count))")
 
-        // 3. ソート
+            if imageExtensions.contains(ext) {
+                imageList.append(entryInfo)
+            } else if archiveExtensions.contains(ext) {
+                archiveList.append(entryInfo)
+            }
+        }
+        print("⏱️ 7z filter time: \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - filterStart))s (images: \(imageList.count), archives: \(archiveList.count))")
+
+        // 3. 画像エントリをソート
         let sortStart = CFAbsoluteTimeGetCurrent()
-        let sorted = entries.sorted { entry1, entry2 in
+        let sortedImages = imageList.sorted { entry1, entry2 in
             entry1.name.localizedStandardCompare(entry2.name) == .orderedAscending
         }
+
+        // 4. 書庫エントリをソート
+        let sortedArchives = archiveList.sorted { entry1, entry2 in
+            entry1.name.localizedStandardCompare(entry2.name) == .orderedAscending
+        }
+
+        // 5. 全エントリ名をソート（表示順序決定用）
+        let allNames = imageList.map { $0.name } + archiveList.map { $0.name }
+        let allSortedNames = allNames.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+
         print("⏱️ 7z sort time: \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - sortStart))s")
 
         print("=== First 5 7z entries after sorting ===")
-        for (index, entryInfo) in sorted.prefix(5).enumerated() {
+        for (index, entryInfo) in sortedImages.prefix(5).enumerated() {
             print("[\(index)] \(entryInfo.name)")
         }
 
-        return sorted
+        print("📦 7z: Found \(sortedImages.count) images, \(sortedArchives.count) nested archives")
+
+        return ExtractResult(imageEntries: sortedImages, archiveEntries: sortedArchives, allSortedNames: allSortedNames)
     }
 
     /// 指定されたインデックスの画像を読み込む
@@ -330,5 +382,82 @@ class SevenZipReader {
         default:
             return ext.uppercased()
         }
+    }
+
+    // MARK: - Nested Archive Extraction
+
+    /// 入れ子書庫を一時ファイルに抽出
+    /// - Parameter index: nestedArchiveEntries内のインデックス
+    /// - Returns: 抽出された一時ファイルのURL（呼び出し側で削除責任あり）
+    func extractNestedArchive(at index: Int) -> URL? {
+        guard index >= 0 && index < nestedArchiveEntries.count else {
+            print("ERROR: SevenZipReader: Nested archive index out of range: \(index)")
+            return nil
+        }
+
+        let entryInfo = nestedArchiveEntries[index]
+        let filename = (entryInfo.name as NSString).lastPathComponent
+
+        // キャッシュから取得を試みる
+        var extractedData: Data?
+        if let cachedData = extractedCache[entryInfo.name] {
+            extractedData = cachedData
+        } else if !cachePopulated {
+            // キャッシュを作成
+            populateCache()
+            extractedData = extractedCache[entryInfo.name]
+        }
+
+        guard let data = extractedData else {
+            print("ERROR: SevenZipReader: Failed to get data for nested archive \(filename)")
+            return nil
+        }
+
+        // 一時ディレクトリにファイルを作成
+        let tempDir = FileManager.default.temporaryDirectory
+        let tempURL = tempDir.appendingPathComponent(UUID().uuidString).appendingPathComponent(filename)
+
+        do {
+            // 親ディレクトリを作成
+            try FileManager.default.createDirectory(at: tempURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+
+            try data.write(to: tempURL)
+            print("📦 SevenZipReader: Extracted nested archive to \(tempURL.path) (\(data.count) bytes)")
+            return tempURL
+        } catch {
+            print("ERROR: SevenZipReader: Failed to extract nested archive \(filename): \(error)")
+            return nil
+        }
+    }
+
+    /// 入れ子書庫のファイル名を取得
+    func nestedArchiveName(at index: Int) -> String? {
+        guard index >= 0 && index < nestedArchiveEntries.count else { return nil }
+        return nestedArchiveEntries[index].name
+    }
+
+    /// 入れ子書庫の数
+    var nestedArchiveCount: Int {
+        return nestedArchiveEntries.count
+    }
+
+    /// 画像エントリ名からインデックスを取得
+    func imageIndex(forName name: String) -> Int? {
+        for i in 0..<imageEntryInfos.count {
+            if imageEntryInfos[i].name == name {
+                return i
+            }
+        }
+        return nil
+    }
+
+    /// 入れ子書庫エントリ名からインデックスを取得
+    func nestedArchiveIndex(forName name: String) -> Int? {
+        for i in 0..<nestedArchiveEntries.count {
+            if nestedArchiveEntries[i].name == name {
+                return i
+            }
+        }
+        return nil
     }
 }
