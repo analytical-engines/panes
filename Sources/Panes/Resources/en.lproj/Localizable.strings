@@ -16,6 +16,7 @@
 "loading_phase_loading_image" = "Loading image...";
 "opening_windows" = "Opening Windows...";
 "drop_files_hint" = "Drop archive or image files here";
+"broken_image" = "Broken Image";
 "access_count_format" = "(%d times)";
 "history_filter_placeholder" = "Filter by filename";
 "history_filter_result_format" = "%d / %d";
@@ -156,6 +157,8 @@
 "menu_flip_vertical" = "Flip Vertical";
 "menu_hide_page" = "Hide This Page";
 "menu_show_page" = "Show This Page";
+"menu_placeholder_portrait" = "Portrait Placeholder";
+"menu_placeholder_landscape" = "Landscape Placeholder";
 "menu_copy_image" = "Copy Image";
 "menu_reveal_in_finder" = "Reveal in Finder";
 "menu_open_in_new_window" = "Open in New Window";

@@ -89,6 +89,9 @@ struct PageDisplaySettings: Codable {
     /// カスタム表示順序（ソースインデックスの配列、空の場合はデフォルト順序）
     var customDisplayOrder: [Int] = []
 
+    /// 壊れた画像をランドスケープ（横長）プレースホルダーで表示するページのインデックス集合
+    var landscapePlaceholderIndices: Set<Int> = []
+
     // MARK: - 後方互換性のためのCodable対応
 
     enum CodingKeys: String, CodingKey {
@@ -100,6 +103,7 @@ struct PageDisplaySettings: Codable {
         case pageRotations
         case pageFlips
         case customDisplayOrder
+        case landscapePlaceholderIndices
         // 旧キー
         case forceSinglePageIndices
     }
@@ -125,6 +129,7 @@ struct PageDisplaySettings: Codable {
         pageRotations = (try? container.decode([Int: ImageRotation].self, forKey: .pageRotations)) ?? [:]
         pageFlips = (try? container.decode([Int: ImageFlip].self, forKey: .pageFlips)) ?? [:]
         customDisplayOrder = (try? container.decode([Int].self, forKey: .customDisplayOrder)) ?? []
+        landscapePlaceholderIndices = (try? container.decode(Set<Int>.self, forKey: .landscapePlaceholderIndices)) ?? []
     }
 
     func encode(to encoder: Encoder) throws {
@@ -137,6 +142,7 @@ struct PageDisplaySettings: Codable {
         try container.encode(pageRotations, forKey: .pageRotations)
         try container.encode(pageFlips, forKey: .pageFlips)
         try container.encode(customDisplayOrder, forKey: .customDisplayOrder)
+        try container.encode(landscapePlaceholderIndices, forKey: .landscapePlaceholderIndices)
     }
 
     // MARK: - 単ページ判定
@@ -335,5 +341,21 @@ struct PageDisplaySettings: Codable {
     /// カスタム表示順序をクリア
     mutating func clearCustomDisplayOrder() {
         customDisplayOrder = []
+    }
+
+    // MARK: - 壊れた画像のプレースホルダー設定
+
+    /// 指定したページがランドスケーププレースホルダーを使用するかどうか
+    func isLandscapePlaceholder(_ index: Int) -> Bool {
+        return landscapePlaceholderIndices.contains(index)
+    }
+
+    /// 指定したページのプレースホルダー縦横を切り替え
+    mutating func togglePlaceholderOrientation(at index: Int) {
+        if landscapePlaceholderIndices.contains(index) {
+            landscapePlaceholderIndices.remove(index)
+        } else {
+            landscapePlaceholderIndices.insert(index)
+        }
     }
 }

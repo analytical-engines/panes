@@ -286,77 +286,84 @@ struct ContentView: View {
             Label(L("menu_single_page_alignment"), systemImage: "arrow.left.and.right")
         }
 
-        // 回転・反転メニュー
-        Menu {
-            // 回転
+        // 回転・反転メニュー（壊れた画像の場合は無効化ボタンを表示）
+        if viewModel.isBrokenImage(at: pageIndex) {
+            Button(action: {}) {
+                Label(L("menu_rotation_and_flip"), systemImage: "arrow.triangle.2.circlepath")
+            }
+            .disabled(true)
+        } else {
             Menu {
-                Button(action: {
-                    viewModel.rotateClockwise(at: pageIndex)
-                }) {
-                    Label(L("menu_rotate_clockwise"), systemImage: "rotate.right")
+                // 回転
+                Menu {
+                    Button(action: {
+                        viewModel.rotateClockwise(at: pageIndex)
+                    }) {
+                        Label(L("menu_rotate_clockwise"), systemImage: "rotate.right")
+                    }
+
+                    Button(action: {
+                        viewModel.rotateCounterClockwise(at: pageIndex)
+                    }) {
+                        Label(L("menu_rotate_counterclockwise"), systemImage: "rotate.left")
+                    }
+
+                    Divider()
+
+                    Button(action: {
+                        viewModel.rotate180(at: pageIndex)
+                    }) {
+                        Label(L("menu_rotate_180"), systemImage: "arrow.up.arrow.down")
+                    }
+                } label: {
+                    let rotation = viewModel.getRotation(at: pageIndex)
+                    Label(
+                        L("menu_rotation"),
+                        systemImage: rotation == .none ? "arrow.clockwise" : "arrow.clockwise.circle.fill"
+                    )
                 }
 
-                Button(action: {
-                    viewModel.rotateCounterClockwise(at: pageIndex)
-                }) {
-                    Label(L("menu_rotate_counterclockwise"), systemImage: "rotate.left")
-                }
+                // 反転
+                Menu {
+                    Button(action: {
+                        viewModel.toggleHorizontalFlip(at: pageIndex)
+                    }) {
+                        HStack {
+                            Text(L("menu_flip_horizontal"))
+                            Spacer()
+                            if viewModel.getFlip(at: pageIndex).horizontal {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
 
-                Divider()
-
-                Button(action: {
-                    viewModel.rotate180(at: pageIndex)
-                }) {
-                    Label(L("menu_rotate_180"), systemImage: "arrow.up.arrow.down")
+                    Button(action: {
+                        viewModel.toggleVerticalFlip(at: pageIndex)
+                    }) {
+                        HStack {
+                            Text(L("menu_flip_vertical"))
+                            Spacer()
+                            if viewModel.getFlip(at: pageIndex).vertical {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                } label: {
+                    let flip = viewModel.getFlip(at: pageIndex)
+                    Label(
+                        L("menu_flip"),
+                        systemImage: (flip.horizontal || flip.vertical) ? "arrow.left.and.right.righttriangle.left.righttriangle.right.fill" : "arrow.left.and.right.righttriangle.left.righttriangle.right"
+                    )
                 }
             } label: {
                 let rotation = viewModel.getRotation(at: pageIndex)
-                Label(
-                    L("menu_rotation"),
-                    systemImage: rotation == .none ? "arrow.clockwise" : "arrow.clockwise.circle.fill"
-                )
-            }
-
-            // 反転
-            Menu {
-                Button(action: {
-                    viewModel.toggleHorizontalFlip(at: pageIndex)
-                }) {
-                    HStack {
-                        Text(L("menu_flip_horizontal"))
-                        Spacer()
-                        if viewModel.getFlip(at: pageIndex).horizontal {
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-
-                Button(action: {
-                    viewModel.toggleVerticalFlip(at: pageIndex)
-                }) {
-                    HStack {
-                        Text(L("menu_flip_vertical"))
-                        Spacer()
-                        if viewModel.getFlip(at: pageIndex).vertical {
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-            } label: {
                 let flip = viewModel.getFlip(at: pageIndex)
+                let hasTransform = rotation != .none || flip.horizontal || flip.vertical
                 Label(
-                    L("menu_flip"),
-                    systemImage: (flip.horizontal || flip.vertical) ? "arrow.left.and.right.righttriangle.left.righttriangle.right.fill" : "arrow.left.and.right.righttriangle.left.righttriangle.right"
+                    L("menu_rotation_and_flip"),
+                    systemImage: hasTransform ? "arrow.triangle.2.circlepath.circle.fill" : "arrow.triangle.2.circlepath"
                 )
             }
-        } label: {
-            let rotation = viewModel.getRotation(at: pageIndex)
-            let flip = viewModel.getFlip(at: pageIndex)
-            let hasTransform = rotation != .none || flip.horizontal || flip.vertical
-            Label(
-                L("menu_rotation_and_flip"),
-                systemImage: hasTransform ? "arrow.triangle.2.circlepath.circle.fill" : "arrow.triangle.2.circlepath"
-            )
         }
 
         // 非表示切り替え
@@ -374,6 +381,22 @@ struct ContentView: View {
             )
         }
         .disabled(viewModel.viewMode == .single && !viewModel.isHidden(at: pageIndex))
+
+        // 壊れた画像のプレースホルダー縦横切り替え（壊れた画像のみ表示）
+        if viewModel.isBrokenImage(at: pageIndex) {
+            Button(action: {
+                viewModel.togglePlaceholderOrientation(at: pageIndex)
+            }) {
+                Label(
+                    viewModel.isLandscapePlaceholder(at: pageIndex)
+                        ? L("menu_placeholder_portrait")
+                        : L("menu_placeholder_landscape"),
+                    systemImage: viewModel.isLandscapePlaceholder(at: pageIndex)
+                        ? "rectangle.portrait"
+                        : "rectangle"
+                )
+            }
+        }
 
         Divider()
 
@@ -393,6 +416,7 @@ struct ContentView: View {
         }) {
             Label(L("menu_copy_image"), systemImage: "doc.on.doc")
         }
+        .disabled(viewModel.isBrokenImage(at: pageIndex))
 
         Divider()
 

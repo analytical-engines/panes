@@ -84,6 +84,108 @@ class BookViewModel {
         return cache
     }()
 
+    /// 壊れた画像（読み込みに失敗した）のソースインデックス集合
+    private var brokenImageIndices: Set<Int> = []
+
+    // MARK: - 壊れた画像のプレースホルダー（回転対応、ISO A4アスペクト比）
+
+    /// プレースホルダーキャッシュ（回転×縦横の8パターン）
+    private static var placeholderCache: [String: NSImage] = [:]
+    private static let placeholderCacheLock = NSLock()
+
+    /// 壊れた画像のプレースホルダーを取得
+    /// - Parameters:
+    ///   - rotation: ページの回転設定（テキストを逆回転して補正）
+    ///   - isLandscape: 横長表示にするかどうか（デフォルトは縦長）
+    /// - Returns: 回転に対応したプレースホルダー画像
+    private static func brokenImagePlaceholder(rotation: ImageRotation = .none, isLandscape: Bool = false) -> NSImage {
+        let key = "\(rotation.rawValue)-\(isLandscape)"
+
+        placeholderCacheLock.lock()
+        defer { placeholderCacheLock.unlock() }
+
+        if let cached = placeholderCache[key] {
+            return cached
+        }
+
+        let placeholder = createBrokenImagePlaceholder(rotation: rotation, isLandscape: isLandscape)
+        placeholderCache[key] = placeholder
+        return placeholder
+    }
+
+    /// プレースホルダー画像を生成
+    /// - Parameters:
+    ///   - rotation: ページの回転設定（テキストを逆回転して補正）
+    ///   - isLandscape: 横長表示にするかどうか
+    /// - Returns: 生成されたプレースホルダー画像
+    private static func createBrokenImagePlaceholder(rotation: ImageRotation, isLandscape: Bool) -> NSImage {
+        // ISO A4アスペクト比: 1:√2 ≈ 1:1.414
+        let sqrt2: CGFloat = 1.41421356237
+        let baseSize: CGFloat = 800
+
+        // 縦長: ~566 x 800, 横長: ~800 x 566
+        let size = isLandscape
+            ? NSSize(width: baseSize, height: baseSize / sqrt2)
+            : NSSize(width: baseSize / sqrt2, height: baseSize)
+
+        let image = NSImage(size: size)
+        image.lockFocus()
+
+        // 背景（ダークグレー）
+        NSColor(white: 0.15, alpha: 1.0).setFill()
+        NSRect(origin: .zero, size: size).fill()
+
+        // テキスト補正用の回転角度（ビューでの回転を打ち消す方向）
+        // SwiftUIのrotationEffectは正の値で時計回り、Core Graphicsのrotateは正の値で反時計回り
+        // よって同じ符号を使えばビューの回転を打ち消せる
+        let textRotationDegrees: CGFloat = CGFloat(rotation.rawValue)
+
+        // コンテンツを描画（中央配置、回転補正付き）
+        let context = NSGraphicsContext.current!.cgContext
+        context.saveGState()
+
+        // 中心を軸に回転
+        context.translateBy(x: size.width / 2, y: size.height / 2)
+        context.rotate(by: textRotationDegrees * .pi / 180)
+        context.translateBy(x: -size.width / 2, y: -size.height / 2)
+
+        // アイコン（壊れた画像を示すシンボル）
+        let iconConfig = NSImage.SymbolConfiguration(pointSize: 64, weight: .light)
+        if let iconImage = NSImage(systemSymbolName: "photo", accessibilityDescription: nil)?
+            .withSymbolConfiguration(iconConfig) {
+            let iconSize = iconImage.size
+            let iconRect = NSRect(
+                x: (size.width - iconSize.width) / 2,
+                y: (size.height - iconSize.height) / 2 + 30,
+                width: iconSize.width,
+                height: iconSize.height
+            )
+            NSColor(white: 0.4, alpha: 1.0).setFill()
+            iconImage.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 0.5)
+        }
+
+        // テキスト
+        let text = L("broken_image")
+        let font = NSFont.systemFont(ofSize: 24, weight: .medium)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor(white: 0.5, alpha: 1.0)
+        ]
+        let textSize = text.size(withAttributes: attributes)
+        let textRect = NSRect(
+            x: (size.width - textSize.width) / 2,
+            y: (size.height - textSize.height) / 2 - 40,
+            width: textSize.width,
+            height: textSize.height
+        )
+        text.draw(in: textRect, withAttributes: attributes)
+
+        context.restoreGState()
+        image.unlockFocus()
+
+        return image
+    }
+
     /// 画像を強制デコードしてビットマップ表現を作成
     /// Core AnimationのテクスチャキャッシュからエビクトされてもCPU側にデコード済みデータを保持
     private func forceDecodeImage(_ image: NSImage) -> NSImage {
@@ -92,6 +194,12 @@ class BookViewModel {
         let pixelWidth = srcRep.pixelsWide
         let pixelHeight = srcRep.pixelsHigh
         guard pixelWidth > 0 && pixelHeight > 0 else { return image }
+
+        // 壊れた画像の検出：CGImageが取得できない場合はデコードをスキップ
+        guard image.cgImage(forProposedRect: nil, context: nil, hints: nil) != nil else {
+            debugLog("⚠️ forceDecodeImage: CGImage unavailable, skipping decode", level: .normal)
+            return image
+        }
 
         // 色空間はデバイスRGBを使用（互換性のため）
         let colorSpace: NSColorSpaceName = .deviceRGB
@@ -622,8 +730,8 @@ class BookViewModel {
 
         guard source.imageCount > 0 else {
             // パスワードが必要なアーカイブかどうかをチェック
-            if let archiveSource = source as? ArchiveImageSource,
-               archiveSource.needsPassword,
+            if let zipSource = source as? SwiftZipImageSource,
+               zipSource.needsPassword,
                let url = source.sourceURL {
                 // Keychainに保存されたパスワードを試す
                 if let savedPassword = PasswordStorage.shared.getPassword(forArchive: url.path) {
@@ -652,13 +760,7 @@ class BookViewModel {
                 return
             }
 
-            // 暗号化されているが画像が0の場合（パスワード未対応）
-            if let archiveSource = source as? ArchiveImageSource,
-               archiveSource.hasEncryptedEntries {
-                errorMessage = L("error_password_protected")
-            } else {
-                errorMessage = L("error_no_images_found")
-            }
+            errorMessage = L("error_no_images_found")
             return
         }
 
@@ -789,7 +891,7 @@ class BookViewModel {
         let source: ImageSource?
 
         if ext == "zip" || ext == "cbz" {
-            source = await ArchiveImageSource.create(url: url, password: password)
+            source = await SwiftZipImageSource.create(url: url, password: password)
         } else if ext == "rar" || ext == "cbr" {
             source = await RarImageSource.create(url: url, password: password)
         } else {
@@ -818,6 +920,7 @@ class BookViewModel {
 
         // 前のソースのキャッシュをクリア
         imageCache.removeAllObjects()
+        brokenImageIndices.removeAll()
         debugLog("🗑️ Image cache cleared for new source", level: .verbose)
 
         self.imageSource = source
@@ -873,15 +976,6 @@ class BookViewModel {
         DebugLogger.log("📬 File opened: hasOpenFile=\(hasOpenFile)", level: .verbose)
         WindowCoordinator.shared.logCurrentState()
         // Note: メニュー状態はNSMenuDelegateで動的に更新されるため、notifyHistoryUpdate()は不要
-    }
-
-    /// zipファイルを開く（互換性のため残す）
-    func openArchive(url: URL) {
-        if let source = ArchiveImageSource(url: url) {
-            openSource(source)
-        } else {
-            errorMessage = L("error_cannot_open_zip")
-        }
     }
 
     /// 画像ファイル（単一・複数）を開く
@@ -944,7 +1038,7 @@ class BookViewModel {
         if urls.count == 1 {
             let ext = urls[0].pathExtension.lowercased()
             if ext == "zip" || ext == "cbz" {
-                return await ArchiveImageSource.create(url: urls[0], onPhaseChange: onPhaseChange)
+                return await openZipArchive(url: urls[0], onPhaseChange: onPhaseChange)
             } else if ext == "rar" || ext == "cbr" {
                 return await RarImageSource.create(url: urls[0], onPhaseChange: onPhaseChange)
             } else if ext == "7z" {
@@ -958,6 +1052,14 @@ class BookViewModel {
             // 複数ファイルの場合
             return FileImageSource(urls: urls)
         }
+    }
+
+    /// ZIPアーカイブを開く（swift-zip-archive使用）
+    private nonisolated static func openZipArchive(
+        url: URL,
+        onPhaseChange: (@Sendable (String) async -> Void)? = nil
+    ) async -> ImageSource? {
+        return await SwiftZipImageSource.create(url: url, onPhaseChange: onPhaseChange)
     }
 
     /// 現在のページの画像を読み込む（ジャンプ操作用、順方向ロジックを使用）
@@ -1372,7 +1474,7 @@ class BookViewModel {
     }
 
     /// キャッシュを使って画像を読み込む（sourceIndexで指定）
-    private func loadCachedImage(at sourceIndex: Int) -> NSImage? {
+    private func loadCachedImage(at sourceIndex: Int) -> NSImage {
         let key = NSNumber(value: sourceIndex)
 
         // キャッシュヒット
@@ -1384,7 +1486,14 @@ class BookViewModel {
         // キャッシュミス → ソースから読み込み
         guard let source = imageSource,
               let image = source.loadImage(at: sourceIndex) else {
-            return nil
+            // 読み込み失敗 → 回転・縦横設定に応じたプレースホルダーを返す
+            // プレースホルダーは静的キャッシュで管理されるため、imageCacheには入れない
+            // （回転/縦横変更時に正しいプレースホルダーが返されるようにするため）
+            debugLog("⚠️ Failed to load image at sourceIndex \(sourceIndex), using placeholder", level: .normal)
+            brokenImageIndices.insert(sourceIndex)
+            let rotation = pageDisplaySettings.rotation(for: sourceIndex)
+            let isLandscape = pageDisplaySettings.isLandscapePlaceholder(sourceIndex)
+            return Self.brokenImagePlaceholder(rotation: rotation, isLandscape: isLandscape)
         }
 
         // 画像を強制デコードしてキャッシュ（CA::Transaction::commitでの再デコードを防ぐ）
@@ -1938,6 +2047,36 @@ class BookViewModel {
         loadCurrentPage()
     }
 
+    /// 指定ページのプレースホルダー縦横を切り替え（壊れた画像用）
+    /// @param pageIndex 表示上のページ番号
+    func togglePlaceholderOrientation(at pageIndex: Int) {
+        let srcIndex = sourceIndex(for: pageIndex)
+        pageDisplaySettings.togglePlaceholderOrientation(at: srcIndex)
+        // 即時反映のため画像をクリアして再読み込み
+        if viewMode == .single {
+            currentImage = nil
+        } else {
+            firstPageImage = nil
+            secondPageImage = nil
+        }
+        saveViewState()
+        loadCurrentPage()
+    }
+
+    /// 指定ページがランドスケーププレースホルダーを使用するかどうか
+    /// @param pageIndex 表示上のページ番号
+    func isLandscapePlaceholder(at pageIndex: Int) -> Bool {
+        let srcIndex = sourceIndex(for: pageIndex)
+        return pageDisplaySettings.isLandscapePlaceholder(srcIndex)
+    }
+
+    /// 指定ページが壊れた画像（読み込み失敗）かどうか
+    /// @param pageIndex 表示上のページ番号
+    func isBrokenImage(at pageIndex: Int) -> Bool {
+        let srcIndex = sourceIndex(for: pageIndex)
+        return brokenImageIndices.contains(srcIndex)
+    }
+
     /// 表示状態を保存（モード、ページ番号、読み方向、ページ表示設定）
     private func saveViewState() {
         guard let source = imageSource,
@@ -2159,8 +2298,8 @@ class BookViewModel {
 
         // アーカイブ名（zipファイル名 or 画像フォルダの親/フォルダ名）
         let archiveName: String
-        if source is ArchiveImageSource {
-            // zipファイル: ファイル名のみ
+        if source is SwiftZipImageSource || source is RarImageSource {
+            // 書庫ファイル: ファイル名のみ
             archiveName = sourceName
         } else {
             // 画像ファイル: 親フォルダ/フォルダ名
