@@ -387,3 +387,5 @@
 "shortcut_zoom_out" = "縮小";
 "shortcut_reset_zoom" = "表示サイズのリセット";
 "shortcut_close_file" = "ファイルを閉じる";
+"shortcut_fit_to_window" = "ウィンドウに合わせる";
+"shortcut_fit_to_original" = "実際のサイズで表示";

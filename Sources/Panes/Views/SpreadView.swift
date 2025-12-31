@@ -115,10 +115,10 @@ struct SpreadView<ContextMenu: View>: View {
                 }
             }
             .frame(
-                minWidth: fittingMode == .height ? nil : size.width,
-                maxWidth: fittingMode == .height ? .infinity : size.width,
-                minHeight: fittingMode == .width ? nil : size.height,
-                maxHeight: fittingMode == .width ? .infinity : size.height
+                minWidth: fittingMode == .height || zoomLevel > 1.0 ? nil : size.width,
+                maxWidth: fittingMode == .height || zoomLevel > 1.0 ? .infinity : size.width,
+                minHeight: fittingMode == .width || zoomLevel > 1.0 ? nil : size.height,
+                maxHeight: fittingMode == .width || zoomLevel > 1.0 ? .infinity : size.height
             )
         } else {
             // 単ページ表示（見開きモード中）
@@ -144,10 +144,10 @@ struct SpreadView<ContextMenu: View>: View {
                     .contextMenu { contextMenuBuilder(firstPageIndex) }
                 }
                 .frame(
-                    minWidth: fittingMode == .height ? nil : size.width,
-                    maxWidth: fittingMode == .height ? .infinity : size.width,
-                    minHeight: fittingMode == .width ? nil : size.height,
-                    maxHeight: fittingMode == .width ? .infinity : size.height,
+                    minWidth: fittingMode == .height || zoomLevel > 1.0 ? nil : size.width,
+                    maxWidth: fittingMode == .height || zoomLevel > 1.0 ? .infinity : size.width,
+                    minHeight: fittingMode == .width || zoomLevel > 1.0 ? nil : size.height,
+                    maxHeight: fittingMode == .width || zoomLevel > 1.0 ? .infinity : size.height,
                     alignment: .leading
                 )
 
@@ -170,10 +170,10 @@ struct SpreadView<ContextMenu: View>: View {
                         .frame(width: halfWidth)
                 }
                 .frame(
-                    minWidth: fittingMode == .height ? nil : size.width,
-                    maxWidth: fittingMode == .height ? .infinity : size.width,
-                    minHeight: fittingMode == .width ? nil : size.height,
-                    maxHeight: fittingMode == .width ? .infinity : size.height,
+                    minWidth: fittingMode == .height || zoomLevel > 1.0 ? nil : size.width,
+                    maxWidth: fittingMode == .height || zoomLevel > 1.0 ? .infinity : size.width,
+                    minHeight: fittingMode == .width || zoomLevel > 1.0 ? nil : size.height,
+                    maxHeight: fittingMode == .width || zoomLevel > 1.0 ? .infinity : size.height,
                     alignment: .leading
                 )
 

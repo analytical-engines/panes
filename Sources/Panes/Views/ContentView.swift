@@ -1455,6 +1455,10 @@ struct ContentView: View {
             viewModel.zoomOut()
         case .closeFile:
             viewModel.closeFile()
+        case .fitToWindow:
+            viewModel.setFittingMode(.window)
+        case .fitToOriginalSize:
+            viewModel.setFittingMode(.originalSize)
         }
 
         return true

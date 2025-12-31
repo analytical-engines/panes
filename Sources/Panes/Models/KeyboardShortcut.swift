@@ -17,6 +17,8 @@ enum ShortcutAction: String, CaseIterable, Codable, Identifiable {
     case zoomIn = "zoomIn"
     case zoomOut = "zoomOut"
     case closeFile = "closeFile"
+    case fitToWindow = "fitToWindow"
+    case fitToOriginalSize = "fitToOriginalSize"
 
     /// 表示名
     var displayName: String {
@@ -33,6 +35,8 @@ enum ShortcutAction: String, CaseIterable, Codable, Identifiable {
         case .zoomIn: return L("shortcut_zoom_in")
         case .zoomOut: return L("shortcut_zoom_out")
         case .closeFile: return L("shortcut_close_file")
+        case .fitToWindow: return L("shortcut_fit_to_window")
+        case .fitToOriginalSize: return L("shortcut_fit_to_original")
         }
     }
 
@@ -51,6 +55,8 @@ enum ShortcutAction: String, CaseIterable, Codable, Identifiable {
         case .zoomIn: return ["⌘+"]
         case .zoomOut: return ["⌘-"]
         case .closeFile: return ["⇧⌘W"]
+        case .fitToWindow: return []
+        case .fitToOriginalSize: return []
         }
     }
 }
