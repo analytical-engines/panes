@@ -3230,7 +3230,7 @@ struct SinglePageView<ContextMenu: View>: View {
             GeometryReader { geometry in
                 // ズームが適用されている場合、または等倍表示の場合はスクロール可能にする
                 if zoomLevel != 1.0 || fittingMode == .originalSize {
-                    ScrollView([.horizontal, .vertical], showsIndicators: true) {
+                    ZoomableScrollView(viewportSize: geometry.size) {
                         ImageDisplayView(
                             image: image,
                             rotation: rotation,
@@ -3247,7 +3247,6 @@ struct SinglePageView<ContextMenu: View>: View {
                             alignment: .center
                         )
                     }
-                    .defaultScrollAnchor(.center)
                 } else {
                     switch fittingMode {
                     case .window:
@@ -3255,7 +3254,7 @@ struct SinglePageView<ContextMenu: View>: View {
                             .contextMenu { contextMenuBuilder(pageIndex) }
                     case .height:
                         // 縦フィット: 横スクロール可能、横センタリング
-                        ScrollView(.horizontal, showsIndicators: true) {
+                        ZoomableScrollView(viewportSize: geometry.size) {
                             ImageDisplayView(
                                 image: image,
                                 rotation: rotation,
@@ -3269,7 +3268,7 @@ struct SinglePageView<ContextMenu: View>: View {
                         }
                     case .width:
                         // 横フィット: 縦スクロール可能、縦センタリング
-                        ScrollView(.vertical, showsIndicators: true) {
+                        ZoomableScrollView(viewportSize: geometry.size) {
                             ImageDisplayView(
                                 image: image,
                                 rotation: rotation,
@@ -3328,7 +3327,7 @@ struct SpreadPageView<ContextMenu: View>: View {
             GeometryReader { geometry in
                 // ズームが適用されている場合は常にスクロール可能にする
                 if zoomLevel != 1.0 {
-                    ScrollView([.horizontal, .vertical], showsIndicators: true) {
+                    ZoomableScrollView(viewportSize: geometry.size) {
                         SpreadView(
                             readingDirection: readingDirection,
                             firstPageImage: firstPageImage,
@@ -3354,7 +3353,6 @@ struct SpreadPageView<ContextMenu: View>: View {
                             alignment: .center
                         )
                     }
-                    .defaultScrollAnchor(.center)
                 } else {
                     switch fittingMode {
                     case .window:
@@ -3377,7 +3375,7 @@ struct SpreadPageView<ContextMenu: View>: View {
                         .equatable()
                     case .height:
                         // 縦フィット: 横スクロール可能、横センタリング
-                        ScrollView(.horizontal, showsIndicators: true) {
+                        ZoomableScrollView(viewportSize: geometry.size) {
                             SpreadView(
                                 readingDirection: readingDirection,
                                 firstPageImage: firstPageImage,
@@ -3400,7 +3398,7 @@ struct SpreadPageView<ContextMenu: View>: View {
                         }
                     case .width:
                         // 横フィット: 縦スクロール可能、縦センタリング
-                        ScrollView(.vertical, showsIndicators: true) {
+                        ZoomableScrollView(viewportSize: geometry.size) {
                             SpreadView(
                                 readingDirection: readingDirection,
                                 firstPageImage: firstPageImage,

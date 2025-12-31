@@ -622,6 +622,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
 
+        // サブメニューの処理（整列、表示サイズ、補間）
+        let sortTitle = L("menu_sort")
+        let displaySizeTitle = L("menu_display_size")
+        let interpolationTitle = L("menu_interpolation")
+
+        if menu.title == sortTitle {
+            updateSortSubmenu(menu, hasOpenFile: hasOpenFile, viewModel: viewModel)
+            return
+        }
+        if menu.title == displaySizeTitle {
+            updateDisplaySizeSubmenu(menu, hasOpenFile: hasOpenFile, viewModel: viewModel)
+            return
+        }
+        if menu.title == interpolationTitle {
+            updateInterpolationSubmenu(menu, hasOpenFile: hasOpenFile, viewModel: viewModel)
+            return
+        }
+
         DebugLogger.log("📋 menuNeedsUpdate: unhandled menu '\(menu.title)'", level: .normal)
     }
 
@@ -702,24 +720,30 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             // 整列メニュー
             else if title == sortTitle {
                 item.isEnabled = hasOpenFile
-                // サブメニュー内の項目も更新
+                // サブメニューにデリゲートを設定して開いた時にも更新されるようにする
                 if let submenu = item.submenu {
+                    submenu.delegate = self
+                    submenu.autoenablesItems = false
                     updateSortSubmenu(submenu, hasOpenFile: hasOpenFile, viewModel: viewModel)
                 }
             }
             // 表示サイズメニュー
             else if title == displaySizeTitle {
                 item.isEnabled = hasOpenFile
-                // サブメニュー内の項目も更新
+                // サブメニューにデリゲートを設定して開いた時にも更新されるようにする
                 if let submenu = item.submenu {
+                    submenu.delegate = self
+                    submenu.autoenablesItems = false
                     updateDisplaySizeSubmenu(submenu, hasOpenFile: hasOpenFile, viewModel: viewModel)
                 }
             }
             // 補間メニュー
             else if title == L("menu_interpolation") {
                 item.isEnabled = hasOpenFile
-                // サブメニュー内の項目も更新
+                // サブメニューにデリゲートを設定して開いた時にも更新されるようにする
                 if let submenu = item.submenu {
+                    submenu.delegate = self
+                    submenu.autoenablesItems = false
                     updateInterpolationSubmenu(submenu, hasOpenFile: hasOpenFile, viewModel: viewModel)
                 }
             }
