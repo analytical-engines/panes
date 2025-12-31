@@ -154,7 +154,10 @@ struct ImageViewerApp: App {
                 Divider()
 
                 Button(action: {
-                    focusedViewModel?.toggleViewMode()
+                    let vm = focusedViewModel
+                    let mode = vm?.viewMode == .spread ? "spread" : (vm?.viewMode == .single ? "single" : "nil")
+                    DebugLogger.log("🔘 toggleViewMode action: focusedViewModel=\(vm != nil), viewMode=\(mode)", level: .normal)
+                    vm?.toggleViewMode()
                 }) {
                     Label(
                         focusedViewModel?.viewMode == .spread
@@ -165,7 +168,6 @@ struct ImageViewerApp: App {
                             : "rectangle.split.2x1"
                     )
                 }
-                .disabled(focusedViewModel == nil)
 
                 Divider()
 
@@ -181,7 +183,7 @@ struct ImageViewerApp: App {
                             : "arrow.right"
                     )
                 }
-                .disabled(focusedViewModel == nil)
+                // Note: .disabled()はAppDelegateのmenuNeedsUpdateで動的に制御
 
                 // 整列メニュー
                 Menu(L("menu_sort")) {
@@ -201,63 +203,38 @@ struct ImageViewerApp: App {
                     Divider()
 
                     // 逆順トグル
+                    // Note: チェックマークはAppDelegateのmenuNeedsUpdateで動的に制御
                     Button(action: {
                         focusedViewModel?.toggleSortReverse()
                     }) {
-                        Label(
-                            L("menu_sort_reverse"),
-                            systemImage: focusedViewModel?.isSortReversed == true
-                                ? "checkmark"
-                                : ""
-                        )
+                        Label(L("menu_sort_reverse"), systemImage: "")
                     }
-                    .disabled(focusedViewModel?.sortMethod.supportsReverse != true)
                 }
-                .disabled(focusedViewModel == nil)
+                // Note: .disabled()はAppDelegateのmenuNeedsUpdateで動的に制御
 
                 // 表示サイズ（フィッティング + ズーム統合）
                 Menu(L("menu_display_size")) {
                     Button(action: {
-                        focusedViewModel?.fittingMode = .window
+                        focusedViewModel?.setFittingMode(.window)
                     }) {
-                        Label(
-                            L("menu_fitting_window"),
-                            systemImage: focusedViewModel?.fittingMode == .window
-                                ? "checkmark"
-                                : ""
-                        )
+                        Label(L("menu_fitting_window"), systemImage: "")
                     }
                     Button(action: {
-                        focusedViewModel?.fittingMode = .height
+                        focusedViewModel?.setFittingMode(.height)
                     }) {
-                        Label(
-                            L("menu_fitting_height"),
-                            systemImage: focusedViewModel?.fittingMode == .height
-                                ? "checkmark"
-                                : ""
-                        )
+                        Label(L("menu_fitting_height"), systemImage: "")
                     }
                     Button(action: {
-                        focusedViewModel?.fittingMode = .width
+                        focusedViewModel?.setFittingMode(.width)
                     }) {
-                        Label(
-                            L("menu_fitting_width"),
-                            systemImage: focusedViewModel?.fittingMode == .width
-                                ? "checkmark"
-                                : ""
-                        )
+                        Label(L("menu_fitting_width"), systemImage: "")
                     }
                     Button(action: {
-                        focusedViewModel?.fittingMode = .originalSize
+                        focusedViewModel?.setFittingMode(.originalSize)
                     }) {
-                        Label(
-                            L("menu_fitting_original"),
-                            systemImage: focusedViewModel?.fittingMode == .originalSize
-                                ? "checkmark"
-                                : ""
-                        )
+                        Label(L("menu_fitting_original"), systemImage: "")
                     }
-                    .disabled(focusedViewModel?.viewMode == .spread)
+                    // Note: チェックマークはAppDelegateのmenuNeedsUpdateで動的に制御
 
                     Divider()
 
@@ -274,21 +251,29 @@ struct ImageViewerApp: App {
                         Label(L("menu_zoom_out"), systemImage: "minus.magnifyingglass")
                     }
                     .keyboardShortcut("-", modifiers: .command)
-
-                    Button(action: {
-                        focusedViewModel?.resetZoom()
-                    }) {
-                        Label(L("menu_zoom_reset"), systemImage: "1.magnifyingglass")
-                    }
-                    .keyboardShortcut("0", modifiers: .command)
-
-                    Divider()
-
-                    // 現在のズームレベル表示
-                    Text("\(focusedViewModel?.zoomPercentage ?? 100)%")
-                        .foregroundColor(.secondary)
                 }
-                .disabled(focusedViewModel == nil)
+                // Note: .disabled()はAppDelegateのmenuNeedsUpdateで動的に制御
+
+                // 補間アルゴリズム
+                Menu(L("menu_interpolation")) {
+                    Button(action: {
+                        focusedViewModel?.interpolationMode = .highQuality
+                    }) {
+                        Label(L("menu_interpolation_high"), systemImage: "")
+                    }
+                    Button(action: {
+                        focusedViewModel?.interpolationMode = .bilinear
+                    }) {
+                        Label(L("menu_interpolation_bilinear"), systemImage: "")
+                    }
+                    Button(action: {
+                        focusedViewModel?.interpolationMode = .nearestNeighbor
+                    }) {
+                        Label(L("menu_interpolation_nearest"), systemImage: "")
+                    }
+                    // Note: チェックマークはAppDelegateのmenuNeedsUpdateで動的に制御
+                }
+                // Note: .disabled()はAppDelegateのmenuNeedsUpdateで動的に制御
 
                 Divider()
 
@@ -299,7 +284,7 @@ struct ImageViewerApp: App {
                     Label(L("menu_reset_page_settings"), systemImage: "arrow.counterclockwise")
                 }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
-                .disabled(focusedViewModel == nil)
+                // Note: .disabled()はAppDelegateのmenuNeedsUpdateで動的に制御
 
                 Divider()
 
@@ -317,7 +302,7 @@ struct ImageViewerApp: App {
                     )
                 }
                 .keyboardShortcut("b", modifiers: .command)
-                .disabled(focusedViewModel?.hasOpenFile != true)
+                // Note: .disabled()はAppDelegateのmenuNeedsUpdateで動的に制御
             }
 
             // ウィンドウメニューにセッション保存を追加
@@ -575,32 +560,43 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
 
-        // ファイルメニューのデリゲートを設定（メニュー表示時に状態を更新するため）
+        // メニューのデリゲートを設定（メニュー表示時に状態を更新するため）
         // SwiftUIのメニュー構築が完了するまで少し待つ
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.setupFileMenuDelegate()
+            self?.setupMenuDelegates()
         }
     }
 
-    /// ファイルメニューのデリゲートを設定
-    private func setupFileMenuDelegate() {
+    /// メニューのデリゲートを設定
+    private func setupMenuDelegates() {
         guard let mainMenu = NSApp.mainMenu else {
-            DebugLogger.log("📁 setupFileMenuDelegate: mainMenu is nil", level: .normal)
+            DebugLogger.log("📁 setupMenuDelegates: mainMenu is nil", level: .normal)
             return
         }
+
+        // デバッグ: 全メニュー項目を出力
+        DebugLogger.log("📋 Main menu items: \(mainMenu.items.map { "[\($0.title)]/[\($0.submenu?.title ?? "nil")]" })", level: .normal)
+
         // "File" メニューを探す（ローカライズ対応のため複数の名前をチェック）
         let fileMenuNames = ["File", "ファイル"]
+        // "View" メニューを探す
+        let viewMenuNames = ["View", "表示"]
+
         for menuItem in mainMenu.items {
-            if let submenu = menuItem.submenu,
-               fileMenuNames.contains(submenu.title) || fileMenuNames.contains(menuItem.title) {
-                submenu.delegate = self
-                // 自動有効化を無効にして手動で制御する
-                submenu.autoenablesItems = false
-                DebugLogger.log("📁 File menu delegate set, autoenablesItems=false", level: .normal)
-                return
+            if let submenu = menuItem.submenu {
+                let title = submenu.title.isEmpty ? menuItem.title : submenu.title
+
+                if fileMenuNames.contains(title) {
+                    submenu.delegate = self
+                    submenu.autoenablesItems = false
+                    DebugLogger.log("📁 File menu delegate set, autoenablesItems=false", level: .normal)
+                } else if viewMenuNames.contains(title) {
+                    submenu.delegate = self
+                    submenu.autoenablesItems = false
+                    DebugLogger.log("👁️ View menu delegate set, autoenablesItems=false", level: .normal)
+                }
             }
         }
-        DebugLogger.log("📁 setupFileMenuDelegate: File menu not found in \(mainMenu.items.map { $0.title })", level: .normal)
     }
 
     // MARK: - NSMenuDelegate
@@ -608,25 +604,255 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         // メニューが表示される直前に呼ばれる
         let hasOpenFile = WindowCoordinator.shared.keyWindowHasOpenFile
-        DebugLogger.log("📁 menuNeedsUpdate: hasOpenFile=\(hasOpenFile), items=\(menu.items.map { $0.title })", level: .normal)
+        let viewModel = WindowCoordinator.shared.keyWindowViewModel
 
-        // 「ファイルを閉じる」と「メモを編集」の有効/無効を更新
+        DebugLogger.log("📋 menuNeedsUpdate: menu.title='\(menu.title)', hasOpenFile=\(hasOpenFile), viewModel=\(viewModel != nil)", level: .normal)
+
+        // ファイルメニューの処理
+        let fileMenuNames = ["File", "ファイル"]
+        if fileMenuNames.contains(menu.title) {
+            updateFileMenu(menu, hasOpenFile: hasOpenFile)
+            return
+        }
+
+        // 表示メニューの処理
+        let viewMenuNames = ["View", "表示"]
+        if viewMenuNames.contains(menu.title) {
+            updateViewMenu(menu, hasOpenFile: hasOpenFile, viewModel: viewModel)
+            return
+        }
+
+        DebugLogger.log("📋 menuNeedsUpdate: unhandled menu '\(menu.title)'", level: .normal)
+    }
+
+    /// ファイルメニューの項目を更新
+    private func updateFileMenu(_ menu: NSMenu, hasOpenFile: Bool) {
+        DebugLogger.log("📁 updateFileMenu: hasOpenFile=\(hasOpenFile)", level: .verbose)
+
         let closeFileTitle = L("menu_close_file")
         let editMemoTitle = L("menu_edit_memo")
+        let pageSettingsTitle = L("menu_page_settings")
 
         for item in menu.items {
             if item.title == closeFileTitle || item.title == editMemoTitle {
-                DebugLogger.log("📁 Setting '\(item.title)' isEnabled=\(hasOpenFile)", level: .normal)
                 item.isEnabled = hasOpenFile
             }
             // サブメニューも確認（ページ設定メニュー内の項目）
-            if let submenu = item.submenu {
-                let pageSettingsTitle = L("menu_page_settings")
-                if item.title == pageSettingsTitle {
-                    for subItem in submenu.items {
-                        subItem.isEnabled = hasOpenFile
+            if let submenu = item.submenu, item.title == pageSettingsTitle {
+                for subItem in submenu.items {
+                    subItem.isEnabled = hasOpenFile
+                }
+            }
+        }
+    }
+
+    /// 表示メニューの項目を更新
+    private func updateViewMenu(_ menu: NSMenu, hasOpenFile: Bool, viewModel: BookViewModel?) {
+        DebugLogger.log("👁️ updateViewMenu: hasOpenFile=\(hasOpenFile), viewModel=\(viewModel != nil)", level: .normal)
+
+        // ファイルが開いているかどうかで有効/無効を決定
+        let singleViewTitle = L("menu_single_view")
+        let spreadViewTitle = L("menu_spread_view")
+        let sortTitle = L("menu_sort")
+        let displaySizeTitle = L("menu_display_size")
+        let resetPageSettingsTitle = L("menu_reset_page_settings")
+        let statusBarShowTitle = L("menu_show_status_bar")
+        let statusBarHideTitle = L("menu_hide_status_bar")
+
+        DebugLogger.log("👁️ Looking for: single='\(singleViewTitle)', spread='\(spreadViewTitle)'", level: .normal)
+
+        // 読み方向のタイトル
+        let rtlTitle = L("menu_reading_direction_rtl")
+        let ltrTitle = L("menu_reading_direction_ltr")
+
+        for item in menu.items {
+            let title = item.title
+            DebugLogger.log("👁️ Menu item: '\(title)'", level: .verbose)
+
+            // 見開き表示/単ページ表示 - タイトルとアイコンを動的に更新
+            if title == singleViewTitle || title == spreadViewTitle {
+                item.isEnabled = hasOpenFile
+                // 現在の状態に応じてタイトルとアイコンを更新
+                if let vm = viewModel {
+                    let isSpread = vm.viewMode == .spread
+                    let newTitle = isSpread ? singleViewTitle : spreadViewTitle
+                    let newIcon = isSpread ? "rectangle" : "rectangle.split.2x1"
+                    if item.title != newTitle {
+                        item.title = newTitle
+                        item.image = NSImage(systemSymbolName: newIcon, accessibilityDescription: nil)
+                        DebugLogger.log("👁️ Updated view mode: '\(title)' -> '\(newTitle)' (icon: \(newIcon))", level: .normal)
                     }
                 }
+            }
+            // 読み進め方向 - タイトルとアイコンを動的に更新
+            else if title == rtlTitle || title == ltrTitle {
+                item.isEnabled = hasOpenFile
+                // 現在の状態に応じてタイトルとアイコンを更新
+                if let vm = viewModel {
+                    let isRTL = vm.readingDirection == .rightToLeft
+                    let newTitle = isRTL ? rtlTitle : ltrTitle
+                    let newIcon = isRTL ? "arrow.left" : "arrow.right"
+                    if item.title != newTitle {
+                        item.title = newTitle
+                        item.image = NSImage(systemSymbolName: newIcon, accessibilityDescription: nil)
+                        DebugLogger.log("👁️ Updated reading direction: '\(title)' -> '\(newTitle)' (icon: \(newIcon))", level: .normal)
+                    }
+                }
+            }
+            // 整列メニュー
+            else if title == sortTitle {
+                item.isEnabled = hasOpenFile
+                // サブメニュー内の項目も更新
+                if let submenu = item.submenu {
+                    updateSortSubmenu(submenu, hasOpenFile: hasOpenFile, viewModel: viewModel)
+                }
+            }
+            // 表示サイズメニュー
+            else if title == displaySizeTitle {
+                item.isEnabled = hasOpenFile
+                // サブメニュー内の項目も更新
+                if let submenu = item.submenu {
+                    updateDisplaySizeSubmenu(submenu, hasOpenFile: hasOpenFile, viewModel: viewModel)
+                }
+            }
+            // 補間メニュー
+            else if title == L("menu_interpolation") {
+                item.isEnabled = hasOpenFile
+                // サブメニュー内の項目も更新
+                if let submenu = item.submenu {
+                    updateInterpolationSubmenu(submenu, hasOpenFile: hasOpenFile, viewModel: viewModel)
+                }
+            }
+            // ページ設定リセット
+            else if title == resetPageSettingsTitle {
+                item.isEnabled = hasOpenFile
+            }
+            // ステータスバー表示 - タイトルとアイコンを動的に更新
+            else if title == statusBarShowTitle || title == statusBarHideTitle {
+                item.isEnabled = hasOpenFile
+                // 現在の状態に応じてタイトルとアイコンを更新
+                if let vm = viewModel {
+                    let isVisible = vm.showStatusBar
+                    let newTitle = isVisible ? statusBarHideTitle : statusBarShowTitle
+                    let newIcon = isVisible ? "eye.slash" : "eye"
+                    if item.title != newTitle {
+                        item.title = newTitle
+                        item.image = NSImage(systemSymbolName: newIcon, accessibilityDescription: nil)
+                        DebugLogger.log("👁️ Updated status bar: '\(title)' -> '\(newTitle)' (icon: \(newIcon))", level: .normal)
+                    }
+                }
+            }
+        }
+    }
+
+    /// 整列サブメニューの項目を更新
+    private func updateSortSubmenu(_ menu: NSMenu, hasOpenFile: Bool, viewModel: BookViewModel?) {
+        let reverseTitle = L("menu_sort_reverse")
+        let currentSortMethod = viewModel?.sortMethod
+        let supportsReverse = currentSortMethod?.supportsReverse ?? false
+        let isReversed = viewModel?.isSortReversed ?? false
+
+        // ソート方法のタイトルとenumのマッピング
+        let sortMethodTitles: [(String, ImageSortMethod)] = [
+            (L("sort_name"), .name),
+            (L("sort_natural"), .natural),
+            (L("sort_date"), .date),
+            (L("sort_random"), .random),
+            (L("sort_custom"), .custom)
+        ]
+
+        for item in menu.items {
+            let title = item.title
+
+            if title == reverseTitle {
+                // 逆順は現在のソート方法が逆順をサポートする場合のみ有効
+                let enabled = hasOpenFile && supportsReverse
+                item.isEnabled = enabled
+                // 逆順の場合はチェックマーク、そうでない場合はプレースホルダー
+                if isReversed {
+                    item.image = NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)
+                } else {
+                    // チェックマークと同じサイズの透明プレースホルダー
+                    let placeholder = NSImage(size: NSSize(width: 16, height: 16))
+                    item.image = placeholder
+                }
+            } else if let matchedMethod = sortMethodTitles.first(where: { $0.0 == title })?.1 {
+                // ソート方法のチェックマーク
+                item.isEnabled = hasOpenFile
+                item.image = currentSortMethod == matchedMethod
+                    ? NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)
+                    : nil
+            } else if !item.isSeparatorItem {
+                item.isEnabled = hasOpenFile
+            }
+        }
+    }
+
+    /// 表示サイズサブメニューの項目を更新
+    private func updateDisplaySizeSubmenu(_ menu: NSMenu, hasOpenFile: Bool, viewModel: BookViewModel?) {
+        let windowTitle = L("menu_fitting_window")
+        let heightTitle = L("menu_fitting_height")
+        let widthTitle = L("menu_fitting_width")
+        let originalSizeTitle = L("menu_fitting_original")
+
+        let currentMode = viewModel?.fittingMode
+        // ズームしている場合はチェックを外す（フィッティングモードから外れている状態）
+        let isNotZoomed = viewModel?.zoomLevel == 1.0
+
+        for item in menu.items {
+            let title = item.title
+
+            if title == windowTitle {
+                item.isEnabled = hasOpenFile
+                item.image = (currentMode == .window && isNotZoomed)
+                    ? NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)
+                    : nil
+            } else if title == heightTitle {
+                item.isEnabled = hasOpenFile
+                item.image = (currentMode == .height && isNotZoomed)
+                    ? NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)
+                    : nil
+            } else if title == widthTitle {
+                item.isEnabled = hasOpenFile
+                item.image = (currentMode == .width && isNotZoomed)
+                    ? NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)
+                    : nil
+            } else if title == originalSizeTitle {
+                // オリジナルサイズは見開きモードでは無効
+                item.isEnabled = hasOpenFile && viewModel?.viewMode != .spread
+                item.image = (currentMode == .originalSize && isNotZoomed)
+                    ? NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)
+                    : nil
+            } else if !item.isSeparatorItem {
+                item.isEnabled = hasOpenFile
+            }
+        }
+    }
+
+    /// 補間サブメニューの項目を更新
+    private func updateInterpolationSubmenu(_ menu: NSMenu, hasOpenFile: Bool, viewModel: BookViewModel?) {
+        let highTitle = L("menu_interpolation_high")
+        let bilinearTitle = L("menu_interpolation_bilinear")
+        let nearestTitle = L("menu_interpolation_nearest")
+
+        let currentMode = viewModel?.interpolationMode
+
+        for item in menu.items {
+            let title = item.title
+            item.isEnabled = hasOpenFile
+
+            if title == highTitle {
+                item.image = currentMode == .highQuality
+                    ? NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)
+                    : nil
+            } else if title == bilinearTitle {
+                item.image = currentMode == .bilinear
+                    ? NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)
+                    : nil
+            } else if title == nearestTitle {
+                item.image = currentMode == .nearestNeighbor
+                    ? NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)
+                    : nil
             }
         }
     }

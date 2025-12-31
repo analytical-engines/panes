@@ -16,7 +16,6 @@ enum ShortcutAction: String, CaseIterable, Codable, Identifiable {
     case toggleReadingDirection = "toggleReadingDirection"
     case zoomIn = "zoomIn"
     case zoomOut = "zoomOut"
-    case resetZoom = "resetZoom"
     case closeFile = "closeFile"
 
     /// 表示名
@@ -33,7 +32,6 @@ enum ShortcutAction: String, CaseIterable, Codable, Identifiable {
         case .toggleReadingDirection: return L("shortcut_reading_direction")
         case .zoomIn: return L("shortcut_zoom_in")
         case .zoomOut: return L("shortcut_zoom_out")
-        case .resetZoom: return L("shortcut_reset_zoom")
         case .closeFile: return L("shortcut_close_file")
         }
     }
@@ -52,7 +50,6 @@ enum ShortcutAction: String, CaseIterable, Codable, Identifiable {
         case .toggleReadingDirection: return ["⇧⌘R"]
         case .zoomIn: return ["⌘+"]
         case .zoomOut: return ["⌘-"]
-        case .resetZoom: return ["⌘0"]
         case .closeFile: return ["⇧⌘W"]
         }
     }
@@ -280,10 +277,6 @@ struct HardcodedShortcut {
         // ⌘- (keyCode 27 = -)
         if keyCode == 27 && modifiers == [.command] {
             return HardcodedShortcut(displayName: L("shortcut_zoom_out"), keyDisplay: "⌘-")
-        }
-        // ⌘0 (keyCode 29 = 0)
-        if keyCode == 29 && modifiers == [.command] {
-            return HardcodedShortcut(displayName: L("shortcut_reset_zoom"), keyDisplay: "⌘0")
         }
         // ⇧⌘R (keyCode 15 = R)
         if keyCode == 15 && modifiers == [.shift, .command] {

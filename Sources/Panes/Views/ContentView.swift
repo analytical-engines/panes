@@ -129,6 +129,7 @@ struct ContentView: View {
                 flip: viewModel.getFlip(at: viewModel.currentPage),
                 fittingMode: viewModel.fittingMode,
                 zoomLevel: viewModel.zoomLevel,
+                interpolation: viewModel.interpolationMode,
                 showStatusBar: viewModel.showStatusBar,
                 archiveFileName: viewModel.archiveFileName,
                 currentFileName: viewModel.currentFileName,
@@ -162,6 +163,7 @@ struct ContentView: View {
                 secondPageFlip: viewModel.getFlip(at: viewModel.currentPage + 1),
                 fittingMode: viewModel.fittingMode,
                 zoomLevel: viewModel.zoomLevel,
+                interpolation: viewModel.interpolationMode,
                 showStatusBar: viewModel.showStatusBar,
                 archiveFileName: viewModel.archiveFileName,
                 currentFileName: viewModel.currentFileName,
@@ -1451,8 +1453,6 @@ struct ContentView: View {
             viewModel.zoomIn()
         case .zoomOut:
             viewModel.zoomOut()
-        case .resetZoom:
-            viewModel.resetZoom()
         case .closeFile:
             viewModel.closeFile()
         }
@@ -3213,6 +3213,7 @@ struct SinglePageView<ContextMenu: View>: View {
     let flip: ImageFlip
     let fittingMode: FittingMode
     let zoomLevel: CGFloat
+    let interpolation: InterpolationMode
     let showStatusBar: Bool
     let archiveFileName: String
     let currentFileName: String
@@ -3223,21 +3224,17 @@ struct SinglePageView<ContextMenu: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             GeometryReader { geometry in
-                // ズーム適用後の仮想ビューポートサイズ
-                let effectiveViewport = CGSize(
-                    width: geometry.size.width * zoomLevel,
-                    height: geometry.size.height * zoomLevel
-                )
-
-                // ズームが適用されている場合は常にスクロール可能にする
-                if zoomLevel != 1.0 {
+                // ズームが適用されている場合、または等倍表示の場合はスクロール可能にする
+                if zoomLevel != 1.0 || fittingMode == .originalSize {
                     ScrollView([.horizontal, .vertical], showsIndicators: true) {
                         ImageDisplayView(
                             image: image,
                             rotation: rotation,
                             flip: flip,
                             fittingMode: fittingMode,
-                            viewportSize: effectiveViewport
+                            viewportSize: geometry.size,
+                            zoomLevel: zoomLevel,
+                            interpolation: interpolation
                         )
                         .contextMenu { contextMenuBuilder(pageIndex) }
                         .frame(
@@ -3250,7 +3247,7 @@ struct SinglePageView<ContextMenu: View>: View {
                 } else {
                     switch fittingMode {
                     case .window:
-                        ImageDisplayView(image: image, rotation: rotation, flip: flip, fittingMode: fittingMode)
+                        ImageDisplayView(image: image, rotation: rotation, flip: flip, fittingMode: fittingMode, interpolation: interpolation)
                             .contextMenu { contextMenuBuilder(pageIndex) }
                     case .height:
                         // 縦フィット: 横スクロール可能、横センタリング
@@ -3260,7 +3257,8 @@ struct SinglePageView<ContextMenu: View>: View {
                                 rotation: rotation,
                                 flip: flip,
                                 fittingMode: fittingMode,
-                                viewportSize: geometry.size
+                                viewportSize: geometry.size,
+                                interpolation: interpolation
                             )
                             .contextMenu { contextMenuBuilder(pageIndex) }
                             .frame(minWidth: geometry.size.width, alignment: .center)
@@ -3273,29 +3271,15 @@ struct SinglePageView<ContextMenu: View>: View {
                                 rotation: rotation,
                                 flip: flip,
                                 fittingMode: fittingMode,
-                                viewportSize: geometry.size
+                                viewportSize: geometry.size,
+                                interpolation: interpolation
                             )
                             .contextMenu { contextMenuBuilder(pageIndex) }
                             .frame(minHeight: geometry.size.height, alignment: .center)
                         }
                     case .originalSize:
-                        // 等倍表示: 縦横スクロール可能、センタリング
-                        ScrollView([.horizontal, .vertical], showsIndicators: true) {
-                            ImageDisplayView(
-                                image: image,
-                                rotation: rotation,
-                                flip: flip,
-                                fittingMode: fittingMode,
-                                viewportSize: geometry.size
-                            )
-                            .contextMenu { contextMenuBuilder(pageIndex) }
-                            .frame(
-                                minWidth: geometry.size.width,
-                                minHeight: geometry.size.height,
-                                alignment: .center
-                            )
-                        }
-                        .defaultScrollAnchor(.center)
+                        // このケースはzoomLevel != 1.0 || fittingMode == .originalSizeで処理される
+                        EmptyView()
                     }
                 }
             }
@@ -3326,6 +3310,7 @@ struct SpreadPageView<ContextMenu: View>: View {
     let secondPageFlip: ImageFlip
     let fittingMode: FittingMode
     let zoomLevel: CGFloat
+    let interpolation: InterpolationMode
     let showStatusBar: Bool
     let archiveFileName: String
     let currentFileName: String
@@ -3337,12 +3322,6 @@ struct SpreadPageView<ContextMenu: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             GeometryReader { geometry in
-                // ズーム適用後の仮想ビューポートサイズ
-                let effectiveViewport = CGSize(
-                    width: geometry.size.width * zoomLevel,
-                    height: geometry.size.height * zoomLevel
-                )
-
                 // ズームが適用されている場合は常にスクロール可能にする
                 if zoomLevel != 1.0 {
                     ScrollView([.horizontal, .vertical], showsIndicators: true) {
@@ -3358,7 +3337,9 @@ struct SpreadPageView<ContextMenu: View>: View {
                             secondPageRotation: secondPageRotation,
                             secondPageFlip: secondPageFlip,
                             fittingMode: fittingMode,
-                            viewportSize: effectiveViewport,
+                            viewportSize: geometry.size,
+                            zoomLevel: zoomLevel,
+                            interpolation: interpolation,
                             copiedPageIndex: copiedPageIndex,
                             contextMenuBuilder: contextMenuBuilder
                         )
@@ -3385,6 +3366,7 @@ struct SpreadPageView<ContextMenu: View>: View {
                             secondPageRotation: secondPageRotation,
                             secondPageFlip: secondPageFlip,
                             fittingMode: fittingMode,
+                            interpolation: interpolation,
                             copiedPageIndex: copiedPageIndex,
                             contextMenuBuilder: contextMenuBuilder
                         )
@@ -3405,6 +3387,7 @@ struct SpreadPageView<ContextMenu: View>: View {
                                 secondPageFlip: secondPageFlip,
                                 fittingMode: fittingMode,
                                 viewportSize: geometry.size,
+                                interpolation: interpolation,
                                 copiedPageIndex: copiedPageIndex,
                                 contextMenuBuilder: contextMenuBuilder
                             )
@@ -3427,6 +3410,7 @@ struct SpreadPageView<ContextMenu: View>: View {
                                 secondPageFlip: secondPageFlip,
                                 fittingMode: fittingMode,
                                 viewportSize: geometry.size,
+                                interpolation: interpolation,
                                 copiedPageIndex: copiedPageIndex,
                                 contextMenuBuilder: contextMenuBuilder
                             )
@@ -3447,6 +3431,7 @@ struct SpreadPageView<ContextMenu: View>: View {
                             secondPageRotation: secondPageRotation,
                             secondPageFlip: secondPageFlip,
                             fittingMode: .window,
+                            interpolation: interpolation,
                             copiedPageIndex: copiedPageIndex,
                             contextMenuBuilder: contextMenuBuilder
                         )

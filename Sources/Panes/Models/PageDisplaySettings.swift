@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// 表示順序におけるページデータ
 /// ソースインデックスと表示位置のマッピングを管理
@@ -20,6 +21,22 @@ enum FittingMode: String, Codable, CaseIterable {
     case height         // ウィンドウの縦サイズにフィッティング（横はスクロール可能）
     case width          // ウィンドウの横サイズにフィッティング（縦はスクロール可能）
     case originalSize   // 等倍表示（1:1ピクセル、スクロール可能）
+}
+
+/// 画像の補間アルゴリズム
+enum InterpolationMode: String, Codable, CaseIterable {
+    case nearestNeighbor    // 最近傍法（ピクセルアート向け）
+    case bilinear           // バイリニア補間
+    case highQuality        // 高品質（デフォルト）
+
+    /// SwiftUIのImage.Interpolationに変換
+    var swiftUIInterpolation: SwiftUI.Image.Interpolation {
+        switch self {
+        case .nearestNeighbor: return .none
+        case .bilinear: return .medium
+        case .highQuality: return .high
+        }
+    }
 }
 
 /// 画像の回転角度（90度単位）

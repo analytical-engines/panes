@@ -507,8 +507,18 @@ class BookViewModel {
     // フィッティングモード
     var fittingMode: FittingMode = .window
 
+    // 補間アルゴリズム
+    var interpolationMode: InterpolationMode = .highQuality
+
     // ズームレベル（1.0 = 100%、2.0 = 200%）
     var zoomLevel: CGFloat = 1.0
+
+    /// フィッティングモードを設定（zoomLevelも常にリセット）
+    /// 同じモードを選択してもzoomLevelがリセットされる
+    func setFittingMode(_ mode: FittingMode) {
+        fittingMode = mode
+        zoomLevel = 1.0
+    }
 
     // ズームの最小・最大値
     private let minZoomLevel: CGFloat = 0.25
@@ -1675,7 +1685,7 @@ class BookViewModel {
         if previousMode == .single && viewMode == .spread {
             // 等倍表示は見開きでは未対応なのでウィンドウフィットに変更
             if fittingMode == .originalSize {
-                fittingMode = .window
+                setFittingMode(.window)
             }
             // adjustCurrentPageForSpreadModeで正しい表示状態を計算し、画像を読み込む
             adjustCurrentPageForSpreadMode()
@@ -1795,11 +1805,6 @@ class BookViewModel {
     func zoomOut() {
         let newZoom = zoomLevel / zoomStep
         zoomLevel = max(newZoom, minZoomLevel)
-    }
-
-    /// ズームをリセット（100%に戻す）
-    func resetZoom() {
-        zoomLevel = 1.0
     }
 
     /// ズームレベルを設定（範囲制限付き）

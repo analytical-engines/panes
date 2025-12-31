@@ -59,6 +59,10 @@ struct ImageDisplayView: View {
     var fittingMode: FittingMode = .window
     /// ScrollView内で使用する場合に外部から渡すビューポートサイズ
     var viewportSize: CGSize? = nil
+    /// ズームレベル（1.0 = 100%）
+    var zoomLevel: CGFloat = 1.0
+    /// 補間アルゴリズム
+    var interpolation: InterpolationMode = .highQuality
 
     var body: some View {
         if let viewport = viewportSize {
@@ -69,7 +73,9 @@ struct ImageDisplayView: View {
                 flip: flip,
                 containerWidth: viewport.width,
                 containerHeight: viewport.height,
-                fittingMode: fittingMode
+                fittingMode: fittingMode,
+                zoomLevel: zoomLevel,
+                interpolation: interpolation
             )
         } else {
             // 通常の場合（GeometryReaderでサイズ取得）
@@ -80,7 +86,9 @@ struct ImageDisplayView: View {
                     flip: flip,
                     containerWidth: geometry.size.width,
                     containerHeight: geometry.size.height,
-                    fittingMode: fittingMode
+                    fittingMode: fittingMode,
+                    zoomLevel: zoomLevel,
+                    interpolation: interpolation
                 )
             }
         }
@@ -97,6 +105,10 @@ struct RotationAwareImageView: View {
     let containerHeight: CGFloat
     var alignment: Alignment = .center
     var fittingMode: FittingMode = .window
+    /// ズームレベル（1.0 = 100%）
+    var zoomLevel: CGFloat = 1.0
+    /// 補間アルゴリズム
+    var interpolation: InterpolationMode = .highQuality
 
     var body: some View {
         // 回転後の実効コンテナサイズを計算
@@ -111,17 +123,18 @@ struct RotationAwareImageView: View {
         let scaleX = effectiveContainerWidth / imageWidth
         let scaleY = effectiveContainerHeight / imageHeight
 
-        // フィッティングモードに応じてスケールを決定
+        // フィッティングモードに応じてスケールを決定（全モードでzoomLevelを適用）
         let scale: CGFloat = {
             switch fittingMode {
             case .window:
-                return min(scaleX, scaleY)
+                return min(scaleX, scaleY) * zoomLevel
             case .height:
-                return scaleY
+                return scaleY * zoomLevel
             case .width:
-                return scaleX
+                return scaleX * zoomLevel
             case .originalSize:
-                return 1.0  // 等倍表示（1:1ピクセル）
+                // 等倍表示: zoomLevelを適用（1.0 = 1:1ピクセル、2.0 = 2倍サイズ）
+                return zoomLevel
             }
         }()
 
@@ -133,36 +146,10 @@ struct RotationAwareImageView: View {
         let visualWidth = rotation.swapsAspectRatio ? fittedHeight : fittedWidth
         let visualHeight = rotation.swapsAspectRatio ? fittedWidth : fittedHeight
 
-        // フレームサイズ（フィッティングモードに応じて変更）
-        let frameWidth: CGFloat = {
-            switch fittingMode {
-            case .window:
-                return containerWidth
-            case .height:
-                // 縦フィット時は視覚的な幅をフレーム幅とする（はみ出し許可）
-                return max(visualWidth, containerWidth)
-            case .width:
-                return containerWidth
-            case .originalSize:
-                // 等倍表示時は視覚的な幅をフレーム幅とする（はみ出し許可）
-                return max(visualWidth, containerWidth)
-            }
-        }()
-
-        let frameHeight: CGFloat = {
-            switch fittingMode {
-            case .window:
-                return containerHeight
-            case .height:
-                return containerHeight
-            case .width:
-                // 横フィット時は視覚的な高さをフレーム高さとする（はみ出し許可）
-                return max(visualHeight, containerHeight)
-            case .originalSize:
-                // 等倍表示時は視覚的な高さをフレーム高さとする（はみ出し許可）
-                return max(visualHeight, containerHeight)
-            }
-        }()
+        // フレームサイズ（ズーム時は画像がはみ出せるように）
+        // 全モードで視覚的サイズがコンテナを超える場合ははみ出しを許可
+        let frameWidth: CGFloat = max(visualWidth, containerWidth)
+        let frameHeight: CGFloat = max(visualHeight, containerHeight)
 
         // 回転時のアライメント補正オフセット
         // 90°/270°回転すると視覚的な幅と高さが入れ替わるが、
@@ -185,6 +172,7 @@ struct RotationAwareImageView: View {
 
         Image(nsImage: image)
             .resizable()
+            .interpolation(interpolation.swiftUIInterpolation)
             .frame(width: fittedWidth, height: fittedHeight)
             .scaleEffect(
                 x: flip.horizontal ? -1 : 1,
@@ -193,6 +181,5 @@ struct RotationAwareImageView: View {
             .rotationEffect(.degrees(Double(rotation.rawValue)))
             .offset(x: alignmentOffsetX)
             .frame(width: frameWidth, height: frameHeight, alignment: alignment)
-            .drawingGroup()
     }
 }

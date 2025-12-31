@@ -16,6 +16,10 @@ struct SpreadView<ContextMenu: View>: View {
     var fittingMode: FittingMode = .window
     /// ScrollView内で使用する場合に外部から渡すビューポートサイズ
     var viewportSize: CGSize? = nil
+    /// ズームレベル（1.0 = 100%）
+    var zoomLevel: CGFloat = 1.0
+    /// 補間アルゴリズム
+    var interpolation: InterpolationMode = .highQuality
     /// コンテキストメニュー状態（移動元マーク等）- Equatableで比較してメニュー更新を検出
     var copiedPageIndex: Int? = nil
     let contextMenuBuilder: (Int) -> ContextMenu
@@ -51,7 +55,9 @@ struct SpreadView<ContextMenu: View>: View {
                         containerWidth: halfWidth,
                         containerHeight: size.height,
                         alignment: .trailing,
-                        fittingMode: fittingMode
+                        fittingMode: fittingMode,
+                        zoomLevel: zoomLevel,
+                        interpolation: interpolation
                     )
                     .contextMenu {
                         let _ = DebugLogger.log("🖼️ LEFT image context menu: secondPageIndex=\(secondPageIndex)", level: .verbose)
@@ -64,7 +70,9 @@ struct SpreadView<ContextMenu: View>: View {
                         containerWidth: halfWidth,
                         containerHeight: size.height,
                         alignment: .leading,
-                        fittingMode: fittingMode
+                        fittingMode: fittingMode,
+                        zoomLevel: zoomLevel,
+                        interpolation: interpolation
                     )
                     .contextMenu {
                         let _ = DebugLogger.log("🖼️ RIGHT image context menu: firstPageIndex=\(firstPageIndex)", level: .verbose)
@@ -81,7 +89,9 @@ struct SpreadView<ContextMenu: View>: View {
                         containerWidth: halfWidth,
                         containerHeight: size.height,
                         alignment: .trailing,
-                        fittingMode: fittingMode
+                        fittingMode: fittingMode,
+                        zoomLevel: zoomLevel,
+                        interpolation: interpolation
                     )
                     .contextMenu {
                         let _ = DebugLogger.log("🖼️ LEFT image context menu: firstPageIndex=\(firstPageIndex)", level: .verbose)
@@ -94,7 +104,9 @@ struct SpreadView<ContextMenu: View>: View {
                         containerWidth: halfWidth,
                         containerHeight: size.height,
                         alignment: .leading,
-                        fittingMode: fittingMode
+                        fittingMode: fittingMode,
+                        zoomLevel: zoomLevel,
+                        interpolation: interpolation
                     )
                     .contextMenu {
                         let _ = DebugLogger.log("🖼️ RIGHT image context menu: secondPageIndex=\(secondPageIndex)", level: .verbose)
@@ -125,7 +137,9 @@ struct SpreadView<ContextMenu: View>: View {
                         containerWidth: halfWidth,
                         containerHeight: size.height,
                         alignment: .leading,
-                        fittingMode: fittingMode
+                        fittingMode: fittingMode,
+                        zoomLevel: zoomLevel,
+                        interpolation: interpolation
                     )
                     .contextMenu { contextMenuBuilder(firstPageIndex) }
                 }
@@ -147,7 +161,9 @@ struct SpreadView<ContextMenu: View>: View {
                         containerWidth: halfWidth,
                         containerHeight: size.height,
                         alignment: .trailing,
-                        fittingMode: fittingMode
+                        fittingMode: fittingMode,
+                        zoomLevel: zoomLevel,
+                        interpolation: interpolation
                     )
                     .contextMenu { contextMenuBuilder(firstPageIndex) }
                     Spacer()
@@ -169,7 +185,9 @@ struct SpreadView<ContextMenu: View>: View {
                     flip: firstPageFlip,
                     containerWidth: size.width,
                     containerHeight: size.height,
-                    fittingMode: fittingMode
+                    fittingMode: fittingMode,
+                    zoomLevel: zoomLevel,
+                    interpolation: interpolation
                 )
                 .contextMenu { contextMenuBuilder(firstPageIndex) }
             }
@@ -196,6 +214,8 @@ extension SpreadView: Equatable {
         lhs.secondPageFlip == rhs.secondPageFlip &&
         lhs.fittingMode == rhs.fittingMode &&
         lhs.viewportSize == rhs.viewportSize &&
+        lhs.zoomLevel == rhs.zoomLevel &&
+        lhs.interpolation == rhs.interpolation &&
         lhs.copiedPageIndex == rhs.copiedPageIndex
     }
 }
