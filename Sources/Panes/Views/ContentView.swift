@@ -1361,6 +1361,8 @@ struct ContentView: View {
             let keyWindowNumber = NSApp.keyWindow?.windowNumber
             let isMyWindowActive = (self.myWindowNumber == keyWindowNumber)
             guard isMyWindowActive else {
+                // デバッグ: キーイベントが自分のウィンドウでない時（稀な問題の調査用）
+                DebugLogger.log("🔑 Key event ignored: myWindow=\(self.myWindowNumber ?? -1), keyWindow=\(keyWindowNumber ?? -1), firstResponder=\(String(describing: NSApp.keyWindow?.firstResponder))", level: .verbose)
                 return event
             }
 
@@ -1762,6 +1764,8 @@ struct ContentView: View {
                        let window = NSApp.windows.first(where: { $0.windowNumber == windowNumber }) {
                         window.makeKeyAndOrderFront(nil)
                         NSApp.activate(ignoringOtherApps: true)
+                        // D&D後にfirstResponderをリセットしてキーボードショートカットが効くようにする
+                        window.makeFirstResponder(nil)
                     }
 
                     DebugLogger.log("📬 D&D: \(urls.first?.lastPathComponent ?? "unknown") (window=\(self.myWindowNumber ?? -1))", level: .normal)
