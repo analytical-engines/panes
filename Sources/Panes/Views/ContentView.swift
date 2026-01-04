@@ -697,6 +697,9 @@ struct ContentView: View {
                 // ファイルが開かれたらローディング状態を解除
                 isWaitingForFile = false
 
+                // SwiftUIのフォーカスを設定（.onKeyPressが動作するために必要）
+                isMainViewFocused = true
+
                 // このウィンドウをアクティブとしてマーク（メニュー状態の更新に必要）
                 if let windowNumber = myWindowNumber {
                     WindowCoordinator.shared.markAsActive(windowNumber: windowNumber)
@@ -1356,13 +1359,17 @@ struct ContentView: View {
     }
 
     private func setupEventMonitor() {
+        // 既存のモニターがあれば削除（重複防止）
+        if let existingMonitor = eventMonitor {
+            NSEvent.removeMonitor(existingMonitor)
+            eventMonitor = nil
+        }
+
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak viewModel] event in
             // 自分のウィンドウか確認
             let keyWindowNumber = NSApp.keyWindow?.windowNumber
             let isMyWindowActive = (self.myWindowNumber == keyWindowNumber)
             guard isMyWindowActive else {
-                // デバッグ: キーイベントが自分のウィンドウでない時（稀な問題の調査用）
-                DebugLogger.log("🔑 Key event ignored: myWindow=\(self.myWindowNumber ?? -1), keyWindow=\(keyWindowNumber ?? -1), firstResponder=\(String(describing: NSApp.keyWindow?.firstResponder))", level: .verbose)
                 return event
             }
 
@@ -1390,6 +1397,12 @@ struct ContentView: View {
         }
 
         // ⌘ + スクロールホイールでズーム
+        // 既存のモニターがあれば削除（重複防止）
+        if let existingMonitor = scrollEventMonitor {
+            NSEvent.removeMonitor(existingMonitor)
+            scrollEventMonitor = nil
+        }
+
         scrollEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak viewModel] event in
             // ⌘キーが押されているか確認
             guard event.modifierFlags.contains(.command) else {
@@ -1764,9 +1777,10 @@ struct ContentView: View {
                        let window = NSApp.windows.first(where: { $0.windowNumber == windowNumber }) {
                         window.makeKeyAndOrderFront(nil)
                         NSApp.activate(ignoringOtherApps: true)
-                        // D&D後にfirstResponderをリセットしてキーボードショートカットが効くようにする
-                        window.makeFirstResponder(nil)
                     }
+
+                    // D&D後にSwiftUIのフォーカスを設定（.onKeyPressが動作するために必要）
+                    self.isMainViewFocused = true
 
                     DebugLogger.log("📬 D&D: \(urls.first?.lastPathComponent ?? "unknown") (window=\(self.myWindowNumber ?? -1))", level: .normal)
                     // 既にファイルが開いている場合は一度閉じる
