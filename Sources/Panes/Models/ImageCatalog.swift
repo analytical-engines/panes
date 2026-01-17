@@ -197,12 +197,10 @@ class ImageCatalogManager {
 
         await MainActor.run {
             isBackgroundCheckRunning = false
-            if changedCount > 0 {
-                DebugLogger.log("🔄 Background catalog check completed: \(changedCount) changes", level: .normal)
-                notifyCatalogUpdate()
-            } else {
-                DebugLogger.log("🔄 Background catalog check completed: no changes", level: .normal)
-            }
+            DebugLogger.log("🔄 Background catalog check completed: \(changedCount) changes, catalogVersion=\(catalogVersion)", level: .normal)
+            // 変更がなくてもUIを更新する（起動時のキャッシュ反映のため）
+            notifyCatalogUpdate()
+            DebugLogger.log("🔄 After notifyCatalogUpdate: catalogVersion=\(catalogVersion)", level: .normal)
         }
     }
 

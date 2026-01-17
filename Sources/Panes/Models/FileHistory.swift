@@ -33,6 +33,24 @@ struct FileHistoryEntry: Codable, Identifiable {
         FileManager.default.fileExists(atPath: filePath)
     }
 
+    /// fileKeyからファイルサイズを抽出（バイト単位）
+    var fileSize: Int64? {
+        // fileKeyのフォーマット: "サイズ-ハッシュ16文字" (例: "12345678-abcdef1234567890")
+        let components = fileKey.split(separator: "-")
+        guard components.count >= 2 else { return nil }
+        // 最後から2番目がサイズ（数字のみ）
+        let sizeComponent = String(components[components.count - 2])
+        return Int64(sizeComponent)
+    }
+
+    /// ファイルサイズを人間が読みやすい形式で返す
+    var fileSizeString: String? {
+        guard let size = fileSize else { return nil }
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: size)
+    }
+
     // Codable用のCodingKeys
     private enum CodingKeys: String, CodingKey {
         case id, fileKey, pageSettingsRef, filePath, fileName, lastAccessDate, accessCount, memo
@@ -232,15 +250,24 @@ class FileHistoryManager {
         isBackgroundCheckRunning = true
 
         Task.detached(priority: .background) { [weak self] in
-            await self?.performBackgroundCheck(paths: pathsToCheck)
+            DebugLogger.log("🔄 Background task started (history)", level: .normal)
+            guard let self = self else {
+                DebugLogger.log("🔄 Background task: self is nil (history)", level: .normal)
+                return
+            }
+            await self.performBackgroundCheck(paths: pathsToCheck)
         }
     }
 
     /// バックグラウンドでアクセス可否をチェック
     private func performBackgroundCheck(paths: [String]) async {
+        DebugLogger.log("🔄 performBackgroundCheck started: \(paths.count) paths", level: .normal)
         var changedCount = 0
 
-        for path in paths {
+        for (index, path) in paths.enumerated() {
+            if index % 100 == 0 {
+                DebugLogger.log("🔄 Checking path \(index)/\(paths.count)", level: .normal)
+            }
             let newValue = FileManager.default.fileExists(atPath: path)
 
             await MainActor.run {
@@ -259,12 +286,10 @@ class FileHistoryManager {
 
         await MainActor.run {
             isBackgroundCheckRunning = false
-            if changedCount > 0 {
-                DebugLogger.log("🔄 Background check completed: \(changedCount) changes", level: .normal)
-                notifyHistoryUpdate()
-            } else {
-                DebugLogger.log("🔄 Background check completed: no changes", level: .normal)
-            }
+            DebugLogger.log("🔄 Background check completed: \(changedCount) changes, historyVersion=\(historyVersion)", level: .normal)
+            // 変更がなくてもUIを更新する（起動時のキャッシュ反映のため）
+            notifyHistoryUpdate()
+            DebugLogger.log("🔄 After notifyHistoryUpdate: historyVersion=\(historyVersion)", level: .normal)
         }
     }
 

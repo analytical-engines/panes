@@ -229,6 +229,59 @@ struct ContentView: View {
         }
     }
 
+    /// 画像表示中に履歴をオーバーレイ表示するためのビュー
+    @ViewBuilder
+    private var historyOverlay: some View {
+        ZStack {
+            // 半透明の黒背景
+            Color.black.opacity(0.85)
+                .ignoresSafeArea()
+
+            VStack(spacing: 20) {
+                // 履歴リスト
+                HistoryListView(
+                    filterText: $historyFilterText,
+                    showFilterField: $showHistoryFilter,
+                    selectedTab: $historySelectedTab,
+                    lastOpenedArchiveId: $lastOpenedArchiveId,
+                    lastOpenedImageId: $lastOpenedImageId,
+                    showHistory: $showHistory,
+                    scrollTrigger: scrollTrigger,
+                    selectedItem: $selectedHistoryItem,
+                    isSearchFocused: $isHistorySearchFocused,
+                    isShowingSuggestions: $isShowingSuggestions,
+                    onOpenHistoryFile: openHistoryFile,
+                    onOpenInNewWindow: openInNewWindow,
+                    onEditMemo: { fileKey, currentMemo in
+                        editingMemoFileKey = fileKey
+                        editingMemoText = currentMemo ?? ""
+                        showMemoEdit = true
+                    },
+                    onEditImageMemo: { id, currentMemo in
+                        editingImageCatalogId = id
+                        editingMemoText = currentMemo ?? ""
+                        showMemoEdit = true
+                    },
+                    onOpenImageFile: openImageCatalogFile,
+                    onRestoreSession: { session in
+                        sessionGroupManager.updateLastAccessed(id: session.id)
+                        sessionManager.restoreSessionGroup(session)
+                    },
+                    onVisibleItemsChange: { items in
+                        visibleHistoryItems = items
+                    },
+                    onExitSearch: {
+                        isMainViewFocused = true
+                        if selectedHistoryItem == nil, let first = visibleHistoryItems.first {
+                            selectedHistoryItem = first
+                        }
+                    }
+                )
+            }
+            .padding()
+        }
+    }
+
     /// 画像表示部分のコンテキストメニュー（ページ操作 + アーカイブ属性）
     @ViewBuilder
     private func imageContextMenu(for pageIndex: Int) -> some View {
@@ -639,6 +692,11 @@ struct ContentView: View {
                 }
 
             mainContent
+
+            // 画像表示中の履歴オーバーレイ
+            if viewModel.hasOpenFile && showHistory {
+                historyOverlay
+            }
         }
         .gesture(
             MagnificationGesture()
@@ -696,6 +754,9 @@ struct ContentView: View {
             if hasFile {
                 // ファイルが開かれたらローディング状態を解除
                 isWaitingForFile = false
+
+                // 履歴オーバーレイを閉じる
+                showHistory = false
 
                 // SwiftUIのフォーカスを設定（.onKeyPressが動作するために必要）
                 isMainViewFocused = true
@@ -1053,9 +1114,8 @@ struct ContentView: View {
         }
 
         // 起動時のバックグラウンドアクセス可否チェックを開始（一度だけ実行）
-        // Note: レイテンシ調査のため一時的に無効化
-        // historyManager.startInitialAccessibilityCheck()
-        // imageCatalogManager.startInitialAccessibilityCheck()
+        historyManager.startInitialAccessibilityCheck()
+        imageCatalogManager.startInitialAccessibilityCheck()
     }
 
     /// ウィンドウフレーム変更の監視を設定
@@ -3105,6 +3165,11 @@ struct HistoryEntryRow: View {
         let archiveType = archiveTypeDescription(for: ext)
         if !archiveType.isEmpty {
             lines.append(L("tooltip_archive_type") + ": " + archiveType)
+        }
+
+        // ファイルサイズ（fileKeyから取得、ファイルアクセス不要）
+        if let sizeStr = entry.fileSizeString {
+            lines.append(L("tooltip_file_size") + ": " + sizeStr)
         }
 
         // 最終アクセス日時（履歴データから、ファイルアクセス不要）

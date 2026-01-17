@@ -144,6 +144,7 @@ struct ImageViewerApp: App {
                 .keyboardShortcut("h", modifiers: [.command, .shift])
 
                 Button(action: {
+                    DebugLogger.log("🔄 Menu: Refresh history clicked", level: .normal)
                     historyManager.startBackgroundAccessibilityCheck()
                     imageCatalogManager.startBackgroundAccessibilityCheck()
                 }) {
