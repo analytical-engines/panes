@@ -14,14 +14,14 @@ enum SearchTargetType: String, CaseIterable {
 struct ParsedSearchQuery {
     /// 検索対象の種別
     let targetType: SearchTargetType
-    /// 検索キーワード（メタキーワードを除いたテキスト）
-    let keyword: String
+    /// 検索キーワード配列（メタキーワードを除いたテキスト、AND検索用）
+    let keywords: [String]
     /// 元のクエリ文字列
     let originalQuery: String
 
     /// キーワードが空かどうか
     var hasKeyword: Bool {
-        !keyword.isEmpty
+        !keywords.isEmpty
     }
 
     /// 書庫を検索対象に含むか
@@ -108,7 +108,7 @@ enum HistorySearchParser {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
 
         guard !trimmed.isEmpty else {
-            return ParsedSearchQuery(targetType: defaultType, keyword: "", originalQuery: query)
+            return ParsedSearchQuery(targetType: defaultType, keywords: [], originalQuery: query)
         }
 
         // 引用符を考慮してトークン化
@@ -135,11 +135,9 @@ enum HistorySearchParser {
             }
         }
 
-        let remainingKeyword = keywordTokens.joined(separator: " ")
-
         return ParsedSearchQuery(
             targetType: targetType,
-            keyword: remainingKeyword,
+            keywords: keywordTokens,
             originalQuery: query
         )
     }
@@ -249,8 +247,9 @@ enum UnifiedSearchFilter {
         guard query.includesArchives else { return false }
         guard query.hasKeyword else { return true }
 
-        return matchesKeyword(entry.fileName, keyword: query.keyword) ||
-               matchesKeyword(entry.memo, keyword: query.keyword)
+        // 全てのキーワードがいずれかのフィールドにマッチする必要がある（AND検索）
+        let searchableTexts = [entry.fileName, entry.memo]
+        return matchesAllKeywords(query.keywords, in: searchableTexts)
     }
 
     /// 画像カタログエントリがクエリにマッチするかチェック
@@ -271,29 +270,21 @@ enum UnifiedSearchFilter {
 
         guard query.hasKeyword else { return true }
 
-        // 画像自体のファイル名・メモで検索
-        if matchesKeyword(entry.fileName, keyword: query.keyword) ||
-           matchesKeyword(entry.memo, keyword: query.keyword) {
-            return true
-        }
+        // 検索対象のテキストを収集
+        var searchableTexts: [String?] = [entry.fileName, entry.memo]
 
-        // 書庫内画像の場合、親書庫の情報も検索対象
+        // 書庫内画像の場合、親書庫の情報も検索対象に追加
         if entry.catalogType == .archiveContent {
-            // 親書庫のファイル名（filePathから取得）
             let parentFileName = (entry.filePath as NSString).lastPathComponent
-            if matchesKeyword(parentFileName, keyword: query.keyword) {
-                return true
-            }
+            searchableTexts.append(parentFileName)
 
-            // 親書庫のメモ（FileHistoryEntryから取得）
             if let parent = parentArchive {
-                if matchesKeyword(parent.memo, keyword: query.keyword) {
-                    return true
-                }
+                searchableTexts.append(parent.memo)
             }
         }
 
-        return false
+        // 全てのキーワードがいずれかのフィールドにマッチする必要がある（AND検索）
+        return matchesAllKeywords(query.keywords, in: searchableTexts)
     }
 
     /// キーワードマッチング（ワイルドカード対応）
@@ -320,24 +311,44 @@ enum UnifiedSearchFilter {
         return result
     }
 
+    /// 全てのキーワードがいずれかのテキストにマッチするかチェック（AND検索）
+    /// - Parameters:
+    ///   - keywords: 検索キーワード配列
+    ///   - texts: 検索対象テキスト配列
+    /// - Returns: 全てのキーワードがマッチすればtrue
+    private static func matchesAllKeywords(_ keywords: [String], in texts: [String?]) -> Bool {
+        // 全てのキーワードについて
+        for keyword in keywords {
+            // いずれかのテキストにマッチするか確認
+            var keywordMatched = false
+            for text in texts {
+                if matchesKeyword(text, keyword: keyword) {
+                    keywordMatched = true
+                    break
+                }
+            }
+            // このキーワードがどのテキストにもマッチしなければ失敗
+            if !keywordMatched {
+                return false
+            }
+        }
+        // 全てのキーワードがマッチした
+        return true
+    }
+
     /// セッショングループがクエリにマッチするかチェック
     static func matches(_ group: SessionGroup, query: ParsedSearchQuery) -> Bool {
         guard query.includesSessions else { return false }
         guard query.hasKeyword else { return true }
 
-        // セッション名で検索
-        if matchesKeyword(group.name, keyword: query.keyword) {
-            return true
-        }
-
-        // ファイル名で検索
+        // 検索対象のテキストを収集（セッション名 + 全エントリのファイル名）
+        var searchableTexts: [String?] = [group.name]
         for entry in group.entries {
-            if matchesKeyword(entry.fileName, keyword: query.keyword) {
-                return true
-            }
+            searchableTexts.append(entry.fileName)
         }
 
-        return false
+        // 全てのキーワードがいずれかのフィールドにマッチする必要がある（AND検索）
+        return matchesAllKeywords(query.keywords, in: searchableTexts)
     }
 
     /// 統合検索を実行
