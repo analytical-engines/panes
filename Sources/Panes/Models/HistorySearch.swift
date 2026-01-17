@@ -95,25 +95,27 @@ enum HistorySearchParser {
     ]
 
     /// 検索クエリをパースする
-    /// - Parameter query: ユーザー入力のクエリ文字列
+    /// - Parameters:
+    ///   - query: ユーザー入力のクエリ文字列
+    ///   - defaultType: type:が指定されていない場合のデフォルトタイプ
     /// - Returns: パース済みの検索クエリ
     ///
     /// 引用符（シングル・ダブル）で囲まれた部分はフレーズとして扱われ、
     /// 空白を含むキーワードやメタキーワードのエスケープに使用できます。
     /// 例: `"My Comic"` → 「My Comic」を検索
     /// 例: `'type:archive'` → 「type:archive」という文字列を検索
-    static func parse(_ query: String) -> ParsedSearchQuery {
+    static func parse(_ query: String, defaultType: SearchTargetType = .archive) -> ParsedSearchQuery {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
 
         guard !trimmed.isEmpty else {
-            return ParsedSearchQuery(targetType: .all, keyword: "", originalQuery: query)
+            return ParsedSearchQuery(targetType: defaultType, keyword: "", originalQuery: query)
         }
 
         // 引用符を考慮してトークン化
         let tokens = tokenize(trimmed)
 
         // type:キーワードを探す
-        var targetType: SearchTargetType = .all
+        var targetType: SearchTargetType = defaultType
         var keywordTokens: [String] = []
 
         for token in tokens {

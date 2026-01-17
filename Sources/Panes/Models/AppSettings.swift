@@ -47,6 +47,7 @@ class AppSettings {
         static let lastWindowHeight = "lastWindowHeight"
         static let quitOnLastWindowClosed = "quitOnLastWindowClosed"
         static let imageCatalogFilter = "imageCatalogFilter"
+        static let defaultHistorySearchType = "defaultHistorySearchType"
     }
 
     // MARK: - 表示設定
@@ -127,6 +128,11 @@ class AppSettings {
     /// 画像カタログ表示フィルタ
     var imageCatalogFilter: ImageCatalogFilter {
         didSet { saveImageCatalogFilter() }
+    }
+
+    /// デフォルトの履歴検索タイプ
+    var defaultHistorySearchType: SearchTargetType {
+        didSet { saveDefaultHistorySearchType() }
     }
 
     // MARK: - ファイル読み込み設定
@@ -281,6 +287,14 @@ class AppSettings {
             imageCatalogFilter = .all  // デフォルト: すべて表示
         }
 
+        // デフォルト履歴検索タイプの読み込み
+        if let typeString = defaults.string(forKey: Keys.defaultHistorySearchType),
+           let type = SearchTargetType(rawValue: typeString) {
+            defaultHistorySearchType = type
+        } else {
+            defaultHistorySearchType = .archive  // デフォルト: 書庫のみ
+        }
+
         // 同時読み込み数の読み込み
         if defaults.object(forKey: Keys.concurrentLoadingLimit) != nil {
             concurrentLoadingLimit = defaults.integer(forKey: Keys.concurrentLoadingLimit)
@@ -350,6 +364,10 @@ class AppSettings {
 
     private func saveHistoryDisplayMode() {
         defaults.set(historyDisplayMode.rawValue, forKey: Keys.historyDisplayMode)
+    }
+
+    private func saveDefaultHistorySearchType() {
+        defaults.set(defaultHistorySearchType.rawValue, forKey: Keys.defaultHistorySearchType)
     }
 }
 

@@ -2129,8 +2129,8 @@ struct HistoryListView: View {
             let imageCatalog = imageCatalogManager.catalog
             let sessionGroups = sessionGroupManager.sessionGroups
 
-            // 検索クエリをパース
-            let parsedQuery = HistorySearchParser.parse(filterText)
+            // 検索クエリをパース（デフォルトタイプはAppSettingsから取得）
+            let parsedQuery = HistorySearchParser.parse(filterText, defaultType: appSettings.defaultHistorySearchType)
             // 統合検索を実行
             let searchResult = UnifiedSearchFilter.search(
                 query: parsedQuery,
@@ -2234,10 +2234,6 @@ struct HistoryListView: View {
                             }
                             // フィルタードロップダウンメニュー
                             Menu {
-                                Button(action: { insertSearchFilter("") }) {
-                                    Label(L("search_filter_all"), systemImage: "square.grid.2x2")
-                                }
-                                Divider()
                                 Button(action: { insertSearchFilter("type:archive ") }) {
                                     Label(L("search_type_archive"), systemImage: "archivebox")
                                 }
@@ -2359,7 +2355,7 @@ struct HistoryListView: View {
                 .onChange(of: searchResult.images.count) { _, _ in
                     updateVisibleItems(archives: searchResult.archives, images: searchResult.images, sessions: searchResult.sessions, parsedQuery: parsedQuery)
                 }
-                .onChange(of: searchResult.sessions.count) { _, _ in
+                .onChange(of: searchResult.sessions.map { $0.id }) { _, _ in
                     updateVisibleItems(archives: searchResult.archives, images: searchResult.images, sessions: searchResult.sessions, parsedQuery: parsedQuery)
                 }
                 .onChange(of: isArchivesSectionCollapsed) { _, _ in
@@ -2805,6 +2801,7 @@ struct HistoryListView: View {
                 .padding(.vertical, 2)
                 .background(selectedItem?.sessionId == session.id ? Color.accentColor.opacity(0.3) : Color.clear)
                 .cornerRadius(4)
+                .id(session.id.uuidString)
             }
         }
     }
