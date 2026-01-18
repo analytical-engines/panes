@@ -268,7 +268,7 @@ class AppSettings {
                 let oldValue = defaults.bool(forKey: "showHistoryOnLaunch")
                 historyDisplayMode = oldValue ? .alwaysShow : .alwaysHide
             } else {
-                historyDisplayMode = .alwaysShow  // デフォルト: 常に表示
+                historyDisplayMode = .alwaysHide  // デフォルト: 常に非表示
             }
         }
 
@@ -276,7 +276,7 @@ class AppSettings {
         if defaults.object(forKey: Keys.lastHistoryVisible) != nil {
             lastHistoryVisible = defaults.bool(forKey: Keys.lastHistoryVisible)
         } else {
-            lastHistoryVisible = true  // デフォルト: 表示
+            lastHistoryVisible = false  // デフォルト: 非表示
         }
 
         // 画像カタログ表示フィルタの読み込み
