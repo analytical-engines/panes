@@ -890,6 +890,12 @@ struct ContentView: View {
             if newValue {
                 historyManager.notifyHistoryUpdate()
                 imageCatalogManager.notifyCatalogUpdate()
+                // リスト未選択なら検索フィールドにフォーカス
+                if selectedHistoryItem == nil {
+                    DispatchQueue.main.async {
+                        isHistorySearchFocused = true
+                    }
+                }
             }
         }
         .onChange(of: showMemoEdit) { _, newValue in
@@ -920,20 +926,16 @@ struct ContentView: View {
                 toggleFullScreen()
                 return .handled
             }
-            // ⌘F で履歴表示トグル（表示時はフォーカスも設定）
+            // ⌘F で履歴表示＋フィルターフォーカス
             if press.modifiers.contains(.command) && !press.modifiers.contains(.control) {
-                if showHistory {
-                    // 表示中なら閉じる
-                    showHistory = false
-                    isHistorySearchFocused = false
-                    isShowingSuggestions = false
-                    // メインビューにフォーカスを戻す
-                    isMainViewFocused = true
-                } else {
-                    // 非表示なら表示＋フォーカス
+                if !showHistory {
+                    // 非表示 → 表示＋フォーカス（onChangeでフォーカス設定）
                     showHistory = true
+                    selectedHistoryItem = nil
+                } else {
+                    // 表示中 → 検索フィールドにフォーカス（検索フィールドのonKeyPressで閉じる処理をする）
+                    selectedHistoryItem = nil
                     isHistorySearchFocused = true
-                    selectedHistoryItem = nil  // 選択解除（IME変換確定との干渉を防ぐ）
                 }
                 return .handled
             }
@@ -943,6 +945,7 @@ struct ContentView: View {
             // Escapeで履歴を閉じる（グローバル）
             if showHistory {
                 showHistory = false
+                selectedHistoryItem = nil
                 isHistorySearchFocused = false
                 isShowingSuggestions = false
                 // メインビューにフォーカスを戻す
@@ -2236,6 +2239,17 @@ struct HistoryListView: View {
                                     isSearchFocused.wrappedValue = false
                                     return .handled
                                 }
+                                .onKeyPress(characters: CharacterSet(charactersIn: "fF")) { press in
+                                    // ⌘F: 検索フィールドにフォーカス中 → 履歴を閉じる
+                                    if press.modifiers.contains(.command) && !press.modifiers.contains(.control) {
+                                        showHistory = false
+                                        selectedItem = nil
+                                        isSearchFocused.wrappedValue = false
+                                        isShowingSuggestions = false
+                                        return .handled
+                                    }
+                                    return .ignored
+                                }
                             }
                             // 検索種別インジケーター
                             if !filterText.isEmpty && parsedQuery.targetType != .all {
@@ -2364,6 +2378,24 @@ struct HistoryListView: View {
                     .scrollIndicators(.visible)
                     .preferredColorScheme(.dark)
                     .frame(maxHeight: 400)
+                    .focusable()
+                    .onKeyPress(characters: CharacterSet(charactersIn: "fF")) { press in
+                        // ⌘F: リスト選択中 → 検索フィールドにフォーカス
+                        if press.modifiers.contains(.command) && !press.modifiers.contains(.control) {
+                            selectedItem = nil
+                            isSearchFocused.wrappedValue = true
+                            return .handled
+                        }
+                        return .ignored
+                    }
+                    .onKeyPress(.escape) {
+                        // Escape: 履歴を閉じる
+                        showHistory = false
+                        selectedItem = nil
+                        isSearchFocused.wrappedValue = false
+                        isShowingSuggestions = false
+                        return .handled
+                    }
                     .onChange(of: selectedItem?.id) { _, newId in
                         if let id = newId {
                             withAnimation(.easeInOut(duration: 0.2)) {
