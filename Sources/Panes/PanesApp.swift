@@ -141,7 +141,7 @@ struct ImageViewerApp: App {
                         }
                     }
                 ))
-                .keyboardShortcut("h", modifiers: [.command, .shift])
+                .keyboardShortcut("f", modifiers: [.command])
 
                 Button(action: {
                     DebugLogger.log("🔄 Menu: Refresh history clicked", level: .normal)

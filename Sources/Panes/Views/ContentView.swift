@@ -920,10 +920,33 @@ struct ContentView: View {
                 toggleFullScreen()
                 return .handled
             }
-            // ⌘F で検索フィールドにフォーカス（初期画面のみ）
-            if press.modifiers.contains(.command) && !press.modifiers.contains(.control) && !viewModel.hasOpenFile {
-                isHistorySearchFocused = true
-                selectedHistoryItem = nil  // 選択解除（IME変換確定との干渉を防ぐ）
+            // ⌘F で履歴表示トグル（表示時はフォーカスも設定）
+            if press.modifiers.contains(.command) && !press.modifiers.contains(.control) {
+                if showHistory {
+                    // 表示中なら閉じる
+                    showHistory = false
+                    isHistorySearchFocused = false
+                    isShowingSuggestions = false
+                    // メインビューにフォーカスを戻す
+                    isMainViewFocused = true
+                } else {
+                    // 非表示なら表示＋フォーカス
+                    showHistory = true
+                    isHistorySearchFocused = true
+                    selectedHistoryItem = nil  // 選択解除（IME変換確定との干渉を防ぐ）
+                }
+                return .handled
+            }
+            return .ignored
+        }
+        .onKeyPress(.escape) {
+            // Escapeで履歴を閉じる（グローバル）
+            if showHistory {
+                showHistory = false
+                isHistorySearchFocused = false
+                isShowingSuggestions = false
+                // メインビューにフォーカスを戻す
+                isMainViewFocused = true
                 return .handled
             }
             return .ignored
@@ -2203,12 +2226,15 @@ struct HistoryListView: View {
                                     return .ignored
                                 }
                                 .onKeyPress(.escape) {
-                                    // Escapeで候補リストを閉じる
+                                    // Escapeで候補リストを閉じる → 履歴を閉じる
                                     if isShowingSuggestions {
                                         isShowingSuggestions = false
                                         return .handled
                                     }
-                                    return .ignored
+                                    // 候補がない場合は履歴を閉じる
+                                    showHistory = false
+                                    isSearchFocused.wrappedValue = false
+                                    return .handled
                                 }
                             }
                             // 検索種別インジケーター

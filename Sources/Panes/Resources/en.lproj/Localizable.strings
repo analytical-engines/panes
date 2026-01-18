@@ -150,7 +150,7 @@
 "menu_single_page_alignment" = "Single Page Alignment";
 "menu_align_right" = "Right Side";
 "menu_align_left" = "Left Side";
-"menu_align_center" = "Center (Fit to Window)";
+"menu_align_center" = "Center";
 "menu_rotation_and_flip" = "Rotation & Flip";
 "menu_rotation" = "Rotation";
 "menu_rotate_clockwise" = "Rotate 90° Right";

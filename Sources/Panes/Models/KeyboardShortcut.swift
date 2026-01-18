@@ -272,9 +272,9 @@ struct HardcodedShortcut {
         if keyCode == 46 && modifiers == [.shift, .command] {
             return HardcodedShortcut(displayName: L("shortcut_view_mode"), keyDisplay: "⇧⌘M")
         }
-        // ⇧⌘H (keyCode 4 = H)
-        if keyCode == 4 && modifiers == [.shift, .command] {
-            return HardcodedShortcut(displayName: L("menu_show_history"), keyDisplay: "⇧⌘H")
+        // ⌘F (keyCode 3 = F) - 履歴表示トグル
+        if keyCode == 3 && modifiers == [.command] {
+            return HardcodedShortcut(displayName: L("menu_show_history"), keyDisplay: "⌘F")
         }
         // ⌘+ (keyCode 24 = +/=)
         if keyCode == 24 && modifiers == [.command] {

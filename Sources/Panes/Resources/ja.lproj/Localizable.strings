@@ -150,7 +150,7 @@
 "menu_single_page_alignment" = "単ページの配置";
 "menu_align_right" = "右側";
 "menu_align_left" = "左側";
-"menu_align_center" = "中央（ウィンドウに合わせる）";
+"menu_align_center" = "中央";
 "menu_rotation_and_flip" = "回転・反転";
 "menu_rotation" = "回転";
 "menu_rotate_clockwise" = "右に90°回転";
