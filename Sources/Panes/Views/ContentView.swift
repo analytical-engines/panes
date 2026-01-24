@@ -810,6 +810,12 @@ struct ContentView: View {
                     if sessionManager.isProcessing {
                         sessionManager.windowDidFinishLoading(id: windowID)
                     }
+                } else {
+                    // フレームがまだ取得できていない場合
+                    // isProcessing中なら完了を通知（登録は後でonChange(of: currentWindowFrame)で行う）
+                    if sessionManager.isProcessing {
+                        sessionManager.windowDidFinishLoading(id: windowID)
+                    }
                 }
             } else {
                 // セッションマネージャーからも削除
@@ -1803,16 +1809,40 @@ struct ContentView: View {
     }
 
     private func handleSelectedFiles(_ urls: [URL]) {
-        // withAnimationでアニメーション付きでローディング画面に遷移
-        withAnimation {
-            pendingURLs = urls
+        openFilesInCurrentWindow(urls: urls, animated: true)
+    }
+
+    /// 現在のウィンドウでファイルを開く（共通処理）
+    /// 複数ファイルの場合、1つ目は現在のウィンドウで開き、2つ目以降は新規ウィンドウで開く
+    private func openFilesInCurrentWindow(
+        urls: [URL],
+        relativePath: String? = nil,
+        animated: Bool = false
+    ) {
+        guard !urls.isEmpty else { return }
+
+        // 1つ目のファイルを現在のウィンドウで開く
+        let firstURL = urls[0]
+        if viewModel.hasOpenFile {
+            viewModel.closeFile()
+        }
+        pendingRelativePath = relativePath
+        if animated {
+            withAnimation { pendingURLs = [firstURL] }
+        } else {
+            pendingURLs = [firstURL]
+        }
+
+        // 2つ目以降は新規ウィンドウで開く
+        if urls.count > 1 {
+            let remainingURLs = Array(urls.dropFirst())
+            sessionManager.addFilesToOpen(urls: remainingURLs)
         }
     }
 
     private func openHistoryFile(path: String) {
         let url = URL(fileURLWithPath: path)
-        // pendingURLsを設定するとonChangeがトリガーされる
-        pendingURLs = [url]
+        openFilesInCurrentWindow(urls: [url])
     }
 
     private func openInNewWindow(path: String) {
@@ -1824,9 +1854,7 @@ struct ContentView: View {
     /// 画像カタログからファイルを開く（書庫/フォルダ内の特定画像にジャンプ）
     private func openImageCatalogFile(path: String, relativePath: String?) {
         let url = URL(fileURLWithPath: path)
-        // 相対パスを保存しておく（ファイルが開かれた後にページジャンプに使う）
-        pendingRelativePath = relativePath
-        pendingURLs = [url]
+        openFilesInCurrentWindow(urls: [url], relativePath: relativePath)
     }
 
     private func handleDrop(providers: [NSItemProvider]) -> Bool {
@@ -1869,12 +1897,7 @@ struct ContentView: View {
                     self.isMainViewFocused = true
 
                     DebugLogger.log("📬 D&D: \(urls.first?.lastPathComponent ?? "unknown") (window=\(self.myWindowNumber ?? -1))", level: .normal)
-                    // 既にファイルが開いている場合は一度閉じる
-                    if viewModel.hasOpenFile {
-                        viewModel.closeFile()
-                    }
-                    // pendingURLsを設定してonChangeをトリガーする（履歴からの読み込みと同じ経路）
-                    pendingURLs = urls
+                    self.openFilesInCurrentWindow(urls: urls)
                 }
             }
         }
