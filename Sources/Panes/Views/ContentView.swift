@@ -76,8 +76,8 @@ struct ContentView: View {
     // 通知オブザーバのトークン（解除用）
     @State private var notificationObservers: [NSObjectProtocol] = []
 
-    // 画像情報モーダル表示用
-    @State private var showImageInfo = false
+    // モーダル表示状態（画像情報、メモ編集）
+    @State private var modalState = ModalState()
 
     // 履歴フィルタ（ファイルを閉じても維持）
     @State private var historyFilterText: String = ""
@@ -88,12 +88,6 @@ struct ContentView: View {
     @State private var lastOpenedImageId: String?
     // スクロールトリガー（初期画面に戻るたびにインクリメント）
     @State private var scrollTrigger: Int = 0
-
-    // メモ編集用
-    @State private var showMemoEdit = false
-    @State private var editingMemoText = ""
-    @State private var editingMemoFileKey: String?  // 履歴エントリ編集時に使用
-    @State private var editingImageCatalogId: String?  // 画像カタログエントリ編集時に使用
 
     // 画像カタログからのファイルオープン時に使用する相対パス
     @State private var pendingRelativePath: String?
@@ -201,14 +195,10 @@ struct ContentView: View {
                 onOpenHistoryFile: openHistoryFile,
                 onOpenInNewWindow: openInNewWindow,
                 onEditMemo: { fileKey, currentMemo in
-                    editingMemoFileKey = fileKey
-                    editingMemoText = currentMemo ?? ""
-                    showMemoEdit = true
+                    modalState.openMemoEditForHistory(fileKey: fileKey, memo: currentMemo)
                 },
                 onEditImageMemo: { id, currentMemo in
-                    editingImageCatalogId = id
-                    editingMemoText = currentMemo ?? ""
-                    showMemoEdit = true
+                    modalState.openMemoEditForCatalog(catalogId: id, memo: currentMemo)
                 },
                 onOpenImageCatalogFile: openImageCatalogFile,
                 onRestoreSession: { session in
@@ -253,14 +243,10 @@ struct ContentView: View {
                     onOpenHistoryFile: openHistoryFile,
                     onOpenInNewWindow: openInNewWindow,
                     onEditMemo: { fileKey, currentMemo in
-                        editingMemoFileKey = fileKey
-                        editingMemoText = currentMemo ?? ""
-                        showMemoEdit = true
+                        modalState.openMemoEditForHistory(fileKey: fileKey, memo: currentMemo)
                     },
                     onEditImageMemo: { id, currentMemo in
-                        editingImageCatalogId = id
-                        editingMemoText = currentMemo ?? ""
-                        showMemoEdit = true
+                        modalState.openMemoEditForCatalog(catalogId: id, memo: currentMemo)
                     },
                     onOpenImageFile: openImageCatalogFile,
                     onRestoreSession: { session in
@@ -457,9 +443,9 @@ struct ContentView: View {
 
         // 画像メモを編集（書庫のメモは履歴リストから編集）
         Button(action: {
-            editingImageCatalogId = viewModel.getCurrentImageCatalogId()
-            editingMemoText = viewModel.getCurrentImageMemo() ?? ""
-            showMemoEdit = true
+            if let catalogId = viewModel.getCurrentImageCatalogId() {
+                modalState.openMemoEditForCatalog(catalogId: catalogId, memo: viewModel.getCurrentImageMemo())
+            }
         }) {
             Label(L("menu_edit_image_memo"), systemImage: "photo")
         }
@@ -646,9 +632,7 @@ struct ContentView: View {
 
         // 書庫のメモ編集（書庫ファイル属性）
         Button(action: {
-            editingMemoFileKey = viewModel.currentFileKey
-            editingMemoText = viewModel.getCurrentMemo() ?? ""
-            showMemoEdit = true
+            modalState.openMemoEditForCurrentFile(fileKey: viewModel.currentFileKey, memo: viewModel.getCurrentMemo())
         }) {
             Label(L("menu_edit_archive_memo"), systemImage: "archivebox")
         }
@@ -904,7 +888,7 @@ struct ContentView: View {
                 }
             }
         }
-        .onChange(of: showMemoEdit) { _, newValue in
+        .onChange(of: modalState.showMemoEdit) { _, newValue in
             // メモ編集モーダルが閉じられたらメインビューにフォーカスを戻す
             if !newValue {
                 DispatchQueue.main.async {
@@ -971,7 +955,7 @@ struct ContentView: View {
         .onKeyPress(characters: CharacterSet(charactersIn: "iI")) { press in
             // ⌘I で画像情報表示
             if press.modifiers.contains(.command) && viewModel.hasOpenFile {
-                showImageInfo.toggle()
+                modalState.toggleImageInfo()
                 return .handled
             }
             return .ignored
@@ -1002,49 +986,43 @@ struct ContentView: View {
     @ViewBuilder
     private var modalOverlays: some View {
         // 画像情報モーダル
-        if showImageInfo {
+        if modalState.showImageInfo {
             Color.black.opacity(0.3)
                 .ignoresSafeArea()
-                .onTapGesture { showImageInfo = false }
+                .onTapGesture { modalState.showImageInfo = false }
 
             ImageInfoView(
                 infos: viewModel.getCurrentImageInfos(),
-                onDismiss: { showImageInfo = false }
+                onDismiss: { modalState.showImageInfo = false }
             )
         }
 
         // メモ編集モーダル
-        if showMemoEdit {
+        if modalState.showMemoEdit {
             Color.black.opacity(0.3)
                 .ignoresSafeArea()
                 .onTapGesture {
-                    showMemoEdit = false
-                    editingMemoFileKey = nil
-                    editingImageCatalogId = nil
+                    modalState.closeMemoEdit()
                 }
 
             MemoEditPopover(
-                memo: $editingMemoText,
+                memo: $modalState.editingMemoText,
                 onSave: {
-                    let newMemo = editingMemoText.isEmpty ? nil : editingMemoText
-                    if let fileKey = editingMemoFileKey {
+                    let newMemo = modalState.finalMemoText
+                    if let fileKey = modalState.editingMemoFileKey {
                         // 履歴エントリのメモを更新
                         historyManager.updateMemo(for: fileKey, memo: newMemo)
-                    } else if let catalogId = editingImageCatalogId {
+                    } else if let catalogId = modalState.editingImageCatalogId {
                         // 画像カタログエントリのメモを更新
                         imageCatalogManager.updateMemo(for: catalogId, memo: newMemo)
                     } else {
                         // 現在開いているファイルのメモを更新
                         viewModel.updateCurrentMemo(newMemo)
                     }
-                    showMemoEdit = false
-                    editingMemoFileKey = nil
-                    editingImageCatalogId = nil
+                    modalState.closeMemoEdit()
                 },
                 onCancel: {
-                    showMemoEdit = false
-                    editingMemoFileKey = nil
-                    editingImageCatalogId = nil
+                    modalState.closeMemoEdit()
                 }
             )
         }
@@ -1772,16 +1750,12 @@ struct ContentView: View {
         case .archive(let id, _):
             // 履歴エントリからidとmemoを取得（updateMemoはidで検索する）
             if let entry = historyManager.history.first(where: { $0.id == id }) {
-                editingMemoFileKey = entry.id
-                editingMemoText = entry.memo ?? ""
-                showMemoEdit = true
+                modalState.openMemoEditForHistory(fileKey: entry.id, memo: entry.memo)
             }
         case .standaloneImage(let id, _), .archiveContentImage(let id, _, _):
             // 画像カタログエントリからmemoを取得
             if let entry = imageCatalogManager.catalog.first(where: { $0.id == id }) {
-                editingImageCatalogId = id
-                editingMemoText = entry.memo ?? ""
-                showMemoEdit = true
+                modalState.openMemoEditForCatalog(catalogId: id, memo: entry.memo)
             }
         case .session:
             // セッションにはメモ機能なし

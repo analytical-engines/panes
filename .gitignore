@@ -21,6 +21,7 @@ xcuserdata/
 
 # Build artifacts
 DerivedData/
+build/
 
 # Dependencies
 Packages/
