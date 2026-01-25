@@ -5,7 +5,6 @@
 # Xcode
 xcuserdata/
 *.xcworkspace
-*.xcodeproj
 
 # macOS
 .DS_Store
