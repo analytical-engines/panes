@@ -904,70 +904,14 @@ struct ContentView: View {
         .onKeyPress(keys: [.pageDown]) { handlePageDown($0) }
         .onKeyPress(characters: .init(charactersIn: "\r\n")) { handleReturn($0) }
         .onKeyPress(characters: CharacterSet(charactersIn: "mM")) { handleMemoEdit($0) }
-        .onKeyPress(keys: [.space]) { press in
-            // ファイルを開いている時のみページ送り（検索フィールドへの入力を妨げない）
-            guard viewModel.hasOpenFile else { return .ignored }
-            if press.modifiers.contains(.shift) { viewModel.previousPage() }
-            else { viewModel.nextPage() }
-            return .handled
-        }
-        .onKeyPress(characters: CharacterSet(charactersIn: "fF")) { press in
-            if press.modifiers.contains(.command) && press.modifiers.contains(.control) {
-                toggleFullScreen()
-                return .handled
-            }
-            // ⌘F で履歴表示＋フィルターフォーカス
-            if press.modifiers.contains(.command) && !press.modifiers.contains(.control) {
-                if !showHistory {
-                    // 非表示 → 表示＋フォーカス（onChangeでフォーカス設定）
-                    showHistory = true
-                    selectedHistoryItem = nil
-                } else {
-                    // 表示中 → 検索フィールドにフォーカス（検索フィールドのonKeyPressで閉じる処理をする）
-                    selectedHistoryItem = nil
-                    isHistorySearchFocused = true
-                }
-                return .handled
-            }
-            return .ignored
-        }
-        .onKeyPress(.escape) {
-            // Escapeで履歴を閉じる（グローバル）
-            if showHistory {
-                showHistory = false
-                selectedHistoryItem = nil
-                isHistorySearchFocused = false
-                isShowingSuggestions = false
-                // メインビューにフォーカスを戻す
-                isMainViewFocused = true
-                return .handled
-            }
-            return .ignored
-        }
+        .onKeyPress(keys: [.space]) { handleSpace($0) }
+        .onKeyPress(characters: CharacterSet(charactersIn: "fF")) { handleFKey($0) }
+        .onKeyPress(.escape) { handleEscape() }
         .onKeyPress(.home) { viewModel.goToFirstPage(); return .handled }
         .onKeyPress(.end) { viewModel.goToLastPage(); return .handled }
-        .onKeyPress(keys: [.tab]) { _ in
-            // 候補表示中はTextField側で処理（補完確定）
-            if isShowingSuggestions { return .ignored }
-            viewModel.skipForward(pages: appSettings.pageJumpCount)
-            return .handled
-        }
-        .onKeyPress(characters: CharacterSet(charactersIn: "iI")) { press in
-            // ⌘I で画像情報表示
-            if press.modifiers.contains(.command) && viewModel.hasOpenFile {
-                modalState.toggleImageInfo()
-                return .handled
-            }
-            return .ignored
-        }
-        .onKeyPress(characters: CharacterSet(charactersIn: "oO")) { press in
-            // ⌘O でファイルを開く
-            if press.modifiers.contains(.command) {
-                openFilePicker()
-                return .handled
-            }
-            return .ignored
-        }
+        .onKeyPress(keys: [.tab]) { handleTab($0) }
+        .onKeyPress(characters: CharacterSet(charactersIn: "iI")) { handleImageInfo($0) }
+        .onKeyPress(characters: CharacterSet(charactersIn: "oO")) { handleOpenFile($0) }
         .onReceive(NotificationCenter.default.publisher(for: .windowDidBecomeKey)) { notification in
             let start = CFAbsoluteTimeGetCurrent()
             // 自分のウィンドウがフォーカスを得た場合のみ履歴を更新
@@ -1116,7 +1060,7 @@ struct ContentView: View {
         }
         ContentView.lastCreatedWindowIDLock.unlock()
 
-        setupEventMonitor()
+        setupEventMonitors()
         if !notificationObserversRegistered {
             notificationObserversRegistered = true
             setupNotificationObservers()
@@ -1428,18 +1372,29 @@ struct ContentView: View {
         alert.runModal()
     }
 
-    private func setupEventMonitor() {
-        // 既存のモニターがあれば削除（重複防止）
-        if let existingMonitor = eventMonitor {
-            NSEvent.removeMonitor(existingMonitor)
+    // MARK: - Event Monitors
+
+    private func setupEventMonitors() {
+        teardownEventMonitors()
+        setupKeyDownMonitor()
+        setupScrollWheelMonitor()
+    }
+
+    private func teardownEventMonitors() {
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
             eventMonitor = nil
         }
+        if let monitor = scrollEventMonitor {
+            NSEvent.removeMonitor(monitor)
+            scrollEventMonitor = nil
+        }
+    }
 
+    private func setupKeyDownMonitor() {
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak viewModel] event in
             // 自分のウィンドウか確認
-            let keyWindowNumber = NSApp.keyWindow?.windowNumber
-            let isMyWindowActive = (self.myWindowNumber == keyWindowNumber)
-            guard isMyWindowActive else {
+            guard self.myWindowNumber == NSApp.keyWindow?.windowNumber else {
                 return event
             }
 
@@ -1465,14 +1420,9 @@ struct ContentView: View {
             }
             return event
         }
+    }
 
-        // ⌘ + スクロールホイールでズーム
-        // 既存のモニターがあれば削除（重複防止）
-        if let existingMonitor = scrollEventMonitor {
-            NSEvent.removeMonitor(existingMonitor)
-            scrollEventMonitor = nil
-        }
-
+    private func setupScrollWheelMonitor() {
         scrollEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak viewModel] event in
             // ⌘キーが押されているか確認
             guard event.modifierFlags.contains(.command) else {
@@ -1480,8 +1430,7 @@ struct ContentView: View {
             }
 
             // 自分のウィンドウか確認
-            let keyWindowNumber = NSApp.keyWindow?.windowNumber
-            guard self.myWindowNumber == keyWindowNumber else {
+            guard self.myWindowNumber == NSApp.keyWindow?.windowNumber else {
                 return event
             }
 
@@ -1555,15 +1504,7 @@ struct ContentView: View {
     }
 
     private func handleOnDisappear() {
-        if let monitor = eventMonitor {
-            NSEvent.removeMonitor(monitor)
-            eventMonitor = nil
-        }
-
-        if let monitor = scrollEventMonitor {
-            NSEvent.removeMonitor(monitor)
-            scrollEventMonitor = nil
-        }
+        teardownEventMonitors()
 
         // 通知オブザーバを解除（メモリリーク防止）
         removeNotificationObservers()
@@ -1591,6 +1532,16 @@ struct ContentView: View {
 
     // MARK: - Key Handlers
 
+    /// 初期画面で履歴ナビゲーションが可能な状態か（ファイル未開封かつ履歴あり）
+    private var canNavigateHistory: Bool {
+        !viewModel.hasOpenFile && !visibleHistoryItems.isEmpty
+    }
+
+    /// 履歴リストのキーボードナビゲーションが可能な状態か（候補表示中・検索フォーカス中を除く）
+    private var canNavigateHistoryList: Bool {
+        canNavigateHistory && !isShowingSuggestions && !isHistorySearchFocused
+    }
+
     private func handleLeftArrow(_ press: KeyPress) -> KeyPress.Result {
         // ファイルを開いている時のみページ送り（検索フィールドへの入力を妨げない）
         guard viewModel.hasOpenFile else { return .ignored }
@@ -1616,11 +1567,7 @@ struct ContentView: View {
     }
 
     private func handleUpArrow(_ press: KeyPress) -> KeyPress.Result {
-        // 初期画面でのみ履歴ナビゲーション
-        guard !viewModel.hasOpenFile else { return .ignored }
-        guard !isHistorySearchFocused else { return .ignored }  // 検索フィールドにフォーカス中は無視
-        guard !isShowingSuggestions else { return .ignored }  // 候補表示中は無視（TextField側で処理）
-        guard !visibleHistoryItems.isEmpty else { return .ignored }
+        guard canNavigateHistoryList else { return .ignored }
 
         if let current = selectedHistoryItem,
            let currentIndex = visibleHistoryItems.firstIndex(where: { $0.id == current.id }) {
@@ -1639,14 +1586,8 @@ struct ContentView: View {
     }
 
     private func handleDownArrow(_ press: KeyPress) -> KeyPress.Result {
-        // 初期画面でのみ履歴ナビゲーション
-        guard !viewModel.hasOpenFile else { return .ignored }
-        guard !visibleHistoryItems.isEmpty else { return .ignored }
-
-        // 候補表示中は無視（TextField側で処理）
-        if isShowingSuggestions {
-            return .ignored
-        }
+        guard canNavigateHistory else { return .ignored }
+        guard !isShowingSuggestions else { return .ignored }
 
         // 検索フィールドにフォーカス中は、フォーカスを外してリストの先頭を選択
         if isHistorySearchFocused {
@@ -1672,35 +1613,26 @@ struct ContentView: View {
     private let pageScrollCount = 10
 
     private func handlePageUp(_ press: KeyPress) -> KeyPress.Result {
-        // 初期画面でのみ履歴ナビゲーション
-        guard !viewModel.hasOpenFile else { return .ignored }
-        guard !isHistorySearchFocused else { return .ignored }
-        guard !visibleHistoryItems.isEmpty else { return .ignored }
-
-        if let current = selectedHistoryItem,
-           let currentIndex = visibleHistoryItems.firstIndex(where: { $0.id == current.id }) {
-            let newIndex = max(0, currentIndex - pageScrollCount)
-            selectedHistoryItem = visibleHistoryItems[newIndex]
-        } else {
-            selectedHistoryItem = visibleHistoryItems.first
-        }
+        guard canNavigateHistoryList else { return .ignored }
+        selectHistoryItem(byOffset: -pageScrollCount)
         return .handled
     }
 
     private func handlePageDown(_ press: KeyPress) -> KeyPress.Result {
-        // 初期画面でのみ履歴ナビゲーション
-        guard !viewModel.hasOpenFile else { return .ignored }
-        guard !isHistorySearchFocused else { return .ignored }
-        guard !visibleHistoryItems.isEmpty else { return .ignored }
+        guard canNavigateHistoryList else { return .ignored }
+        selectHistoryItem(byOffset: pageScrollCount)
+        return .handled
+    }
 
+    /// 履歴リストの選択を指定オフセット分移動する
+    private func selectHistoryItem(byOffset offset: Int) {
         if let current = selectedHistoryItem,
            let currentIndex = visibleHistoryItems.firstIndex(where: { $0.id == current.id }) {
-            let newIndex = min(visibleHistoryItems.count - 1, currentIndex + pageScrollCount)
+            let newIndex = max(0, min(visibleHistoryItems.count - 1, currentIndex + offset))
             selectedHistoryItem = visibleHistoryItems[newIndex]
         } else {
             selectedHistoryItem = visibleHistoryItems.first
         }
-        return .handled
     }
 
     private func handleReturn(_ press: KeyPress) -> KeyPress.Result {
@@ -1762,6 +1694,74 @@ struct ContentView: View {
             return .ignored
         }
         return .handled
+    }
+
+    private func handleSpace(_ press: KeyPress) -> KeyPress.Result {
+        // ファイルを開いている時のみページ送り（検索フィールドへの入力を妨げない）
+        guard viewModel.hasOpenFile else { return .ignored }
+        if press.modifiers.contains(.shift) { viewModel.previousPage() }
+        else { viewModel.nextPage() }
+        return .handled
+    }
+
+    private func handleFKey(_ press: KeyPress) -> KeyPress.Result {
+        if press.modifiers.contains(.command) && press.modifiers.contains(.control) {
+            toggleFullScreen()
+            return .handled
+        }
+        // ⌘F で履歴表示＋フィルターフォーカス
+        if press.modifiers.contains(.command) && !press.modifiers.contains(.control) {
+            if !showHistory {
+                // 非表示 → 表示＋フォーカス（onChangeでフォーカス設定）
+                showHistory = true
+                selectedHistoryItem = nil
+            } else {
+                // 表示中 → 検索フィールドにフォーカス（検索フィールドのonKeyPressで閉じる処理をする）
+                selectedHistoryItem = nil
+                isHistorySearchFocused = true
+            }
+            return .handled
+        }
+        return .ignored
+    }
+
+    private func handleEscape() -> KeyPress.Result {
+        // Escapeで履歴を閉じる（グローバル）
+        if showHistory {
+            showHistory = false
+            selectedHistoryItem = nil
+            isHistorySearchFocused = false
+            isShowingSuggestions = false
+            // メインビューにフォーカスを戻す
+            isMainViewFocused = true
+            return .handled
+        }
+        return .ignored
+    }
+
+    private func handleTab(_ press: KeyPress) -> KeyPress.Result {
+        // 候補表示中はTextField側で処理（補完確定）
+        if isShowingSuggestions { return .ignored }
+        viewModel.skipForward(pages: appSettings.pageJumpCount)
+        return .handled
+    }
+
+    private func handleImageInfo(_ press: KeyPress) -> KeyPress.Result {
+        // ⌘I で画像情報表示
+        if press.modifiers.contains(.command) && viewModel.hasOpenFile {
+            modalState.toggleImageInfo()
+            return .handled
+        }
+        return .ignored
+    }
+
+    private func handleOpenFile(_ press: KeyPress) -> KeyPress.Result {
+        // ⌘O でファイルを開く
+        if press.modifiers.contains(.command) {
+            openFilePicker()
+            return .handled
+        }
+        return .ignored
     }
 
     private func openFilePicker() {
