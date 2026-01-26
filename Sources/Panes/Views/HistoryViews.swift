@@ -290,17 +290,7 @@ struct HistoryListView: View {
                                     isSearchFocused.wrappedValue = false
                                     return .handled
                                 }
-                                .onKeyPress(characters: CharacterSet(charactersIn: "fF")) { press in
-                                    // ⌘F: 検索フィールドにフォーカス中 → 履歴を閉じる
-                                    if press.modifiers.contains(.command) && !press.modifiers.contains(.control) {
-                                        showHistory = false
-                                        selectedItem = nil
-                                        isSearchFocused.wrappedValue = false
-                                        isShowingSuggestions = false
-                                        return .handled
-                                    }
-                                    return .ignored
-                                }
+                                // 注: ⌘F（履歴トグル）はメニューショートカットで処理
                             }
                             // 検索種別インジケーター
                             if !filterText.isEmpty && parsedQuery.targetType != .all {
@@ -430,15 +420,7 @@ struct HistoryListView: View {
                     .preferredColorScheme(.dark)
                     .frame(maxHeight: 400)
                     .focusable()
-                    .onKeyPress(characters: CharacterSet(charactersIn: "fF")) { press in
-                        // ⌘F: リスト選択中 → 検索フィールドにフォーカス
-                        if press.modifiers.contains(.command) && !press.modifiers.contains(.control) {
-                            selectedItem = nil
-                            isSearchFocused.wrappedValue = true
-                            return .handled
-                        }
-                        return .ignored
-                    }
+                    // 注: ⌘F（履歴トグル）はメニューショートカットで処理
                     .onKeyPress(.escape) {
                         // Escape: 履歴を閉じる
                         showHistory = false

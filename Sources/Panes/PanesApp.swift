@@ -131,7 +131,7 @@ struct ImageViewerApp: App {
 
             CommandGroup(after: .sidebar) {
                 // フォーカスされているウィンドウの履歴表示をトグル
-                // ⌘+FはContentViewのonKeyPressで細かく制御するため、ショートカットは設定しない
+                // メニューショートカットはTextFieldフォーカス中でも優先されるため、ここで⌘Fを処理
                 Toggle(L("menu_show_history"), isOn: Binding(
                     get: { WindowCoordinator.shared.keyWindowShowHistory ?? appSettings.lastHistoryVisible },
                     set: { newValue in
@@ -142,6 +142,7 @@ struct ImageViewerApp: App {
                         }
                     }
                 ))
+                .keyboardShortcut("f", modifiers: .command)
 
                 Button(action: {
                     DebugLogger.log("🔄 Menu: Refresh history clicked", level: .normal)

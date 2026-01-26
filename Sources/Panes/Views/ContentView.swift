@@ -1677,21 +1677,10 @@ struct ContentView: View {
     }
 
     private func handleFKey(_ press: KeyPress) -> KeyPress.Result {
+        // ⌘⌃F でフルスクリーン切り替え
+        // 注: ⌘F（履歴トグル）はメニューショートカットで処理（TextFieldフォーカス中でも動作するため）
         if press.modifiers.contains(.command) && press.modifiers.contains(.control) {
             toggleFullScreen()
-            return .handled
-        }
-        // ⌘F で履歴表示＋フィルターフォーカス
-        if press.modifiers.contains(.command) && !press.modifiers.contains(.control) {
-            if !showHistory {
-                // 非表示 → 表示＋フォーカス（onChangeでフォーカス設定）
-                showHistory = true
-                selectedHistoryItem = nil
-            } else {
-                // 表示中 → 検索フィールドにフォーカス（検索フィールドのonKeyPressで閉じる処理をする）
-                selectedHistoryItem = nil
-                isHistorySearchFocused = true
-            }
             return .handled
         }
         return .ignored
