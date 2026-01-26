@@ -1504,9 +1504,9 @@ struct ContentView: View {
 
     // MARK: - Key Handlers
 
-    /// 初期画面で履歴ナビゲーションが可能な状態か（ファイル未開封かつ履歴あり）
+    /// 履歴ナビゲーションが可能な状態か（履歴表示中かつ履歴あり）
     private var canNavigateHistory: Bool {
-        !viewModel.hasOpenFile && !visibleHistoryItems.isEmpty
+        showHistory && !visibleHistoryItems.isEmpty
     }
 
     /// 履歴リストのキーボードナビゲーションが可能な状態か（候補表示中・検索フォーカス中を除く）
@@ -1608,8 +1608,8 @@ struct ContentView: View {
     }
 
     private func handleReturn(_ press: KeyPress) -> KeyPress.Result {
-        // 初期画面でのみ履歴アイテムを開く
-        guard !viewModel.hasOpenFile else { return .ignored }
+        // 履歴表示中に履歴アイテムを開く（Enter: 現在のウィンドウ、Shift+Enter: 新規ウィンドウ）
+        guard showHistory else { return .ignored }
         guard !isHistorySearchFocused else { return .ignored }  // 検索フィールドにフォーカス中は無視（IME変換確定と干渉するため）
         guard let selected = selectedHistoryItem else { return .ignored }
 
