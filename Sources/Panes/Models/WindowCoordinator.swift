@@ -22,6 +22,9 @@ final class WindowCoordinator {
     /// ウィンドウ番号から履歴選択クリアのコールバック
     private var clearSelectionCallbacks: [Int: () -> Void] = [:]
 
+    /// ウィンドウ番号からメインビューフォーカスのコールバック
+    private var focusMainViewCallbacks: [Int: () -> Void] = [:]
+
     /// 現在アクティブなウィンドウ番号（markAsActiveで明示的に設定）
     private var activeWindowNumber: Int?
 
@@ -70,6 +73,12 @@ final class WindowCoordinator {
         DebugLogger.log("📋 WindowCoordinator: registered clearSelection for window \(windowNumber)", level: .verbose)
     }
 
+    /// メインビューフォーカスのコールバックを登録する
+    func registerFocusMainView(windowNumber: Int, callback: @escaping () -> Void) {
+        focusMainViewCallbacks[windowNumber] = callback
+        DebugLogger.log("📋 WindowCoordinator: registered focusMainView for window \(windowNumber)", level: .verbose)
+    }
+
     /// 登録を解除する
     func unregister(windowNumber: Int) {
         windowViewModels.removeValue(forKey: windowNumber)
@@ -78,6 +87,7 @@ final class WindowCoordinator {
         searchFocusGetters.removeValue(forKey: windowNumber)
         searchFocusSetters.removeValue(forKey: windowNumber)
         clearSelectionCallbacks.removeValue(forKey: windowNumber)
+        focusMainViewCallbacks.removeValue(forKey: windowNumber)
         DebugLogger.log("📋 WindowCoordinator: unregistered window \(windowNumber)", level: .verbose)
     }
 
@@ -160,8 +170,9 @@ final class WindowCoordinator {
             clearSelectionCallbacks[windowNumber]?()
             searchFocusSetters[windowNumber]?(true)
         } else {
-            // 履歴表示中、検索フォーカスあり → 閉じる
+            // 履歴表示中、検索フォーカスあり → 閉じてメインビューにフォーカス
             showHistorySetters[windowNumber]?(false)
+            focusMainViewCallbacks[windowNumber]?()
         }
     }
 

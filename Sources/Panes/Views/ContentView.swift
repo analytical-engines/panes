@@ -846,6 +846,10 @@ struct ContentView: View {
                     windowNumber: newNumber,
                     callback: { selectedHistoryItem = nil }
                 )
+                WindowCoordinator.shared.registerFocusMainView(
+                    windowNumber: newNumber,
+                    callback: { isMainViewFocused = true }
+                )
             }
         }
         .onChange(of: showHistoryFilter) { _, newValue in
