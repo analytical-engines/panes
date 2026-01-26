@@ -132,16 +132,17 @@ struct ImageViewerApp: App {
             CommandGroup(after: .sidebar) {
                 // フォーカスされているウィンドウの履歴表示をトグル
                 // メニューショートカットはTextFieldフォーカス中でも優先されるため、ここで⌘Fを処理
-                Toggle(L("menu_show_history"), isOn: Binding(
-                    get: { WindowCoordinator.shared.keyWindowShowHistory ?? appSettings.lastHistoryVisible },
-                    set: { newValue in
-                        WindowCoordinator.shared.setKeyWindowShowHistory(newValue)
-                        // 「終了時の状態を復元」モードの場合は保存
-                        if appSettings.historyDisplayMode == .restoreLast {
-                            appSettings.lastHistoryVisible = newValue
-                        }
+                // 履歴非表示→表示、表示中フォーカスなし→フォーカス、表示中フォーカスあり→閉じる
+                Button(action: {
+                    WindowCoordinator.shared.toggleHistoryWithFocus()
+                }) {
+                    // 現在の履歴表示状態に応じてラベルを変更
+                    if WindowCoordinator.shared.keyWindowShowHistory ?? false {
+                        Text(L("menu_hide_history"))
+                    } else {
+                        Text(L("menu_show_history"))
                     }
-                ))
+                }
                 .keyboardShortcut("f", modifiers: .command)
 
                 Button(action: {

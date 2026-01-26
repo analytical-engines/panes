@@ -348,8 +348,8 @@
 "search_no_results" = "検索結果がありません";
 "search_type_archive" = "書庫";
 "search_type_image" = "画像";
-"search_type_standalone" = "個別画像";
-"search_type_content" = "書庫内画像";
+"search_type_individual" = "個別画像";
+"search_type_archived" = "書庫内画像";
 "search_filter_all" = "すべて";
 "search_filter_menu_title" = "絞り込み";
 

@@ -837,6 +837,15 @@ struct ContentView: View {
                     getter: { showHistory },
                     setter: { showHistory = $0 }
                 )
+                WindowCoordinator.shared.registerSearchFocus(
+                    windowNumber: newNumber,
+                    getter: { isHistorySearchFocused },
+                    setter: { isHistorySearchFocused = $0 }
+                )
+                WindowCoordinator.shared.registerClearSelection(
+                    windowNumber: newNumber,
+                    callback: { selectedHistoryItem = nil }
+                )
             }
         }
         .onChange(of: showHistoryFilter) { _, newValue in
@@ -848,6 +857,10 @@ struct ContentView: View {
             }
         }
         .onChange(of: showHistory) { _, newValue in
+            // 「終了時の状態を復元」モードの場合は保存
+            if appSettings.historyDisplayMode == .restoreLast {
+                appSettings.lastHistoryVisible = newValue
+            }
             // 履歴表示が有効になったら、必要に応じて履歴とカタログを再読み込み
             if newValue {
                 historyManager.notifyHistoryUpdate()
@@ -1515,7 +1528,9 @@ struct ContentView: View {
     }
 
     private func handleLeftArrow(_ press: KeyPress) -> KeyPress.Result {
-        // ファイルを開いている時のみページ送り（検索フィールドへの入力を妨げない）
+        // 検索フィールドにフォーカス中はテキスト編集を優先
+        guard !isHistorySearchFocused else { return .ignored }
+        // ファイルを開いている時のみページ送り
         guard viewModel.hasOpenFile else { return .ignored }
         if press.modifiers.contains(.shift) {
             // Shift+←: 右→左なら正方向シフト、左→右なら逆方向シフト
@@ -1527,7 +1542,9 @@ struct ContentView: View {
     }
 
     private func handleRightArrow(_ press: KeyPress) -> KeyPress.Result {
-        // ファイルを開いている時のみページ送り（検索フィールドへの入力を妨げない）
+        // 検索フィールドにフォーカス中はテキスト編集を優先
+        guard !isHistorySearchFocused else { return .ignored }
+        // ファイルを開いている時のみページ送り
         guard viewModel.hasOpenFile else { return .ignored }
         if press.modifiers.contains(.shift) {
             // Shift+→: 右→左なら逆方向シフト、左→右なら正方向シフト
@@ -1628,7 +1645,7 @@ struct ContentView: View {
             } else {
                 openImageCatalogFile(path: filePath, relativePath: nil)
             }
-        case .archiveContentImage(_, let parentPath, let relativePath):
+        case .archivedImage(_, let parentPath, let relativePath):
             if openInNew {
                 openInNewWindow(path: parentPath)  // 親アーカイブを新しいウィンドウで開く
             } else {
@@ -1656,7 +1673,7 @@ struct ContentView: View {
             if let entry = historyManager.history.first(where: { $0.id == id }) {
                 modalState.openMemoEditForHistory(fileKey: entry.id, memo: entry.memo)
             }
-        case .standaloneImage(let id, _), .archiveContentImage(let id, _, _):
+        case .standaloneImage(let id, _), .archivedImage(let id, _, _):
             // 画像カタログエントリからmemoを取得
             if let entry = imageCatalogManager.catalog.first(where: { $0.id == id }) {
                 modalState.openMemoEditForCatalog(catalogId: id, memo: entry.memo)
@@ -1669,7 +1686,9 @@ struct ContentView: View {
     }
 
     private func handleSpace(_ press: KeyPress) -> KeyPress.Result {
-        // ファイルを開いている時のみページ送り（検索フィールドへの入力を妨げない）
+        // 検索フィールドにフォーカス中はテキスト入力を優先
+        guard !isHistorySearchFocused else { return .ignored }
+        // ファイルを開いている時のみページ送り
         guard viewModel.hasOpenFile else { return .ignored }
         if press.modifiers.contains(.shift) { viewModel.previousPage() }
         else { viewModel.nextPage() }
@@ -1701,8 +1720,8 @@ struct ContentView: View {
     }
 
     private func handleTab(_ press: KeyPress) -> KeyPress.Result {
-        // 候補表示中はTextField側で処理（補完確定）
-        if isShowingSuggestions { return .ignored }
+        // 検索フィールドにフォーカス中はTextField側で処理（補完確定など）
+        if isHistorySearchFocused { return .ignored }
         viewModel.skipForward(pages: appSettings.pageJumpCount)
         return .handled
     }

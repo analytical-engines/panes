@@ -15,6 +15,13 @@ final class WindowCoordinator {
     private var showHistoryGetters: [Int: () -> Bool] = [:]
     private var showHistorySetters: [Int: (Bool) -> Void] = [:]
 
+    /// ウィンドウ番号から検索フォーカスのgetter/setterへのマッピング
+    private var searchFocusGetters: [Int: () -> Bool] = [:]
+    private var searchFocusSetters: [Int: (Bool) -> Void] = [:]
+
+    /// ウィンドウ番号から履歴選択クリアのコールバック
+    private var clearSelectionCallbacks: [Int: () -> Void] = [:]
+
     /// 現在アクティブなウィンドウ番号（markAsActiveで明示的に設定）
     private var activeWindowNumber: Int?
 
@@ -50,11 +57,27 @@ final class WindowCoordinator {
         DebugLogger.log("📋 WindowCoordinator: registered showHistory for window \(windowNumber)", level: .verbose)
     }
 
+    /// 検索フォーカスのgetter/setterを登録する
+    func registerSearchFocus(windowNumber: Int, getter: @escaping () -> Bool, setter: @escaping (Bool) -> Void) {
+        searchFocusGetters[windowNumber] = getter
+        searchFocusSetters[windowNumber] = setter
+        DebugLogger.log("📋 WindowCoordinator: registered searchFocus for window \(windowNumber)", level: .verbose)
+    }
+
+    /// 履歴選択クリアのコールバックを登録する
+    func registerClearSelection(windowNumber: Int, callback: @escaping () -> Void) {
+        clearSelectionCallbacks[windowNumber] = callback
+        DebugLogger.log("📋 WindowCoordinator: registered clearSelection for window \(windowNumber)", level: .verbose)
+    }
+
     /// 登録を解除する
     func unregister(windowNumber: Int) {
         windowViewModels.removeValue(forKey: windowNumber)
         showHistoryGetters.removeValue(forKey: windowNumber)
         showHistorySetters.removeValue(forKey: windowNumber)
+        searchFocusGetters.removeValue(forKey: windowNumber)
+        searchFocusSetters.removeValue(forKey: windowNumber)
+        clearSelectionCallbacks.removeValue(forKey: windowNumber)
         DebugLogger.log("📋 WindowCoordinator: unregistered window \(windowNumber)", level: .verbose)
     }
 
@@ -104,6 +127,42 @@ final class WindowCoordinator {
     func setKeyWindowShowHistory(_ value: Bool) {
         guard let keyWindow = NSApp.keyWindow else { return }
         showHistorySetters[keyWindow.windowNumber]?(value)
+    }
+
+    /// 現在のキーウィンドウの検索フォーカス状態を取得する
+    var keyWindowSearchFocused: Bool? {
+        guard let keyWindow = NSApp.keyWindow else { return nil }
+        return searchFocusGetters[keyWindow.windowNumber]?()
+    }
+
+    /// 現在のキーウィンドウの検索フォーカスを設定する
+    func setKeyWindowSearchFocus(_ value: Bool) {
+        guard let keyWindow = NSApp.keyWindow else { return }
+        searchFocusSetters[keyWindow.windowNumber]?(value)
+    }
+
+    /// ⌘Fショートカットの処理（履歴表示とフォーカスの制御）
+    /// - 履歴非表示 → 履歴を表示（フォーカスはonChangeで設定される）
+    /// - 履歴表示中、検索フォーカスなし → 検索フィールドにフォーカス（選択クリア）
+    /// - 履歴表示中、検索フォーカスあり → 履歴を閉じる
+    func toggleHistoryWithFocus() {
+        guard let keyWindow = NSApp.keyWindow else { return }
+        let windowNumber = keyWindow.windowNumber
+
+        let showHistory = showHistoryGetters[windowNumber]?() ?? false
+        let searchFocused = searchFocusGetters[windowNumber]?() ?? false
+
+        if !showHistory {
+            // 履歴非表示 → 表示する
+            showHistorySetters[windowNumber]?(true)
+        } else if !searchFocused {
+            // 履歴表示中、検索フォーカスなし → 検索フィールドにフォーカス（選択クリア）
+            clearSelectionCallbacks[windowNumber]?()
+            searchFocusSetters[windowNumber]?(true)
+        } else {
+            // 履歴表示中、検索フォーカスあり → 閉じる
+            showHistorySetters[windowNumber]?(false)
+        }
     }
 
     /// キーウィンドウがファイルを開いているかどうか

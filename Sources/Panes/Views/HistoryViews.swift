@@ -11,14 +11,14 @@ enum HistoryTab: String, CaseIterable {
 enum SelectableHistoryItem: Equatable, Hashable {
     case archive(id: String, filePath: String)
     case standaloneImage(id: String, filePath: String)
-    case archiveContentImage(id: String, parentPath: String, relativePath: String)
+    case archivedImage(id: String, parentPath: String, relativePath: String)
     case session(id: UUID)
 
     var id: String {
         switch self {
         case .archive(let id, _): return id
         case .standaloneImage(let id, _): return id
-        case .archiveContentImage(let id, _, _): return id
+        case .archivedImage(let id, _, _): return id
         case .session(let id): return id.uuidString
         }
     }
@@ -318,18 +318,14 @@ struct HistoryListView: View {
                                 Button(action: { insertSearchFilter("type:archive ") }) {
                                     Label(L("search_type_archive"), systemImage: "archivebox")
                                 }
-                                Button(action: { insertSearchFilter("type:image ") }) {
-                                    Label(L("search_type_image"), systemImage: "photo.stack")
+                                Button(action: { insertSearchFilter("type:individual ") }) {
+                                    Label(L("search_type_individual"), systemImage: "photo")
+                                }
+                                Button(action: { insertSearchFilter("type:archived ") }) {
+                                    Label(L("search_type_archived"), systemImage: "photo.on.rectangle")
                                 }
                                 Button(action: { insertSearchFilter("type:session ") }) {
                                     Label(L("search_type_session"), systemImage: "square.stack.3d.up")
-                                }
-                                Divider()
-                                Button(action: { insertSearchFilter("type:standalone ") }) {
-                                    Label(L("search_type_standalone"), systemImage: "photo")
-                                }
-                                Button(action: { insertSearchFilter("type:content ") }) {
-                                    Label(L("search_type_content"), systemImage: "photo.on.rectangle")
                                 }
                             } label: {
                                 Image(systemName: "line.3.horizontal.decrease.circle")
@@ -484,8 +480,8 @@ struct HistoryListView: View {
 
         // 画像セクション
         if parsedQuery.includesImages && !images.isEmpty && !isImagesSectionCollapsed {
-            let standaloneImages = images.filter { $0.catalogType == .standalone }
-            let archiveContentImages = images.filter { $0.catalogType == .archiveContent }
+            let standaloneImages = images.filter { $0.catalogType == .individual }
+            let archiveContentImages = images.filter { $0.catalogType == .archived }
 
             // 個別画像
             if !standaloneImages.isEmpty && !isStandaloneSectionCollapsed {
@@ -497,7 +493,7 @@ struct HistoryListView: View {
             // 書庫内画像
             if !archiveContentImages.isEmpty && !isArchiveContentSectionCollapsed {
                 for entry in archiveContentImages {
-                    items.append(.archiveContentImage(id: entry.id, parentPath: entry.filePath, relativePath: entry.relativePath ?? ""))
+                    items.append(.archivedImage(id: entry.id, parentPath: entry.filePath, relativePath: entry.relativePath ?? ""))
                 }
             }
         }
@@ -520,12 +516,10 @@ struct HistoryListView: View {
             return ""
         case .archive:
             return L("search_type_archive")
-        case .image:
-            return L("search_type_image")
-        case .standalone:
-            return L("search_type_standalone")
-        case .content:
-            return L("search_type_content")
+        case .individual:
+            return L("search_type_individual")
+        case .archived:
+            return L("search_type_archived")
         case .session:
             return L("search_type_session")
         }
@@ -549,10 +543,9 @@ struct HistoryListView: View {
     /// type:プレフィックスの候補リスト
     private let typeFilterSuggestions = [
         "type:archive ",
-        "type:image ",
-        "type:session ",
-        "type:standalone ",
-        "type:content "
+        "type:individual ",
+        "type:archived ",
+        "type:session "
     ]
 
     /// 入力補完候補を計算する（type:プレフィックス用）
@@ -673,8 +666,8 @@ struct HistoryListView: View {
     /// 画像セクションビュー
     @ViewBuilder
     private func imagesSectionView(images: [ImageCatalogEntry], totalCount: Int, isFiltering: Bool) -> some View {
-        let standaloneImages = images.filter { $0.catalogType == .standalone }
-        let archiveContentImages = images.filter { $0.catalogType == .archiveContent }
+        let standaloneImages = images.filter { $0.catalogType == .individual }
+        let archiveContentImages = images.filter { $0.catalogType == .archived }
 
         // セクションヘッダー
         HStack {
@@ -793,7 +786,7 @@ struct HistoryListView: View {
                         .font(.caption2)
                     Image(systemName: "doc.zipper")
                         .font(.caption)
-                    Text(L("search_type_content"))
+                    Text(L("search_type_archived"))
                         .font(.caption.bold())
                     Text("(\(images.count))")
                         .font(.caption2)
@@ -1118,7 +1111,7 @@ struct ImageCatalogEntryRow: View {
         var lines: [String] = []
 
         // ファイルパス（書庫/フォルダ内の場合は親パス + 相対パス）
-        if entry.catalogType == .archiveContent, let relativePath = entry.relativePath {
+        if entry.catalogType == .archived, let relativePath = entry.relativePath {
             lines.append(entry.filePath)
             lines.append("  → " + relativePath)
         } else {

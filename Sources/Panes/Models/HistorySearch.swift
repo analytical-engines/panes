@@ -4,9 +4,8 @@ import Foundation
 enum SearchTargetType: String, CaseIterable {
     case all = "all"                    // すべて
     case archive = "archive"            // 書庫ファイルのみ
-    case image = "image"                // 画像ファイルのみ
-    case standalone = "standalone"      // 個別画像のみ
-    case content = "content"            // 書庫/フォルダ内画像のみ
+    case individual = "individual"      // 個別画像のみ
+    case archived = "archived"          // 書庫/フォルダ内画像のみ
     case session = "session"            // セッションのみ
 }
 
@@ -29,7 +28,7 @@ struct ParsedSearchQuery {
         switch targetType {
         case .all, .archive:
             return true
-        case .image, .standalone, .content, .session:
+        case .individual, .archived, .session:
             return false
         }
     }
@@ -37,7 +36,7 @@ struct ParsedSearchQuery {
     /// 画像を検索対象に含むか
     var includesImages: Bool {
         switch targetType {
-        case .all, .image, .standalone, .content:
+        case .all, .individual, .archived:
             return true
         case .archive, .session:
             return false
@@ -47,9 +46,9 @@ struct ParsedSearchQuery {
     /// 個別画像を検索対象に含むか
     var includesStandalone: Bool {
         switch targetType {
-        case .all, .image, .standalone:
+        case .all, .individual:
             return true
-        case .archive, .content, .session:
+        case .archive, .archived, .session:
             return false
         }
     }
@@ -57,9 +56,9 @@ struct ParsedSearchQuery {
     /// 書庫/フォルダ内画像を検索対象に含むか
     var includesArchiveContent: Bool {
         switch targetType {
-        case .all, .image, .content:
+        case .all, .archived:
             return true
-        case .archive, .standalone, .session:
+        case .archive, .individual, .session:
             return false
         }
     }
@@ -69,7 +68,7 @@ struct ParsedSearchQuery {
         switch targetType {
         case .all, .session:
             return true
-        case .archive, .image, .standalone, .content:
+        case .archive, .individual, .archived:
             return false
         }
     }
@@ -85,11 +84,9 @@ enum HistorySearchParser {
         "all": .all,
         "archive": .archive,
         "archives": .archive,
-        "image": .image,
-        "images": .image,
-        "standalone": .standalone,
-        "content": .content,
-        "archived": .content,
+        "individual": .individual,
+        "content": .archived,
+        "archived": .archived,
         "session": .session,
         "sessions": .session
     ]
@@ -262,9 +259,9 @@ enum UnifiedSearchFilter {
 
         // 画像種別でフィルタ
         switch entry.catalogType {
-        case .standalone:
+        case .individual:
             guard query.includesStandalone else { return false }
-        case .archiveContent:
+        case .archived:
             guard query.includesArchiveContent else { return false }
         }
 
@@ -274,7 +271,7 @@ enum UnifiedSearchFilter {
         var searchableTexts: [String?] = [entry.fileName, entry.memo]
 
         // 書庫内画像の場合、親書庫の情報も検索対象に追加
-        if entry.catalogType == .archiveContent {
+        if entry.catalogType == .archived {
             let parentFileName = (entry.filePath as NSString).lastPathComponent
             searchableTexts.append(parentFileName)
 
@@ -365,7 +362,7 @@ enum UnifiedSearchFilter {
         let filteredArchives = archives.filter { matches($0, query: query) }
         let filteredImages = images.filter { entry in
             // 書庫内画像の場合、親書庫のエントリを取得
-            let parentArchive: FileHistoryEntry? = entry.catalogType == .archiveContent
+            let parentArchive: FileHistoryEntry? = entry.catalogType == .archived
                 ? archivesByPath[entry.filePath]
                 : nil
             return matches(entry, query: query, parentArchive: parentArchive)

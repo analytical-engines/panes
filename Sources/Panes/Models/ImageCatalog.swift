@@ -21,9 +21,9 @@ struct ImageCatalogEntry: Codable, Identifiable {
     /// ファイルがアクセス可能かどうか
     var isAccessible: Bool {
         switch catalogType {
-        case .standalone:
+        case .individual:
             return FileManager.default.fileExists(atPath: filePath)
-        case .archiveContent:
+        case .archived:
             // 親（書庫/フォルダ）が存在すればアクセス可能
             return FileManager.default.fileExists(atPath: filePath)
         }
@@ -31,7 +31,7 @@ struct ImageCatalogEntry: Codable, Identifiable {
 
     /// 書庫/フォルダ内画像かどうか
     var isArchiveContent: Bool {
-        catalogType == .archiveContent
+        catalogType == .archived
     }
 
     /// 解像度の表示用文字列
@@ -50,12 +50,12 @@ struct ImageCatalogEntry: Codable, Identifiable {
 
     /// 親（書庫/フォルダ）の名前
     var parentName: String? {
-        guard catalogType == .archiveContent else { return nil }
+        guard catalogType == .archived else { return nil }
         return URL(fileURLWithPath: filePath).lastPathComponent
     }
 
     init(id: String, fileKey: String, filePath: String, fileName: String,
-         catalogType: ImageCatalogType = .standalone, relativePath: String? = nil,
+         catalogType: ImageCatalogType = .individual, relativePath: String? = nil,
          lastAccessDate: Date, accessCount: Int, memo: String?,
          imageWidth: Int?, imageHeight: Int?, fileSize: Int64?,
          imageFormat: String?, tags: [String]) {
@@ -248,7 +248,7 @@ class ImageCatalogManager {
             DebugLogger.log("📦 Migrating \(oldData.count) old ImageCatalogData entries...", level: .normal)
 
             for old in oldData {
-                if old.catalogType == .standalone {
+                if old.catalogType == .individual {
                     // 個別画像として新テーブルに移行
                     let newData = StandaloneImageData(
                         fileKey: old.fileKey,
@@ -339,7 +339,7 @@ class ImageCatalogManager {
         catalog.insert(entry, at: 0)
 
         // 上限を超えた分を削除（種類ごとに）
-        let maxCount = entry.catalogType == .standalone ? maxStandaloneCount : maxArchiveContentCount
+        let maxCount = entry.catalogType == .individual ? maxStandaloneCount : maxArchiveContentCount
         let sameTypeEntries = catalog.filter { $0.catalogType == entry.catalogType }
         if sameTypeEntries.count > maxCount {
             // メタデータなしの古いエントリを削除
@@ -421,7 +421,7 @@ class ImageCatalogManager {
                 fileKey: fileKey,
                 filePath: filePath,
                 fileName: fileName,
-                catalogType: .standalone,
+                catalogType: .individual,
                 relativePath: nil,
                 lastAccessDate: now,
                 accessCount: newAccessCount,
@@ -508,7 +508,7 @@ class ImageCatalogManager {
                 fileKey: fileKey,
                 filePath: parentPath,
                 fileName: fileName,
-                catalogType: .archiveContent,
+                catalogType: .archived,
                 relativePath: relativePath,
                 lastAccessDate: now,
                 accessCount: newAccessCount,

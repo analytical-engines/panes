@@ -348,8 +348,8 @@
 "search_no_results" = "No results found";
 "search_type_archive" = "Archives";
 "search_type_image" = "Images";
-"search_type_standalone" = "Standalone";
-"search_type_content" = "Archive Content";
+"search_type_individual" = "Individual";
+"search_type_archived" = "Archived";
 "search_filter_all" = "All";
 "search_filter_menu_title" = "Filter";
 

@@ -3,8 +3,8 @@ import SwiftData
 
 /// 画像カタログエントリの種類
 enum ImageCatalogType: Int, Codable {
-    case standalone = 0      // 個別画像ファイル
-    case archiveContent = 1  // 書庫/フォルダ内の画像
+    case individual = 0  // 個別画像ファイル
+    case archived = 1    // 書庫/フォルダ内の画像
 }
 
 // MARK: - 個別画像用モデル
@@ -64,7 +64,7 @@ final class StandaloneImageData {
             fileKey: fileKey,
             filePath: filePath,
             fileName: fileName,
-            catalogType: .standalone,
+            catalogType: .individual,
             relativePath: nil,
             lastAccessDate: lastAccessDate,
             accessCount: accessCount,
@@ -155,7 +155,7 @@ final class ArchiveContentImageData {
             fileKey: fileKey,
             filePath: parentPath,
             fileName: fileName,
-            catalogType: .archiveContent,
+            catalogType: .archived,
             relativePath: relativePath,
             lastAccessDate: lastAccessDate,
             accessCount: accessCount,
@@ -234,7 +234,7 @@ final class ImageCatalogData {
 
     /// 種類を取得
     var catalogType: ImageCatalogType {
-        get { ImageCatalogType(rawValue: catalogTypeRaw) ?? .standalone }
+        get { ImageCatalogType(rawValue: catalogTypeRaw) ?? .individual }
         set { catalogTypeRaw = newValue.rawValue }
     }
 
@@ -244,7 +244,7 @@ final class ImageCatalogData {
         self.fileKey = fileKey
         self.filePath = filePath
         self.fileName = fileName
-        self.catalogTypeRaw = ImageCatalogType.standalone.rawValue
+        self.catalogTypeRaw = ImageCatalogType.individual.rawValue
         self.relativePath = nil
         self.lastAccessDate = Date()
         self.accessCount = 1
@@ -256,7 +256,7 @@ final class ImageCatalogData {
         self.fileKey = fileKey
         self.filePath = parentPath
         self.fileName = fileName
-        self.catalogTypeRaw = ImageCatalogType.archiveContent.rawValue
+        self.catalogTypeRaw = ImageCatalogType.archived.rawValue
         self.relativePath = relativePath
         self.lastAccessDate = Date()
         self.accessCount = 1
