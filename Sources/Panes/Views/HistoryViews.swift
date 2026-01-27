@@ -35,16 +35,8 @@ struct InitialScreenView: View {
     @Environment(AppSettings.self) private var appSettings
 
     let errorMessage: String?
-    @Binding var filterText: String
-    @Binding var showFilterField: Bool
-    @Binding var selectedTab: HistoryTab
-    @Binding var lastOpenedArchiveId: String?
-    @Binding var lastOpenedImageId: String?
-    @Binding var showHistory: Bool  // セッション中の履歴表示状態
-    let scrollTrigger: Int
-    @Binding var selectedItem: SelectableHistoryItem?
+    let historyState: HistoryUIState
     var isSearchFocused: FocusState<Bool>.Binding
-    @Binding var isShowingSuggestions: Bool
     let onOpenFile: () -> Void
     let onOpenHistoryFile: (String) -> Void
     let onOpenInNewWindow: (String) -> Void  // filePath
@@ -52,7 +44,6 @@ struct InitialScreenView: View {
     let onEditImageMemo: (String, String?) -> Void  // (id, currentMemo) for image catalog
     let onOpenImageCatalogFile: (String, String?) -> Void  // (filePath, relativePath) for image catalog
     var onRestoreSession: ((SessionGroup) -> Void)? = nil
-    var onVisibleItemsChange: (([SelectableHistoryItem]) -> Void)? = nil
     var onExitSearch: (() -> Void)? = nil
 
     var body: some View {
@@ -76,7 +67,17 @@ struct InitialScreenView: View {
             .buttonStyle(.borderedProminent)
 
             // 履歴表示
-            HistoryListView(filterText: $filterText, showFilterField: $showFilterField, selectedTab: $selectedTab, lastOpenedArchiveId: $lastOpenedArchiveId, lastOpenedImageId: $lastOpenedImageId, showHistory: $showHistory, scrollTrigger: scrollTrigger, selectedItem: $selectedItem, isSearchFocused: isSearchFocused, isShowingSuggestions: $isShowingSuggestions, onOpenHistoryFile: onOpenHistoryFile, onOpenInNewWindow: onOpenInNewWindow, onEditMemo: onEditMemo, onEditImageMemo: onEditImageMemo, onOpenImageFile: onOpenImageCatalogFile, onRestoreSession: onRestoreSession, onVisibleItemsChange: onVisibleItemsChange, onExitSearch: onExitSearch)
+            HistoryListView(
+                historyState: historyState,
+                isSearchFocused: isSearchFocused,
+                onOpenHistoryFile: onOpenHistoryFile,
+                onOpenInNewWindow: onOpenInNewWindow,
+                onEditMemo: onEditMemo,
+                onEditImageMemo: onEditImageMemo,
+                onOpenImageFile: onOpenImageCatalogFile,
+                onRestoreSession: onRestoreSession,
+                onExitSearch: onExitSearch
+            )
         }
     }
 }
@@ -87,16 +88,10 @@ struct HistoryListView: View {
     @Environment(ImageCatalogManager.self) private var imageCatalogManager
     @Environment(AppSettings.self) private var appSettings
     @Environment(SessionGroupManager.self) private var sessionGroupManager
-    @Binding var filterText: String
-    @Binding var showFilterField: Bool
-    @Binding var selectedTab: HistoryTab  // 後方互換性のため残す（将来削除予定）
-    @Binding var lastOpenedArchiveId: String?
-    @Binding var lastOpenedImageId: String?
-    @Binding var showHistory: Bool  // セッション中の履歴表示状態
-    let scrollTrigger: Int
-    @Binding var selectedItem: SelectableHistoryItem?
+
+    let historyState: HistoryUIState
     var isSearchFocused: FocusState<Bool>.Binding
-    @Binding var isShowingSuggestions: Bool  // 親に候補表示状態を伝える
+
     @State private var dismissedError = false
     /// セクションの折りたたみ状態
     @State private var isArchivesSectionCollapsed = false
@@ -104,10 +99,8 @@ struct HistoryListView: View {
     @State private var isStandaloneSectionCollapsed = false
     @State private var isArchiveContentSectionCollapsed = false
     @State private var isSessionsSectionCollapsed = false
-    /// 表示中の全アイテムリスト（キーボードナビゲーション用）
-    @State private var visibleItems: [SelectableHistoryItem] = []
 
-    /// 入力補完用（isShowingSuggestionsはisShowingSuggestionsバインディングを使用）
+    /// 入力補完用
     @State private var selectedSuggestionIndex: Int = 0
     @State private var suggestions: [String] = []
 
@@ -117,7 +110,6 @@ struct HistoryListView: View {
     let onEditImageMemo: (String, String?) -> Void  // (id, currentMemo) for image catalog
     let onOpenImageFile: (String, String?) -> Void  // (filePath, relativePath) - 画像ファイルを開く
     var onRestoreSession: ((SessionGroup) -> Void)? = nil
-    var onVisibleItemsChange: (([SelectableHistoryItem]) -> Void)? = nil
     var onExitSearch: (() -> Void)? = nil
 
     var body: some View {
@@ -200,14 +192,14 @@ struct HistoryListView: View {
             let _ = historyManager.historyVersion
             let _ = imageCatalogManager.catalogVersion
             // scrollTrigger監視：フォーカス時にそのウィンドウだけ再描画するため
-            let _ = scrollTrigger
+            let _ = historyState.scrollTrigger
 
             let recentHistory = historyManager.getRecentHistory(limit: appSettings.maxHistoryCount)
             let imageCatalog = imageCatalogManager.catalog
             let sessionGroups = sessionGroupManager.sessionGroups
 
             // 検索クエリをパース（デフォルトタイプはAppSettingsから取得）
-            let parsedQuery = HistorySearchParser.parse(filterText, defaultType: appSettings.defaultHistorySearchType)
+            let parsedQuery = HistorySearchParser.parse(historyState.filterText, defaultType: appSettings.defaultHistorySearchType)
             // 統合検索を実行
             let searchResult = UnifiedSearchFilter.search(
                 query: parsedQuery,
@@ -217,7 +209,7 @@ struct HistoryListView: View {
             )
 
             // 履歴表示が有効で、書庫または画像またはセッションがある場合
-            if showHistory && (!recentHistory.isEmpty || !imageCatalog.isEmpty || !sessionGroups.isEmpty) {
+            if historyState.showHistory && (!recentHistory.isEmpty || !imageCatalog.isEmpty || !sessionGroups.isEmpty) {
                 VStack(alignment: .leading, spacing: 8) {
                     // 検索フィールド（常に表示、⌘+Fでフォーカス）
                     VStack(alignment: .leading, spacing: 0) {
@@ -227,9 +219,9 @@ struct HistoryListView: View {
                             // インライン補完付きテキストフィールド
                             ZStack(alignment: .leading) {
                                 // インライン補完テキスト（グレー表示）
-                                if let completion = getInlineCompletion(for: filterText), isSearchFocused.wrappedValue {
+                                if let completion = getInlineCompletion(for: historyState.filterText), isSearchFocused.wrappedValue {
                                     HStack(spacing: 0) {
-                                        Text(filterText)
+                                        Text(historyState.filterText)
                                             .foregroundColor(.clear)
                                         Text(completion)
                                             .foregroundColor(.gray.opacity(0.6))
@@ -237,25 +229,28 @@ struct HistoryListView: View {
                                 }
                                 TextField(
                                     L("unified_search_placeholder"),
-                                    text: $filterText
+                                    text: Binding<String>(
+                                        get: { historyState.filterText },
+                                        set: { historyState.filterText = $0 }
+                                    )
                                 )
                                 .textFieldStyle(.plain)
                                 .foregroundColor(.white)
                                 .focused(isSearchFocused)
                                 .onExitCommand {
-                                    isShowingSuggestions = false
+                                    historyState.isShowingSuggestions = false
                                     isSearchFocused.wrappedValue = false
                                     onExitSearch?()
                                 }
-                                .onChange(of: filterText) { _, newValue in
+                                .onChange(of: historyState.filterText) { _, newValue in
                                     // 候補を更新
                                     suggestions = computeSuggestions(from: searchResult, query: newValue)
-                                    isShowingSuggestions = !suggestions.isEmpty && isSearchFocused.wrappedValue
+                                    historyState.isShowingSuggestions = !suggestions.isEmpty && isSearchFocused.wrappedValue
                                     selectedSuggestionIndex = 0
                                 }
                                 .onKeyPress(.tab) {
                                     // Tabで補完を適用
-                                    if isShowingSuggestions && !suggestions.isEmpty {
+                                    if historyState.isShowingSuggestions && !suggestions.isEmpty {
                                         applySuggestion(suggestions[selectedSuggestionIndex])
                                         return .handled
                                     }
@@ -263,7 +258,7 @@ struct HistoryListView: View {
                                 }
                                 .onKeyPress(.upArrow) {
                                     // 候補リスト内で上に移動
-                                    if isShowingSuggestions && !suggestions.isEmpty {
+                                    if historyState.isShowingSuggestions && !suggestions.isEmpty {
                                         selectedSuggestionIndex = max(0, selectedSuggestionIndex - 1)
                                         return .handled
                                     }
@@ -271,7 +266,7 @@ struct HistoryListView: View {
                                 }
                                 .onKeyPress(.downArrow) {
                                     // 候補リスト内で下に移動
-                                    if isShowingSuggestions && !suggestions.isEmpty {
+                                    if historyState.isShowingSuggestions && !suggestions.isEmpty {
                                         if selectedSuggestionIndex < suggestions.count - 1 {
                                             selectedSuggestionIndex += 1
                                         }
@@ -281,19 +276,19 @@ struct HistoryListView: View {
                                 }
                                 .onKeyPress(.escape) {
                                     // Escapeで候補リストを閉じる → 履歴を閉じる
-                                    if isShowingSuggestions {
-                                        isShowingSuggestions = false
+                                    if historyState.isShowingSuggestions {
+                                        historyState.isShowingSuggestions = false
                                         return .handled
                                     }
                                     // 候補がない場合は履歴を閉じる
-                                    showHistory = false
+                                    historyState.showHistory = false
                                     isSearchFocused.wrappedValue = false
                                     return .handled
                                 }
                                 // 注: ⌘F（履歴トグル）はメニューショートカットで処理
                             }
                             // 検索種別インジケーター
-                            if !filterText.isEmpty && parsedQuery.targetType != .all {
+                            if !historyState.filterText.isEmpty && parsedQuery.targetType != .all {
                                 Text(searchTargetLabel(parsedQuery.targetType))
                                     .font(.caption2)
                                     .padding(.horizontal, 6)
@@ -303,10 +298,10 @@ struct HistoryListView: View {
                                     .foregroundColor(.white)
                             }
                             // クリアボタン
-                            if !filterText.isEmpty {
+                            if !historyState.filterText.isEmpty {
                                 Button(action: {
-                                    filterText = ""
-                                    isShowingSuggestions = false
+                                    historyState.filterText = ""
+                                    historyState.isShowingSuggestions = false
                                 }) {
                                     Image(systemName: "xmark.circle.fill")
                                         .foregroundColor(.gray)
@@ -339,7 +334,7 @@ struct HistoryListView: View {
                         .cornerRadius(6)
 
                         // ドロップダウン候補リスト
-                        if isShowingSuggestions && !suggestions.isEmpty {
+                        if historyState.isShowingSuggestions && !suggestions.isEmpty {
                             VStack(alignment: .leading, spacing: 0) {
                                 ForEach(Array(suggestions.enumerated()), id: \.offset) { index, suggestion in
                                     HStack {
@@ -419,13 +414,11 @@ struct HistoryListView: View {
                     // 注: ⌘F（履歴トグル）はメニューショートカットで処理
                     .onKeyPress(.escape) {
                         // Escape: 履歴を閉じる
-                        showHistory = false
-                        selectedItem = nil
+                        historyState.closeHistory()
                         isSearchFocused.wrappedValue = false
-                        isShowingSuggestions = false
                         return .handled
                     }
-                    .onChange(of: selectedItem?.id) { _, newId in
+                    .onChange(of: historyState.selectedItem?.id) { _, newId in
                         if let id = newId {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 proxy.scrollTo(id, anchor: .center)
@@ -458,6 +451,10 @@ struct HistoryListView: View {
                     updateVisibleItems(archives: searchResult.archives, images: searchResult.images, sessions: searchResult.sessions, parsedQuery: parsedQuery)
                 }
                 .onChange(of: isSessionsSectionCollapsed) { _, _ in
+                    updateVisibleItems(archives: searchResult.archives, images: searchResult.images, sessions: searchResult.sessions, parsedQuery: parsedQuery)
+                }
+                .onChange(of: historyState.scrollTrigger) { _, _ in
+                    // ウィンドウフォーカス時などにvisibleItemsを再構築
                     updateVisibleItems(archives: searchResult.archives, images: searchResult.images, sessions: searchResult.sessions, parsedQuery: parsedQuery)
                 }
                 .onAppear {
@@ -505,8 +502,7 @@ struct HistoryListView: View {
             }
         }
 
-        visibleItems = items
-        onVisibleItemsChange?(items)
+        historyState.visibleItems = items
     }
 
     /// 検索対象種別のラベル
@@ -529,14 +525,14 @@ struct HistoryListView: View {
     private func insertSearchFilter(_ filter: String) {
         // 既存のtype:プレフィックスを削除
         let typePattern = /^type:\w+\s*/
-        let cleanedText = filterText.replacing(typePattern, with: "")
+        let cleanedText = historyState.filterText.replacing(typePattern, with: "")
 
         if filter.isEmpty {
             // 「すべて」が選択された場合はtype:を削除するだけ
-            filterText = cleanedText
+            historyState.filterText = cleanedText
         } else {
             // 新しいフィルターを先頭に追加
-            filterText = filter + cleanedText
+            historyState.filterText = filter + cleanedText
         }
     }
 
@@ -599,8 +595,8 @@ struct HistoryListView: View {
 
     /// 補完を適用する
     private func applySuggestion(_ suggestion: String) {
-        filterText = suggestion
-        isShowingSuggestions = false
+        historyState.filterText = suggestion
+        historyState.isShowingSuggestions = false
     }
 
     /// 書庫セクションビュー
@@ -643,11 +639,11 @@ struct HistoryListView: View {
                     entry: entry,
                     onOpenHistoryFile: { filePath in
                         if index > 0 {
-                            lastOpenedArchiveId = archives[index - 1].id
+                            historyState.lastOpenedArchiveId = archives[index - 1].id
                         } else if index + 1 < archives.count {
-                            lastOpenedArchiveId = archives[index + 1].id
+                            historyState.lastOpenedArchiveId = archives[index + 1].id
                         } else {
-                            lastOpenedArchiveId = nil
+                            historyState.lastOpenedArchiveId = nil
                         }
                         onOpenHistoryFile(filePath)
                     },
@@ -656,7 +652,7 @@ struct HistoryListView: View {
                 )
                 .padding(.horizontal, 4)
                 .padding(.vertical, 2)
-                .background(selectedItem?.id == entry.id ? Color.accentColor.opacity(0.3) : Color.clear)
+                .background(historyState.selectedItem?.id == entry.id ? Color.accentColor.opacity(0.3) : Color.clear)
                 .cornerRadius(4)
                 .id(entry.id)
             }
@@ -757,11 +753,11 @@ struct HistoryListView: View {
                     entry: entry,
                     onOpenImageFile: { filePath, relativePath in
                         if index > 0 {
-                            lastOpenedImageId = images[index - 1].id
+                            historyState.lastOpenedImageId = images[index - 1].id
                         } else if index + 1 < images.count {
-                            lastOpenedImageId = images[index + 1].id
+                            historyState.lastOpenedImageId = images[index + 1].id
                         } else {
-                            lastOpenedImageId = nil
+                            historyState.lastOpenedImageId = nil
                         }
                         onOpenImageFile(filePath, relativePath)
                     },
@@ -769,7 +765,7 @@ struct HistoryListView: View {
                 )
                 .padding(.horizontal, 4)
                 .padding(.vertical, 2)
-                .background(selectedItem?.id == entry.id ? Color.accentColor.opacity(0.3) : Color.clear)
+                .background(historyState.selectedItem?.id == entry.id ? Color.accentColor.opacity(0.3) : Color.clear)
                 .cornerRadius(4)
                 .id(entry.id)
             }
@@ -814,11 +810,11 @@ struct HistoryListView: View {
                     entry: entry,
                     onOpenImageFile: { filePath, relativePath in
                         if index > 0 {
-                            lastOpenedImageId = images[index - 1].id
+                            historyState.lastOpenedImageId = images[index - 1].id
                         } else if index + 1 < images.count {
-                            lastOpenedImageId = images[index + 1].id
+                            historyState.lastOpenedImageId = images[index + 1].id
                         } else {
-                            lastOpenedImageId = nil
+                            historyState.lastOpenedImageId = nil
                         }
                         onOpenImageFile(filePath, relativePath)
                     },
@@ -826,7 +822,7 @@ struct HistoryListView: View {
                 )
                 .padding(.horizontal, 4)
                 .padding(.vertical, 2)
-                .background(selectedItem?.id == entry.id ? Color.accentColor.opacity(0.3) : Color.clear)
+                .background(historyState.selectedItem?.id == entry.id ? Color.accentColor.opacity(0.3) : Color.clear)
                 .cornerRadius(4)
                 .id(entry.id)
             }
@@ -883,7 +879,7 @@ struct HistoryListView: View {
                 )
                 .padding(.horizontal, 4)
                 .padding(.vertical, 2)
-                .background(selectedItem?.sessionId == session.id ? Color.accentColor.opacity(0.3) : Color.clear)
+                .background(historyState.selectedItem?.sessionId == session.id ? Color.accentColor.opacity(0.3) : Color.clear)
                 .cornerRadius(4)
                 .id(session.id.uuidString)
             }

@@ -51,15 +51,8 @@ struct ContentView: View {
     // モーダル表示状態（画像情報、メモ編集）
     @State private var modalState = ModalState()
 
-    // 履歴フィルタ（ファイルを閉じても維持）
-    @State private var historyFilterText: String = ""
-    @State private var showHistoryFilter: Bool = false
-    @State private var historySelectedTab: HistoryTab = .archives
-    // スクロール位置復元用（最後に開いたエントリのID）
-    @State private var lastOpenedArchiveId: String?
-    @State private var lastOpenedImageId: String?
-    // スクロールトリガー（初期画面に戻るたびにインクリメント）
-    @State private var scrollTrigger: Int = 0
+    // 履歴・検索UI状態
+    @State private var historyState = HistoryUIState()
 
     // 画像カタログからのファイルオープン時に使用する相対パス
     @State private var pendingRelativePath: String?
@@ -70,17 +63,11 @@ struct ContentView: View {
     // ピンチジェスチャー用のベースライン（ジェスチャー開始時のズームレベル）
     @State private var magnificationGestureBaseline: CGFloat = 1.0
 
-    // セッション中の履歴表示状態（起動時にAppSettingsから初期化）
-    @State private var showHistory: Bool = true
-
     // メインビューのフォーカス管理
     @FocusState private var isMainViewFocused: Bool
 
-    // 初期画面のキーボードナビゲーション用
-    @State private var selectedHistoryItem: SelectableHistoryItem?
-    @State private var visibleHistoryItems: [SelectableHistoryItem] = []
+    // 履歴検索フィールドのフォーカス（@FocusStateはビューに紐づくためここに残す）
     @FocusState private var isHistorySearchFocused: Bool
-    @State private var isShowingSuggestions: Bool = false  // 入力補完候補表示中
 
     @ViewBuilder
     private var mainContent: some View {
@@ -153,16 +140,8 @@ struct ContentView: View {
         } else {
             InitialScreenView(
                 errorMessage: viewModel.errorMessage,
-                filterText: $historyFilterText,
-                showFilterField: $showHistoryFilter,
-                selectedTab: $historySelectedTab,
-                lastOpenedArchiveId: $lastOpenedArchiveId,
-                lastOpenedImageId: $lastOpenedImageId,
-                showHistory: $showHistory,
-                scrollTrigger: scrollTrigger,
-                selectedItem: $selectedHistoryItem,
+                historyState: historyState,
                 isSearchFocused: $isHistorySearchFocused,
-                isShowingSuggestions: $isShowingSuggestions,
                 onOpenFile: openFilePicker,
                 onOpenHistoryFile: openHistoryFile,
                 onOpenInNewWindow: openInNewWindow,
@@ -177,13 +156,10 @@ struct ContentView: View {
                     sessionGroupManager.updateLastAccessed(id: session.id)
                     sessionManager.restoreSessionGroup(session)
                 },
-                onVisibleItemsChange: { items in
-                    visibleHistoryItems = items
-                },
                 onExitSearch: {
                     isMainViewFocused = true
-                    if selectedHistoryItem == nil, let first = visibleHistoryItems.first {
-                        selectedHistoryItem = first
+                    if historyState.selectedItem == nil, let first = historyState.visibleItems.first {
+                        historyState.selectedItem = first
                     }
                 }
             )
@@ -202,16 +178,8 @@ struct ContentView: View {
             VStack(spacing: 20) {
                 // 履歴リスト
                 HistoryListView(
-                    filterText: $historyFilterText,
-                    showFilterField: $showHistoryFilter,
-                    selectedTab: $historySelectedTab,
-                    lastOpenedArchiveId: $lastOpenedArchiveId,
-                    lastOpenedImageId: $lastOpenedImageId,
-                    showHistory: $showHistory,
-                    scrollTrigger: scrollTrigger,
-                    selectedItem: $selectedHistoryItem,
+                    historyState: historyState,
                     isSearchFocused: $isHistorySearchFocused,
-                    isShowingSuggestions: $isShowingSuggestions,
                     onOpenHistoryFile: openHistoryFile,
                     onOpenInNewWindow: openInNewWindow,
                     onEditMemo: { fileKey, currentMemo in
@@ -225,13 +193,10 @@ struct ContentView: View {
                         sessionGroupManager.updateLastAccessed(id: session.id)
                         sessionManager.restoreSessionGroup(session)
                     },
-                    onVisibleItemsChange: { items in
-                        visibleHistoryItems = items
-                    },
                     onExitSearch: {
                         isMainViewFocused = true
-                        if selectedHistoryItem == nil, let first = visibleHistoryItems.first {
-                            selectedHistoryItem = first
+                        if historyState.selectedItem == nil, let first = historyState.visibleItems.first {
+                            historyState.selectedItem = first
                         }
                     }
                 )
@@ -552,17 +517,17 @@ struct ContentView: View {
     @ViewBuilder
     private var initialScreenContextMenu: some View {
         Button(action: {
-            showHistory.toggle()
+            historyState.showHistory.toggle()
             // 「終了時の状態を復元」モードの場合は現在の状態を保存
             if appSettings.historyDisplayMode == .restoreLast {
-                appSettings.lastHistoryVisible = showHistory
+                appSettings.lastHistoryVisible = historyState.showHistory
             }
         }) {
             Label(
-                showHistory
+                historyState.showHistory
                     ? L("menu_hide_history")
                     : L("menu_show_history_toggle"),
-                systemImage: showHistory
+                systemImage: historyState.showHistory
                     ? "eye.slash"
                     : "eye"
             )
@@ -650,7 +615,7 @@ struct ContentView: View {
             mainContent
 
             // 画像表示中の履歴オーバーレイ
-            if viewModel.hasOpenFile && showHistory {
+            if viewModel.hasOpenFile && historyState.showHistory {
                 historyOverlay
             }
         }
@@ -712,7 +677,7 @@ struct ContentView: View {
                 isWaitingForFile = false
 
                 // 履歴オーバーレイを閉じる
-                showHistory = false
+                historyState.showHistory = false
 
                 // SwiftUIのフォーカスを設定（.onKeyPressが動作するために必要）
                 isMainViewFocused = true
@@ -780,10 +745,10 @@ struct ContentView: View {
                 // Note: isWaitingForFileはファイル読み込み完了時にfalseになる
 
                 // 初期画面に戻ったのでスクロール位置復元をトリガー
-                scrollTrigger += 1
+                historyState.incrementScrollTrigger()
 
                 // 初期画面に戻ったので、必要に応じて履歴とカタログを再読み込み
-                if showHistory {
+                if historyState.showHistory {
                     historyManager.notifyHistoryUpdate()
                     imageCatalogManager.notifyCatalogUpdate()
                 }
@@ -834,25 +799,25 @@ struct ContentView: View {
                 WindowCoordinator.shared.register(windowNumber: newNumber, viewModel: viewModel)
                 WindowCoordinator.shared.registerShowHistory(
                     windowNumber: newNumber,
-                    getter: { showHistory },
-                    setter: { showHistory = $0 }
+                    getter: { self.historyState.showHistory },
+                    setter: { self.historyState.showHistory = $0 }
                 )
                 WindowCoordinator.shared.registerSearchFocus(
                     windowNumber: newNumber,
-                    getter: { isHistorySearchFocused },
-                    setter: { isHistorySearchFocused = $0 }
+                    getter: { self.isHistorySearchFocused },
+                    setter: { self.isHistorySearchFocused = $0 }
                 )
                 WindowCoordinator.shared.registerClearSelection(
                     windowNumber: newNumber,
-                    callback: { selectedHistoryItem = nil }
+                    callback: { self.historyState.clearSelection() }
                 )
                 WindowCoordinator.shared.registerFocusMainView(
                     windowNumber: newNumber,
-                    callback: { isMainViewFocused = true }
+                    callback: { self.isMainViewFocused = true }
                 )
             }
         }
-        .onChange(of: showHistoryFilter) { _, newValue in
+        .onChange(of: historyState.showHistoryFilter) { _, newValue in
             // フィルタが非表示になったらメインビューにフォーカスを戻す
             if !newValue {
                 DispatchQueue.main.async {
@@ -860,7 +825,7 @@ struct ContentView: View {
                 }
             }
         }
-        .onChange(of: showHistory) { _, newValue in
+        .onChange(of: historyState.showHistory) { _, newValue in
             // 「終了時の状態を復元」モードの場合は保存
             if appSettings.historyDisplayMode == .restoreLast {
                 appSettings.lastHistoryVisible = newValue
@@ -870,7 +835,7 @@ struct ContentView: View {
                 historyManager.notifyHistoryUpdate()
                 imageCatalogManager.notifyCatalogUpdate()
                 // リスト未選択なら検索フィールドにフォーカス
-                if selectedHistoryItem == nil {
+                if historyState.selectedItem == nil {
                     DispatchQueue.main.async {
                         isHistorySearchFocused = true
                     }
@@ -885,6 +850,10 @@ struct ContentView: View {
                 }
             }
         }
+        .modifier(FocusSyncModifier(
+            isHistorySearchFocused: $isHistorySearchFocused,
+            historyState: historyState
+        ))
         .onKeyPress(keys: [.leftArrow]) { handleLeftArrow($0) }
         .onKeyPress(keys: [.rightArrow]) { handleRightArrow($0) }
         .onKeyPress(keys: [.upArrow]) { handleUpArrow($0) }
@@ -907,7 +876,12 @@ struct ContentView: View {
             guard let windowNumber = notification.userInfo?["windowNumber"] as? Int,
                   windowNumber == myWindowNumber else { return }
             // scrollTrigger をインクリメントして HistoryListView を再描画
-            scrollTrigger += 1
+            historyState.incrementScrollTrigger()
+            // ウィンドウがフォーカスを得た時にメインビューのフォーカスを復元
+            // （検索フィールドにフォーカスがない場合のみ）
+            if !isHistorySearchFocused {
+                isMainViewFocused = true
+            }
             let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000
             DebugLogger.log("⏱️ onReceive scrollTrigger update: \(String(format: "%.1f", elapsed))ms", level: .normal)
         }
@@ -1036,7 +1010,7 @@ struct ContentView: View {
         historyManager.appSettings = appSettings
 
         // 起動時の履歴表示状態を設定から初期化
-        showHistory = appSettings.shouldShowHistoryOnLaunch
+        historyState.showHistory = appSettings.shouldShowHistoryOnLaunch
 
         // このウィンドウを最後に作成されたウィンドウとして登録
         ContentView.lastCreatedWindowIDLock.lock()
@@ -1523,12 +1497,12 @@ struct ContentView: View {
 
     /// 履歴ナビゲーションが可能な状態か（履歴表示中かつ履歴あり）
     private var canNavigateHistory: Bool {
-        showHistory && !visibleHistoryItems.isEmpty
+        historyState.canNavigateHistory
     }
 
     /// 履歴リストのキーボードナビゲーションが可能な状態か（候補表示中・検索フォーカス中を除く）
     private var canNavigateHistoryList: Bool {
-        canNavigateHistory && !isShowingSuggestions && !isHistorySearchFocused
+        historyState.canNavigateHistoryList && !isHistorySearchFocused
     }
 
     private func handleLeftArrow(_ press: KeyPress) -> KeyPress.Result {
@@ -1562,42 +1536,42 @@ struct ContentView: View {
     private func handleUpArrow(_ press: KeyPress) -> KeyPress.Result {
         guard canNavigateHistoryList else { return .ignored }
 
-        if let current = selectedHistoryItem,
-           let currentIndex = visibleHistoryItems.firstIndex(where: { $0.id == current.id }) {
+        if let current = historyState.selectedItem,
+           let currentIndex = historyState.visibleItems.firstIndex(where: { $0.id == current.id }) {
             if currentIndex > 0 {
-                selectedHistoryItem = visibleHistoryItems[currentIndex - 1]
+                historyState.selectedItem = historyState.visibleItems[currentIndex - 1]
             } else {
                 // 先頭にいる場合は検索フィールドにフォーカス
-                selectedHistoryItem = nil
+                historyState.selectedItem = nil
                 isHistorySearchFocused = true
             }
         } else {
             // 選択がなければ最後のアイテムを選択
-            selectedHistoryItem = visibleHistoryItems.last
+            historyState.selectedItem = historyState.visibleItems.last
         }
         return .handled
     }
 
     private func handleDownArrow(_ press: KeyPress) -> KeyPress.Result {
         guard canNavigateHistory else { return .ignored }
-        guard !isShowingSuggestions else { return .ignored }
+        guard !historyState.isShowingSuggestions else { return .ignored }
 
         // 検索フィールドにフォーカス中は、フォーカスを外してリストの先頭を選択
         if isHistorySearchFocused {
             isHistorySearchFocused = false
             isMainViewFocused = true
-            selectedHistoryItem = visibleHistoryItems.first
+            historyState.selectedItem = historyState.visibleItems.first
             return .handled
         }
 
-        if let current = selectedHistoryItem,
-           let currentIndex = visibleHistoryItems.firstIndex(where: { $0.id == current.id }) {
-            if currentIndex < visibleHistoryItems.count - 1 {
-                selectedHistoryItem = visibleHistoryItems[currentIndex + 1]
+        if let current = historyState.selectedItem,
+           let currentIndex = historyState.visibleItems.firstIndex(where: { $0.id == current.id }) {
+            if currentIndex < historyState.visibleItems.count - 1 {
+                historyState.selectedItem = historyState.visibleItems[currentIndex + 1]
             }
         } else {
             // 選択がなければ最初のアイテムを選択
-            selectedHistoryItem = visibleHistoryItems.first
+            historyState.selectedItem = historyState.visibleItems.first
         }
         return .handled
     }
@@ -1607,32 +1581,21 @@ struct ContentView: View {
 
     private func handlePageUp(_ press: KeyPress) -> KeyPress.Result {
         guard canNavigateHistoryList else { return .ignored }
-        selectHistoryItem(byOffset: -pageScrollCount)
+        historyState.selectItem(byOffset: -pageScrollCount)
         return .handled
     }
 
     private func handlePageDown(_ press: KeyPress) -> KeyPress.Result {
         guard canNavigateHistoryList else { return .ignored }
-        selectHistoryItem(byOffset: pageScrollCount)
+        historyState.selectItem(byOffset: pageScrollCount)
         return .handled
-    }
-
-    /// 履歴リストの選択を指定オフセット分移動する
-    private func selectHistoryItem(byOffset offset: Int) {
-        if let current = selectedHistoryItem,
-           let currentIndex = visibleHistoryItems.firstIndex(where: { $0.id == current.id }) {
-            let newIndex = max(0, min(visibleHistoryItems.count - 1, currentIndex + offset))
-            selectedHistoryItem = visibleHistoryItems[newIndex]
-        } else {
-            selectedHistoryItem = visibleHistoryItems.first
-        }
     }
 
     private func handleReturn(_ press: KeyPress) -> KeyPress.Result {
         // 履歴表示中に履歴アイテムを開く（Enter: 現在のウィンドウ、Shift+Enter: 新規ウィンドウ）
-        guard showHistory else { return .ignored }
+        guard historyState.showHistory else { return .ignored }
         guard !isHistorySearchFocused else { return .ignored }  // 検索フィールドにフォーカス中は無視（IME変換確定と干渉するため）
-        guard let selected = selectedHistoryItem else { return .ignored }
+        guard let selected = historyState.selectedItem else { return .ignored }
 
         let openInNew = press.modifiers.contains(.shift)  // ⇧+Enterで新しいウィンドウ
 
@@ -1669,7 +1632,7 @@ struct ContentView: View {
         // 初期画面でのみメモ編集
         guard !viewModel.hasOpenFile else { return .ignored }
         guard !isHistorySearchFocused else { return .ignored }  // 検索フィールド入力中は無視
-        guard let selected = selectedHistoryItem else { return .ignored }
+        guard let selected = historyState.selectedItem else { return .ignored }
 
         switch selected {
         case .archive(let id, _):
@@ -1711,11 +1674,9 @@ struct ContentView: View {
 
     private func handleEscape() -> KeyPress.Result {
         // Escapeで履歴を閉じる（グローバル）
-        if showHistory {
-            showHistory = false
-            selectedHistoryItem = nil
+        if historyState.showHistory {
+            historyState.closeHistory()
             isHistorySearchFocused = false
-            isShowingSuggestions = false
             // メインビューにフォーカスを戻す
             isMainViewFocused = true
             return .handled
@@ -1931,5 +1892,23 @@ struct ContentView: View {
         if alert.runModal() == .alertFirstButtonReturn {
             viewModel.resetPageSettings()
         }
+    }
+}
+
+/// @FocusStateとHistoryUIState.isSearchFocusedを同期するViewModifier
+struct FocusSyncModifier: ViewModifier {
+    @FocusState.Binding var isHistorySearchFocused: Bool
+    let historyState: HistoryUIState
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: isHistorySearchFocused) { _, newValue in
+                historyState.isSearchFocused = newValue
+            }
+            .onChange(of: historyState.isSearchFocused) { _, newValue in
+                if isHistorySearchFocused != newValue {
+                    isHistorySearchFocused = newValue
+                }
+            }
     }
 }

@@ -33,6 +33,7 @@
 		9CC4E060E04165BBDA83296C /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82C31F3299EF98F7399930B4 /* SettingsView.swift */; };
 		9EDECB4C25E1B4812E9306C5 /* SevenZipReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB8D054B88ADD193A51C3EC4 /* SevenZipReader.swift */; };
 		A23641132F260C89009AB18F /* ModalState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A23641122F260C89009AB18F /* ModalState.swift */; };
+		A23641152F27C8F0009AB18F /* HistoryUIState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A23641142F27C8F0009AB18F /* HistoryUIState.swift */; };
 		A2B38B262F05631300C307FE /* ZoomableScrollView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2B38B252F05631300C307FE /* ZoomableScrollView.swift */; };
 		A2C5DD952F03A6FE007905CF /* ZipArchive in Frameworks */ = {isa = PBXBuildFile; productRef = A2C5DD942F03A6FE007905CF /* ZipArchive */; };
 		A2C5DD982F03AB6E007905CF /* SwiftZipReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2C5DD972F03AB6E007905CF /* SwiftZipReader.swift */; };
@@ -83,6 +84,7 @@
 		86D714A2D3495DB31C1EAFC0 /* RarImageSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RarImageSource.swift; sourceTree = "<group>"; };
 		87A88CECA7DDF54397E415EA /* PasswordStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasswordStorage.swift; sourceTree = "<group>"; };
 		A23641122F260C89009AB18F /* ModalState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModalState.swift; sourceTree = "<group>"; };
+		A23641142F27C8F0009AB18F /* HistoryUIState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryUIState.swift; sourceTree = "<group>"; };
 		A2B38B252F05631300C307FE /* ZoomableScrollView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomableScrollView.swift; sourceTree = "<group>"; };
 		A2C5DD962F03AB6E007905CF /* SwiftZipImageSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftZipImageSource.swift; sourceTree = "<group>"; };
 		A2C5DD972F03AB6E007905CF /* SwiftZipReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftZipReader.swift; sourceTree = "<group>"; };
@@ -156,6 +158,7 @@
 		43612BEE8C21DE99311A9F01 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				A23641142F27C8F0009AB18F /* HistoryUIState.swift */,
 				A23641122F260C89009AB18F /* ModalState.swift */,
 				6F43AA4B01C5B586B26D5D1E /* AppSettings.swift */,
 				20F8717C9F5224842FD197D3 /* FileHistory.swift */,
@@ -353,6 +356,7 @@
 				0998EBD1951B8D288A84D8BA /* KeyboardShortcut.swift in Sources */,
 				C6E7251B77FD79E49D8F1555 /* Localization.swift in Sources */,
 				A23641132F260C89009AB18F /* ModalState.swift in Sources */,
+				A23641152F27C8F0009AB18F /* HistoryUIState.swift in Sources */,
 				6621E1D3C9D8941CF48DC712 /* PageDisplaySettings.swift in Sources */,
 				00D04F187131023ADF3D9C99 /* PageIndicatorOverlay.swift in Sources */,
 				6B7C43F23990F260E2CD364D /* PanesApp.swift in Sources */,
