@@ -44,7 +44,6 @@ struct InitialScreenView: View {
     let onEditImageMemo: (String, String?) -> Void  // (id, currentMemo) for image catalog
     let onOpenImageCatalogFile: (String, String?) -> Void  // (filePath, relativePath) for image catalog
     var onRestoreSession: ((SessionGroup) -> Void)? = nil
-    var onExitSearch: (() -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 20) {
@@ -75,8 +74,7 @@ struct InitialScreenView: View {
                 onEditMemo: onEditMemo,
                 onEditImageMemo: onEditImageMemo,
                 onOpenImageFile: onOpenImageCatalogFile,
-                onRestoreSession: onRestoreSession,
-                onExitSearch: onExitSearch
+                onRestoreSession: onRestoreSession
             )
         }
     }
@@ -110,7 +108,6 @@ struct HistoryListView: View {
     let onEditImageMemo: (String, String?) -> Void  // (id, currentMemo) for image catalog
     let onOpenImageFile: (String, String?) -> Void  // (filePath, relativePath) - 画像ファイルを開く
     var onRestoreSession: ((SessionGroup) -> Void)? = nil
-    var onExitSearch: (() -> Void)? = nil
 
     var body: some View {
         Group {
@@ -240,7 +237,7 @@ struct HistoryListView: View {
                                 .onExitCommand {
                                     historyState.isShowingSuggestions = false
                                     isSearchFocused.wrappedValue = false
-                                    onExitSearch?()
+                                    // フォーカス離脱はFocusSyncModifier経由でContentViewに通知される
                                 }
                                 .onChange(of: historyState.filterText) { _, newValue in
                                     // 候補を更新

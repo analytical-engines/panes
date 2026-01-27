@@ -155,12 +155,6 @@ struct ContentView: View {
                 onRestoreSession: { session in
                     sessionGroupManager.updateLastAccessed(id: session.id)
                     sessionManager.restoreSessionGroup(session)
-                },
-                onExitSearch: {
-                    isMainViewFocused = true
-                    if historyState.selectedItem == nil, let first = historyState.visibleItems.first {
-                        historyState.selectedItem = first
-                    }
                 }
             )
             .contextMenu { initialScreenContextMenu }
@@ -192,12 +186,6 @@ struct ContentView: View {
                     onRestoreSession: { session in
                         sessionGroupManager.updateLastAccessed(id: session.id)
                         sessionManager.restoreSessionGroup(session)
-                    },
-                    onExitSearch: {
-                        isMainViewFocused = true
-                        if historyState.selectedItem == nil, let first = historyState.visibleItems.first {
-                            historyState.selectedItem = first
-                        }
                     }
                 )
             }
@@ -680,7 +668,7 @@ struct ContentView: View {
                 historyState.showHistory = false
 
                 // SwiftUIのフォーカスを設定（.onKeyPressが動作するために必要）
-                isMainViewFocused = true
+                focusMainView()
 
                 // このウィンドウをアクティブとしてマーク（メニュー状態の更新に必要）
                 if let windowNumber = myWindowNumber {
@@ -754,7 +742,7 @@ struct ContentView: View {
                 }
 
                 // 初期画面に戻ったのでフォーカスを復元
-                isMainViewFocused = true
+                focusMainView()
             }
         }
         .onChange(of: viewModel.currentPage) { _, newPage in
@@ -813,7 +801,7 @@ struct ContentView: View {
                 )
                 WindowCoordinator.shared.registerFocusMainView(
                     windowNumber: newNumber,
-                    callback: { self.isMainViewFocused = true }
+                    callback: { self.focusMainView() }
                 )
             }
         }
@@ -821,7 +809,7 @@ struct ContentView: View {
             // フィルタが非表示になったらメインビューにフォーカスを戻す
             if !newValue {
                 DispatchQueue.main.async {
-                    isMainViewFocused = true
+                    self.focusMainView()
                 }
             }
         }
@@ -830,8 +818,8 @@ struct ContentView: View {
             if appSettings.historyDisplayMode == .restoreLast {
                 appSettings.lastHistoryVisible = newValue
             }
-            // 履歴表示が有効になったら、必要に応じて履歴とカタログを再読み込み
             if newValue {
+                // 履歴表示が有効になったら、必要に応じて履歴とカタログを再読み込み
                 historyManager.notifyHistoryUpdate()
                 imageCatalogManager.notifyCatalogUpdate()
                 // リスト未選択なら検索フィールドにフォーカス
@@ -840,19 +828,28 @@ struct ContentView: View {
                         isHistorySearchFocused = true
                     }
                 }
+            } else {
+                // 履歴を閉じたらメインビューにフォーカスを戻す
+                isHistorySearchFocused = false
+                DispatchQueue.main.async {
+                    self.focusMainView()
+                }
             }
         }
         .onChange(of: modalState.showMemoEdit) { _, newValue in
             // メモ編集モーダルが閉じられたらメインビューにフォーカスを戻す
             if !newValue {
                 DispatchQueue.main.async {
-                    isMainViewFocused = true
+                    self.focusMainView()
                 }
             }
         }
         .modifier(FocusSyncModifier(
             isHistorySearchFocused: $isHistorySearchFocused,
-            historyState: historyState
+            historyState: historyState,
+            onSearchFocusLost: {
+                focusMainView(selectFirstHistoryItem: true)
+            }
         ))
         .onKeyPress(keys: [.leftArrow]) { handleLeftArrow($0) }
         .onKeyPress(keys: [.rightArrow]) { handleRightArrow($0) }
@@ -880,7 +877,7 @@ struct ContentView: View {
             // ウィンドウがフォーカスを得た時にメインビューのフォーカスを復元
             // （検索フィールドにフォーカスがない場合のみ）
             if !isHistorySearchFocused {
-                isMainViewFocused = true
+                focusMainView()
             }
             let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000
             DebugLogger.log("⏱️ onReceive scrollTrigger update: \(String(format: "%.1f", elapsed))ms", level: .normal)
@@ -964,7 +961,7 @@ struct ContentView: View {
                     viewModel.handlePasswordSubmit(password: password, shouldSave: shouldSave)
                     // フォーカスを復元
                     DispatchQueue.main.async {
-                        isMainViewFocused = true
+                        self.focusMainView()
                     }
                 },
                 onCancel: {
@@ -977,7 +974,7 @@ struct ContentView: View {
                     }
                     // フォーカスを復元
                     DispatchQueue.main.async {
-                        isMainViewFocused = true
+                        self.focusMainView()
                     }
                 }
             )
@@ -1493,6 +1490,29 @@ struct ContentView: View {
         NSApp.keyWindow?.toggleFullScreen(nil)
     }
 
+    // MARK: - Focus Management
+
+    /// メインビューにフォーカスを移す
+    private func focusMainView(selectFirstHistoryItem: Bool = false) {
+        isMainViewFocused = true
+        if selectFirstHistoryItem, historyState.selectedItem == nil,
+           let first = historyState.visibleItems.first {
+            historyState.selectedItem = first
+        }
+    }
+
+    /// 検索フィールドにフォーカスを移す
+    private func focusSearchField() {
+        historyState.clearSelection()
+        isHistorySearchFocused = true
+    }
+
+    /// 検索フィールドからフォーカスを外す（リスト移動時）
+    private func exitSearchField() {
+        isHistorySearchFocused = false
+        focusMainView(selectFirstHistoryItem: true)
+    }
+
     // MARK: - Key Handlers
 
     /// 履歴ナビゲーションが可能な状態か（履歴表示中かつ履歴あり）
@@ -1558,9 +1578,7 @@ struct ContentView: View {
 
         // 検索フィールドにフォーカス中は、フォーカスを外してリストの先頭を選択
         if isHistorySearchFocused {
-            isHistorySearchFocused = false
-            isMainViewFocused = true
-            historyState.selectedItem = historyState.visibleItems.first
+            exitSearchField()
             return .handled
         }
 
@@ -1678,7 +1696,7 @@ struct ContentView: View {
             historyState.closeHistory()
             isHistorySearchFocused = false
             // メインビューにフォーカスを戻す
-            isMainViewFocused = true
+            focusMainView()
             return .handled
         }
         return .ignored
@@ -1813,7 +1831,7 @@ struct ContentView: View {
                     }
 
                     // D&D後にSwiftUIのフォーカスを設定（.onKeyPressが動作するために必要）
-                    self.isMainViewFocused = true
+                    self.focusMainView()
 
                     DebugLogger.log("📬 D&D: \(urls.first?.lastPathComponent ?? "unknown") (window=\(self.myWindowNumber ?? -1))", level: .normal)
                     self.openFilesInCurrentWindow(urls: urls)
@@ -1899,11 +1917,23 @@ struct ContentView: View {
 struct FocusSyncModifier: ViewModifier {
     @FocusState.Binding var isHistorySearchFocused: Bool
     let historyState: HistoryUIState
+    /// 検索フィールドからフォーカスが外れた時のコールバック（履歴リストへの移動時のみ）
+    var onSearchFocusLost: (() -> Void)?
 
     func body(content: Content) -> some View {
         content
             .onChange(of: isHistorySearchFocused) { _, newValue in
                 historyState.isSearchFocused = newValue
+                // フォーカスが外れた時、遅延して履歴が表示中か確認
+                // （履歴を閉じる操作の場合は呼ばない）
+                if !newValue {
+                    DispatchQueue.main.async {
+                        // 遅延後も履歴が表示中なら、リストへの移動とみなす
+                        if historyState.showHistory {
+                            onSearchFocusLost?()
+                        }
+                    }
+                }
             }
             .onChange(of: historyState.isSearchFocused) { _, newValue in
                 if isHistorySearchFocused != newValue {
