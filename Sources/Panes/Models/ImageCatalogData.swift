@@ -48,6 +48,9 @@ final class StandaloneImageData {
     /// タグ（将来拡張用、JSON配列で保存）
     var tagsData: Data?
 
+    /// ワークスペースID（""=デフォルト、将来のworkspace機能で使用）
+    var workspaceId: String = ""
+
     init(fileKey: String, filePath: String, fileName: String) {
         self.id = fileKey
         self.fileKey = fileKey
@@ -137,6 +140,9 @@ final class ArchiveContentImageData {
 
     /// タグ（将来拡張用、JSON配列で保存）
     var tagsData: Data?
+
+    /// ワークスペースID（""=デフォルト、将来のworkspace機能で使用）
+    var workspaceId: String = ""
 
     init(fileKey: String, parentPath: String, relativePath: String, fileName: String) {
         self.id = fileKey

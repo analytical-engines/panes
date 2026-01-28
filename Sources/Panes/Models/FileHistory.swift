@@ -164,7 +164,8 @@ class FileHistoryManager {
 
     /// 現在のスキーマバージョン（スキーマ変更時にインクリメント）
     /// v4: ImageCatalogDataにcatalogTypeRaw, relativePathフィールドを追加
-    private static let currentSchemaVersion = 4
+    /// v5: 全モデルにworkspaceIdフィールドを追加、WorkspaceDataテーブル追加（将来のworkspace機能用）
+    private static let currentSchemaVersion = 5
 
     /// アプリ専用ディレクトリ
     private static var appSupportDirectory: URL {
@@ -380,7 +381,8 @@ class FileHistoryManager {
                 FileHistoryData.self,
                 ImageCatalogData.self,  // 旧モデル（マイグレーション用）
                 StandaloneImageData.self,
-                ArchiveContentImageData.self
+                ArchiveContentImageData.self,
+                WorkspaceData.self      // 将来のworkspace機能用
             ])
             let modelConfiguration = ModelConfiguration(schema: schema, url: Self.storeURL, allowsSave: true)
             modelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])
@@ -419,6 +421,12 @@ class FileHistoryManager {
             } catch {
                 DebugLogger.log("⚠️ Migration check failed: \(error)", level: .minimal)
             }
+        }
+
+        // v4 -> v5: 全モデルにworkspaceIdフィールド追加、WorkspaceDataテーブル追加（将来のworkspace機能用）
+        // SwiftDataの軽量マイグレーションでデフォルト値("")が自動適用される
+        if oldVersion < 5 {
+            DebugLogger.log("📦 Migration v4→v5: workspaceId field added to all models, WorkspaceData table added", level: .normal)
         }
     }
 

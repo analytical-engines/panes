@@ -9,6 +9,9 @@ struct SessionGroup: Codable, Identifiable {
     var lastAccessedAt: Date
     var entries: [SessionGroupEntry]
 
+    /// ワークスペースID（""=デフォルト、将来のworkspace機能で使用）
+    var workspaceId: String = ""
+
     /// ファイル数
     var fileCount: Int {
         entries.count

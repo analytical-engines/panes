@@ -41,6 +41,9 @@ final class FileHistoryData {
     /// ソート逆順
     var sortReversed: Bool?
 
+    /// ワークスペースID（""=デフォルト、将来のworkspace機能で使用）
+    var workspaceId: String = ""
+
     init(fileKey: String, filePath: String, fileName: String) {
         self.id = FileHistoryData.generateId(fileName: fileName, fileKey: fileKey)
         self.fileKey = fileKey
