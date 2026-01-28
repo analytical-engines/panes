@@ -869,6 +869,9 @@ class FileHistoryManager {
 
         // アクセシビリティキャッシュを更新
         accessibilityCache[filePath] = true
+
+        // 他のウィンドウに更新を通知
+        notifyHistoryUpdate()
     }
 
     // MARK: - File Identity Check
