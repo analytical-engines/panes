@@ -165,7 +165,8 @@ class FileHistoryManager {
     /// 現在のスキーマバージョン（スキーマ変更時にインクリメント）
     /// v4: ImageCatalogDataにcatalogTypeRaw, relativePathフィールドを追加
     /// v5: 全モデルにworkspaceIdフィールドを追加、WorkspaceDataテーブル追加（将来のworkspace機能用）
-    private static let currentSchemaVersion = 5
+    /// v6: SessionGroupDataテーブル追加（UserDefaultsから移行）
+    private static let currentSchemaVersion = 6
 
     /// アプリ専用ディレクトリ
     private static var appSupportDirectory: URL {
@@ -187,7 +188,7 @@ class FileHistoryManager {
 
     // SwiftData用
     private var modelContainer: ModelContainer?
-    private var modelContext: ModelContext?
+    private(set) var modelContext: ModelContext?
 
     // アプリ設定への参照（最大件数を取得するため）
     var appSettings: AppSettings?
@@ -382,7 +383,8 @@ class FileHistoryManager {
                 ImageCatalogData.self,  // 旧モデル（マイグレーション用）
                 StandaloneImageData.self,
                 ArchiveContentImageData.self,
-                WorkspaceData.self      // 将来のworkspace機能用
+                WorkspaceData.self,      // 将来のworkspace機能用
+                SessionGroupData.self    // セッショングループ（UserDefaultsから移行）
             ])
             let modelConfiguration = ModelConfiguration(schema: schema, url: Self.storeURL, allowsSave: true)
             modelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])
@@ -427,6 +429,11 @@ class FileHistoryManager {
         // SwiftDataの軽量マイグレーションでデフォルト値("")が自動適用される
         if oldVersion < 5 {
             DebugLogger.log("📦 Migration v4→v5: workspaceId field added to all models, WorkspaceData table added", level: .normal)
+        }
+
+        // v5 -> v6: SessionGroupDataテーブル追加（UserDefaultsから移行）
+        if oldVersion < 6 {
+            DebugLogger.log("📦 Migration v5→v6: SessionGroupData table added", level: .normal)
         }
     }
 

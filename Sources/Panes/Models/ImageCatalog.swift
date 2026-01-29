@@ -219,7 +219,9 @@ class ImageCatalogManager {
                 FileHistoryData.self,
                 ImageCatalogData.self,  // 旧モデル（マイグレーション用）
                 StandaloneImageData.self,
-                ArchiveContentImageData.self
+                ArchiveContentImageData.self,
+                WorkspaceData.self,      // 将来のworkspace機能用
+                SessionGroupData.self    // セッショングループ
             ])
             let modelConfiguration = ModelConfiguration(schema: schema, url: Self.storeURL, allowsSave: true)
             modelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])

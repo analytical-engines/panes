@@ -23,6 +23,7 @@
 		547C4B91ABCD00B57476429E /* ImageInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E86A0FDB87F33AB39E48DC5 /* ImageInfoView.swift */; };
 		61765FE77F2CD4713ED2E8D9 /* SupportViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AB6547DB72CE3BE153138E5 /* SupportViews.swift */; };
 		644AEC77BDC96FCAB48A8E16 /* PasswordStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87A88CECA7DDF54397E415EA /* PasswordStorage.swift */; };
+		65017E835C08135405D42AF6 /* SessionGroupData.swift in Sources */ = {isa = PBXBuildFile; fileRef = D810CDC7F68A0173CA4B74BD /* SessionGroupData.swift */; };
 		6621E1D3C9D8941CF48DC712 /* PageDisplaySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F57A2B44F8B019A58BC7F270 /* PageDisplaySettings.swift */; };
 		692DE6A8D01B6E59809BDD73 /* SessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CE884AB6254A48884226BAF /* SessionManager.swift */; };
 		6B7C43F23990F260E2CD364D /* PanesApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCC0C860CC743B089FB7407F /* PanesApp.swift */; };
@@ -99,6 +100,7 @@
 		B795A1876A0615DED3AB00FA /* SessionGroupManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionGroupManager.swift; sourceTree = "<group>"; };
 		BB8D054B88ADD193A51C3EC4 /* SevenZipReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SevenZipReader.swift; sourceTree = "<group>"; };
 		D71E01147FF39887173FBE19 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		D810CDC7F68A0173CA4B74BD /* SessionGroupData.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SessionGroupData.swift; path = Sources/Panes/Models/SessionGroupData.swift; sourceTree = "<group>"; };
 		DB17C60C338A7697FBD1FFB0 /* FileImageSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileImageSource.swift; sourceTree = "<group>"; };
 		E130497ED914CA7FB7ED9D14 /* PageIndicatorOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageIndicatorOverlay.swift; sourceTree = "<group>"; };
 		E352CE8BC78E2DF13ACB50D3 /* SessionGroup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionGroup.swift; sourceTree = "<group>"; };
@@ -161,6 +163,7 @@
 			isa = PBXGroup;
 			children = (
 				31F691A0578E9C33346B2039 /* WorkspaceData.swift */,
+				D810CDC7F68A0173CA4B74BD /* SessionGroupData.swift */,
 			);
 			name = Models;
 			sourceTree = "<group>";
@@ -404,6 +407,7 @@
 				AABEF21D0F6669DF86C413E0 /* PageViews.swift in Sources */,
 				61765FE77F2CD4713ED2E8D9 /* SupportViews.swift in Sources */,
 				25529FA90CE34815607A0C68 /* WorkspaceData.swift in Sources */,
+				65017E835C08135405D42AF6 /* SessionGroupData.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -65,7 +65,8 @@ struct ImageViewerApp: App {
                     appDelegate.sessionManager = sessionManager
                     appDelegate.appSettings = appSettings
 
-                    // SessionGroupManagerに最大件数を設定
+                    // SessionGroupManagerにModelContextを設定（SwiftData共有）
+                    sessionGroupManager.setModelContext(historyManager.modelContext)
                     sessionGroupManager.maxSessionGroupCount = appSettings.maxSessionGroupCount
                 }
         }

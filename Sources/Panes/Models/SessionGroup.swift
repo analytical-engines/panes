@@ -10,7 +10,22 @@ struct SessionGroup: Codable, Identifiable {
     var entries: [SessionGroupEntry]
 
     /// ワークスペースID（""=デフォルト、将来のworkspace機能で使用）
-    var workspaceId: String = ""
+    var workspaceId: String
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, createdAt, lastAccessedAt, entries, workspaceId
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        lastAccessedAt = try container.decode(Date.self, forKey: .lastAccessedAt)
+        entries = try container.decode([SessionGroupEntry].self, forKey: .entries)
+        // 既存データにworkspaceIdがない場合はデフォルト値を使用
+        workspaceId = try container.decodeIfPresent(String.self, forKey: .workspaceId) ?? ""
+    }
 
     /// ファイル数
     var fileCount: Int {
@@ -27,13 +42,15 @@ struct SessionGroup: Codable, Identifiable {
         name: String,
         entries: [SessionGroupEntry],
         createdAt: Date = Date(),
-        lastAccessedAt: Date = Date()
+        lastAccessedAt: Date = Date(),
+        workspaceId: String = ""
     ) {
         self.id = id
         self.name = name
         self.entries = entries
         self.createdAt = createdAt
         self.lastAccessedAt = lastAccessedAt
+        self.workspaceId = workspaceId
     }
 
     /// 現在のウィンドウ状態から作成
@@ -43,6 +60,7 @@ struct SessionGroup: Codable, Identifiable {
         self.createdAt = Date()
         self.lastAccessedAt = Date()
         self.entries = windowEntries.map { SessionGroupEntry(from: $0) }
+        self.workspaceId = ""
     }
 }
 
