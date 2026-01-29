@@ -426,10 +426,11 @@ struct HistoryListView: View {
                 }
                 .frame(maxWidth: 500)
                 .padding(.horizontal, 20)
-                .onChange(of: searchResult.archives.count) { _, _ in
+                // 順序変更も検出するためIDリストを監視（countだけだと順序変更時にvisibleItemsが更新されない）
+                .onChange(of: searchResult.archives.map { $0.id }) { _, _ in
                     updateVisibleItems(archives: searchResult.archives, images: searchResult.images, sessions: searchResult.sessions, parsedQuery: parsedQuery)
                 }
-                .onChange(of: searchResult.images.count) { _, _ in
+                .onChange(of: searchResult.images.map { $0.id }) { _, _ in
                     updateVisibleItems(archives: searchResult.archives, images: searchResult.images, sessions: searchResult.sessions, parsedQuery: parsedQuery)
                 }
                 .onChange(of: searchResult.sessions.map { $0.id }) { _, _ in
