@@ -33,6 +33,7 @@
 		9C1071A8C39D4C14A38B14DF /* RarReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32226AEC2ABD5BE8D2C0AF1C /* RarReader.swift */; };
 		9C18E29524A78782CCEEA187 /* ImageCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5045756C847826C2C8F8F35 /* ImageCatalog.swift */; };
 		9CC4E060E04165BBDA83296C /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82C31F3299EF98F7399930B4 /* SettingsView.swift */; };
+		ACKNOWLEDGEMENTS0001 /* AcknowledgementsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACKNOWLEDGEMENTS0002 /* AcknowledgementsView.swift */; };
 		9EDECB4C25E1B4812E9306C5 /* SevenZipReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB8D054B88ADD193A51C3EC4 /* SevenZipReader.swift */; };
 		A23641132F260C89009AB18F /* ModalState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A23641122F260C89009AB18F /* ModalState.swift */; };
 		A23641152F27C8F0009AB18F /* HistoryUIState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A23641142F27C8F0009AB18F /* HistoryUIState.swift */; };
@@ -83,6 +84,7 @@
 		7633A0EED1F1DF4F65DB3F29 /* ImageDisplayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageDisplayView.swift; sourceTree = "<group>"; };
 		7CE884AB6254A48884226BAF /* SessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionManager.swift; sourceTree = "<group>"; };
 		82C31F3299EF98F7399930B4 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		ACKNOWLEDGEMENTS0002 /* AcknowledgementsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcknowledgementsView.swift; sourceTree = "<group>"; };
 		864D39A15F95B6BA902EF459 /* WindowCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowCoordinator.swift; sourceTree = "<group>"; };
 		86D714A2D3495DB31C1EAFC0 /* RarImageSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RarImageSource.swift; sourceTree = "<group>"; };
 		87A88CECA7DDF54397E415EA /* PasswordStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasswordStorage.swift; sourceTree = "<group>"; };
@@ -212,6 +214,7 @@
 				E130497ED914CA7FB7ED9D14 /* PageIndicatorOverlay.swift */,
 				B0834380A771880B0C637C63 /* PasswordDialog.swift */,
 				82C31F3299EF98F7399930B4 /* SettingsView.swift */,
+				ACKNOWLEDGEMENTS0002 /* AcknowledgementsView.swift */,
 				10444958562FC303CAFE33B9 /* SpreadView.swift */,
 				602805302D4CD9275D1CD886 /* HistoryViews.swift */,
 				3ADFA22D783827843E9B8295 /* PageViews.swift */,
@@ -286,6 +289,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 25F559EE4E33D94E3B7C1C2E /* Build configuration list for PBXNativeTarget "Panes" */;
 			buildPhases = (
+				UPDATEBUILDINFO000000000000 /* Update Build Info */,
 				93682E782B1328B675DAD06F /* Sources */,
 				42DB66767B9E143209A4C626 /* Resources */,
 				046C3803C7320797E66D8004 /* Frameworks */,
@@ -358,6 +362,27 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		UPDATEBUILDINFO000000000000 /* Update Build Info */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Update Build Info";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PROJECT_DIR}/Scripts/update_build_info.sh\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		93682E782B1328B675DAD06F /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -398,6 +423,7 @@
 				50654A752541CEA1D9F8EC15 /* SessionGroupManager.swift in Sources */,
 				692DE6A8D01B6E59809BDD73 /* SessionManager.swift in Sources */,
 				9CC4E060E04165BBDA83296C /* SettingsView.swift in Sources */,
+				ACKNOWLEDGEMENTS0001 /* AcknowledgementsView.swift in Sources */,
 				829438252EA04F64C7948B1C /* SevenZipImageSource.swift in Sources */,
 				9EDECB4C25E1B4812E9306C5 /* SevenZipReader.swift in Sources */,
 				2A943A0B0DB41F18305EEE00 /* SpreadView.swift in Sources */,

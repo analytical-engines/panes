@@ -389,3 +389,16 @@
 "shortcut_close_file" = "Close File";
 "shortcut_fit_to_window" = "Fit to Window";
 "shortcut_fit_to_original" = "Original Size";
+
+// MARK: - App Expiration
+
+"expiration_title" = "This Version Has Expired";
+"expiration_message" = "This beta version of Panes has expired. Please download the latest version.";
+"expiration_quit" = "Quit";
+"expiration_warning_title" = "Expiration Date Approaching";
+"expiration_warning_message" = "This beta version will expire in %d day(s).\n\nExpires: %@\n\nPlease update to the latest version.";
+
+// MARK: - Acknowledgements
+
+"menu_acknowledgements" = "Acknowledgements";
+"acknowledgements_title" = "Third-Party Libraries";

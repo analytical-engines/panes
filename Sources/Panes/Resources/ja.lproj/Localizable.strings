@@ -389,3 +389,16 @@
 "shortcut_close_file" = "ファイルを閉じる";
 "shortcut_fit_to_window" = "ウィンドウに合わせる";
 "shortcut_fit_to_original" = "実際のサイズで表示";
+
+// MARK: - App Expiration
+
+"expiration_title" = "このバージョンの使用期限が切れました";
+"expiration_message" = "このベータ版の使用期限が終了しました。最新バージョンをダウンロードしてください。";
+"expiration_quit" = "終了";
+"expiration_warning_title" = "使用期限が近づいています";
+"expiration_warning_message" = "このベータ版はあと%d日で使用期限が切れます。\n\n期限: %@\n\n最新バージョンへのアップデートをお願いします。";
+
+// MARK: - Acknowledgements
+
+"menu_acknowledgements" = "謝辞";
+"acknowledgements_title" = "使用しているライブラリ";

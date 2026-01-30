@@ -289,7 +289,6 @@ class SessionManager {
         panel.backgroundColor = NSColor.windowBackgroundColor
         panel.level = .floating
         panel.isReleasedWhenClosed = false
-
         // SwiftUIビューをホスト
         let hostingView = NSHostingView(rootView: LoadingPanelContent(
             restoredCount: processedWindowCount,
