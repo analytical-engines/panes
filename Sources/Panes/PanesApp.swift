@@ -571,17 +571,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var appSettings: AppSettings?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // 使用期限チェック（ベータ版用）
-        if AppExpiration.isExpired {
-            showExpirationAlert()
-            return
-        }
-
-        // 期限が近い場合は警告（7日以内）
-        if let days = AppExpiration.daysRemaining, days <= 7, days >= 0 {
-            showExpirationWarning(daysRemaining: days)
-        }
-
         // アプリ起動時にフォーカスを取得
         NSApp.activate(ignoringOtherApps: true)
 
@@ -912,28 +901,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     : nil
             }
         }
-    }
-
-    /// 使用期限切れアラートを表示して終了
-    private func showExpirationAlert() {
-        let alert = NSAlert()
-        alert.messageText = L("expiration_title")
-        alert.informativeText = L("expiration_message")
-        alert.alertStyle = .critical
-        alert.addButton(withTitle: L("expiration_quit"))
-        alert.runModal()
-        NSApplication.shared.terminate(nil)
-    }
-
-    /// 期限が近い場合の警告を表示
-    private func showExpirationWarning(daysRemaining: Int) {
-        let alert = NSAlert()
-        alert.messageText = L("expiration_warning_title")
-        let dateStr = AppExpiration.expirationDateString ?? ""
-        alert.informativeText = String(format: L("expiration_warning_message"), daysRemaining, dateStr)
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: L("ok"))
-        alert.runModal()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
