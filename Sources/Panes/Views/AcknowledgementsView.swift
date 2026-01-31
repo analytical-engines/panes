@@ -94,8 +94,21 @@ private struct LibraryRow: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Link(library.url, destination: URL(string: library.url)!)
+            Text(library.url)
                 .font(.caption)
+                .foregroundStyle(.link)
+                .onTapGesture {
+                    if let url = URL(string: library.url) {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+                .onHover { hovering in
+                    if hovering {
+                        NSCursor.pointingHand.push()
+                    } else {
+                        NSCursor.pop()
+                    }
+                }
         }
         .padding(.vertical, 4)
     }

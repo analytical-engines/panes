@@ -272,4 +272,107 @@ class SessionGroupManager {
             }
         }
     }
+
+    // MARK: - Import
+
+    /// セッションをImport
+    /// - Parameters:
+    ///   - sessions: インポートするセッション
+    ///   - merge: trueならマージ（同名は別名追加）、falseなら置換
+    /// - Returns: インポートされた件数
+    func importSessions(_ sessions: [SessionGroup], merge: Bool) -> Int {
+        guard let context = modelContext else {
+            DebugLogger.log("⚠️ importSessions skipped: ModelContext not available", level: .normal)
+            return 0
+        }
+
+        guard !sessions.isEmpty else { return 0 }
+
+        var importedCount = 0
+
+        do {
+            if !merge {
+                // Replace mode: delete all existing sessions
+                let descriptor = FetchDescriptor<SessionGroupData>()
+                let all = try context.fetch(descriptor)
+                for item in all {
+                    context.delete(item)
+                }
+                sessionGroups.removeAll()
+            }
+
+            for session in sessions {
+                // 同名セッションがあるかチェック
+                let uniqueName = generateUniqueName(baseName: session.name)
+
+                // 新しいセッションを作成（名前を変更、IDは新規）
+                let newSession = SessionGroup(
+                    id: UUID(),
+                    name: uniqueName,
+                    entries: session.entries,
+                    createdAt: session.createdAt,
+                    lastAccessedAt: session.lastAccessedAt,
+                    workspaceId: session.workspaceId
+                )
+
+                let groupData = SessionGroupData(from: newSession)
+                context.insert(groupData)
+                importedCount += 1
+            }
+
+            // 上限チェック
+            enforceLimit(context: context)
+
+            try context.save()
+            loadSessionGroups()
+
+            DebugLogger.log("📥 Imported \(importedCount) sessions", level: .normal)
+            return importedCount
+        } catch {
+            DebugLogger.log("❌ Failed to import sessions: \(error)", level: .minimal)
+            return 0
+        }
+    }
+
+    /// 重複しない名前を生成
+    private func generateUniqueName(baseName: String) -> String {
+        let existingNames = Set(sessionGroups.map { $0.name })
+
+        if !existingNames.contains(baseName) {
+            return baseName
+        }
+
+        // "名前 (2)", "名前 (3)" ... の形式で探す
+        var counter = 2
+        while true {
+            let candidateName = "\(baseName) (\(counter))"
+            if !existingNames.contains(candidateName) {
+                return candidateName
+            }
+            counter += 1
+        }
+    }
+
+    /// 上限を超えた古いセッションを削除
+    private func enforceLimit(context: ModelContext) {
+        do {
+            let countDescriptor = FetchDescriptor<SessionGroupData>()
+            let totalCount = try context.fetchCount(countDescriptor)
+
+            if totalCount > maxSessionGroupCount {
+                let oldestDescriptor = FetchDescriptor<SessionGroupData>(
+                    sortBy: [SortDescriptor(\.lastAccessedAt, order: .forward)]
+                )
+                let oldest = try context.fetch(oldestDescriptor)
+                let deleteCount = totalCount - maxSessionGroupCount
+                for i in 0..<deleteCount {
+                    if i < oldest.count {
+                        context.delete(oldest[i])
+                    }
+                }
+            }
+        } catch {
+            DebugLogger.log("❌ Failed to enforce session limit: \(error)", level: .minimal)
+        }
+    }
 }

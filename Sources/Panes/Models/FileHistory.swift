@@ -1376,37 +1376,47 @@ class FileHistoryManager {
         let pageSettings: PageDisplaySettings?
     }
 
-    /// Export用のデータ構造
-    /// - version 1: 旧形式（id = fileKey, pageSettingsRefなし）
-    /// - version 2: 新形式（id = hash(fileName+fileKey), pageSettingsRefあり）
-    struct HistoryExport: Codable {
-        let version: Int?  // nilの場合はversion 1として扱う
+    /// Export用のデータ構造（書庫ファイル + 個別画像 + セッション）
+    struct UnifiedExport: Codable {
+        let version: Int
         let exportDate: Date
-        let entryCount: Int
-        let entries: [HistoryEntryWithSettings]
+        let archives: [HistoryEntryWithSettings]
+        let standaloneImages: [ImageCatalogEntry]
+        let sessions: [SessionGroup]
+
+        var archiveCount: Int { archives.count }
+        var standaloneImageCount: Int { standaloneImages.count }
+        var sessionCount: Int { sessions.count }
     }
 
     /// 現在のExportフォーマットバージョン
-    private static let currentExportVersion = 2
+    private static let currentExportVersion = 3
 
-    /// 履歴をExport可能か
+    /// Export可能か（書庫履歴があるかどうかで簡易判定）
     var canExportHistory: Bool {
-        return !history.isEmpty
+        !history.isEmpty
     }
 
-    /// 履歴をJSONデータとしてExport（ページ表示設定含む）
-    func exportHistory() -> Data? {
-        // 各履歴エントリにページ表示設定を付加
-        let entriesWithSettings = history.map { entry -> HistoryEntryWithSettings in
+    /// 履歴をJSONデータとしてExport（書庫ファイル + 個別画像 + セッション）
+    func exportHistory(imageCatalog: ImageCatalogManager, sessionGroup: SessionGroupManager) -> Data? {
+        // 書庫ファイル（ページ表示設定含む）
+        let archivesWithSettings = history.map { entry -> HistoryEntryWithSettings in
             let pageSettings = loadPageDisplaySettings(for: entry.fileKey)
             return HistoryEntryWithSettings(entry: entry, pageSettings: pageSettings)
         }
 
-        let exportData = HistoryExport(
+        // 個別画像のみ（書庫内画像は除外）
+        let standaloneImages = imageCatalog.catalog.filter { $0.catalogType == .individual }
+
+        // セッション
+        let sessions = sessionGroup.sessionGroups
+
+        let exportData = UnifiedExport(
             version: FileHistoryManager.currentExportVersion,
             exportDate: Date(),
-            entryCount: history.count,
-            entries: entriesWithSettings
+            archives: archivesWithSettings,
+            standaloneImages: standaloneImages,
+            sessions: sessions
         )
 
         let encoder = JSONEncoder()
@@ -1416,7 +1426,7 @@ class FileHistoryManager {
         do {
             return try encoder.encode(exportData)
         } catch {
-            print("Failed to encode history: \(error)")
+            DebugLogger.log("❌ Failed to encode unified export: \(error)", level: .minimal)
             return nil
         }
     }
@@ -1682,31 +1692,64 @@ class FileHistoryManager {
         }
     }
 
-    /// JSONデータから履歴をImport（ページ表示設定含む）
-    func importHistory(from data: Data, merge: Bool) -> (success: Bool, message: String, importedCount: Int) {
-        guard isInitialized else {
-            return (false, "Database not initialized", 0)
+    /// Import結果
+    struct ImportResult {
+        let success: Bool
+        let message: String
+        let archiveCount: Int
+        let standaloneImageCount: Int
+        let sessionCount: Int
+
+        var totalCount: Int {
+            archiveCount + standaloneImageCount + sessionCount
         }
-        return importHistoryWithSwiftData(from: data, merge: merge)
     }
 
-    /// SwiftDataで履歴をImport
-    private func importHistoryWithSwiftData(from data: Data, merge: Bool) -> (success: Bool, message: String, importedCount: Int) {
-        guard let context = modelContext else {
-            return (false, "Database not available", 0)
+    /// 履歴をImport（書庫ファイル + 個別画像 + セッション）
+    func importHistory(
+        from data: Data,
+        merge: Bool,
+        imageCatalog: ImageCatalogManager,
+        sessionGroup: SessionGroupManager
+    ) -> ImportResult {
+        guard isInitialized else {
+            return ImportResult(success: false, message: "Database not initialized",
+                               archiveCount: 0, standaloneImageCount: 0, sessionCount: 0)
         }
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        do {
-            let importData = try decoder.decode(HistoryExport.self, from: data)
-            let importVersion = importData.version ?? 1
-            DebugLogger.log("📥 Importing history: version \(importVersion), \(importData.entryCount) entries", level: .normal)
+        guard let importData = try? decoder.decode(UnifiedExport.self, from: data) else {
+            return ImportResult(success: false, message: "Invalid file format",
+                               archiveCount: 0, standaloneImageCount: 0, sessionCount: 0)
+        }
 
+        return importHistoryData(importData, merge: merge, imageCatalog: imageCatalog, sessionGroup: sessionGroup)
+    }
+
+    /// データをImport
+    private func importHistoryData(
+        _ importData: UnifiedExport,
+        merge: Bool,
+        imageCatalog: ImageCatalogManager,
+        sessionGroup: SessionGroupManager
+    ) -> ImportResult {
+        guard let context = modelContext else {
+            return ImportResult(success: false, message: "Database not available",
+                               archiveCount: 0, standaloneImageCount: 0, sessionCount: 0)
+        }
+
+        DebugLogger.log("📥 Importing data: version \(importData.version), archives=\(importData.archiveCount), images=\(importData.standaloneImageCount), sessions=\(importData.sessionCount)", level: .normal)
+
+        var importedArchives = 0
+        var importedImages = 0
+        var importedSessions = 0
+
+        do {
+            // 1. 書庫ファイルのImport
             if merge {
-                for item in importData.entries {
-                    // 新しいid形式で検索
+                for item in importData.archives {
                     let entryId = FileHistoryEntry.generateId(fileName: item.entry.fileName, fileKey: item.entry.fileKey)
                     let searchId = entryId
                     var descriptor = FetchDescriptor<FileHistoryData>(
@@ -1724,26 +1767,32 @@ class FileHistoryManager {
                         newData.lastAccessDate = item.entry.lastAccessDate
                         newData.accessCount = item.entry.accessCount
                         newData.memo = item.entry.memo
-                        // ページ設定を直接設定
+                        // ビューステートを復元
+                        newData.viewMode = item.entry.viewMode
+                        newData.savedPage = item.entry.savedPage
+                        newData.readingDirection = item.entry.readingDirection
+                        newData.sortMethod = item.entry.sortMethod
+                        newData.sortReversed = item.entry.sortReversed
                         if let settings = item.pageSettings {
                             newData.setPageSettings(settings)
                         }
                         context.insert(newData)
+                        importedArchives += 1
                     } else if let existingData = existing.first {
-                        // 既存エントリのメモを更新（インポートデータにメモがある場合）
                         if let importMemo = item.entry.memo, !importMemo.isEmpty {
                             existingData.memo = importMemo
                         }
                     }
                 }
             } else {
+                // Replace mode: delete all existing archives
                 let allDescriptor = FetchDescriptor<FileHistoryData>()
                 let all = try context.fetch(allDescriptor)
                 for item in all {
                     context.delete(item)
                 }
 
-                for item in importData.entries {
+                for item in importData.archives {
                     let newData = FileHistoryData(
                         fileKey: item.entry.fileKey,
                         filePath: item.entry.filePath,
@@ -1752,37 +1801,46 @@ class FileHistoryManager {
                     newData.lastAccessDate = item.entry.lastAccessDate
                     newData.accessCount = item.entry.accessCount
                     newData.memo = item.entry.memo
-                    // ページ設定を直接設定
+                    // ビューステートを復元
+                    newData.viewMode = item.entry.viewMode
+                    newData.savedPage = item.entry.savedPage
+                    newData.readingDirection = item.entry.readingDirection
+                    newData.sortMethod = item.entry.sortMethod
+                    newData.sortReversed = item.entry.sortReversed
                     if let settings = item.pageSettings {
                         newData.setPageSettings(settings)
                     }
                     context.insert(newData)
-                }
-            }
-
-            // 上限を超えたら古いものを削除
-            let countDescriptor = FetchDescriptor<FileHistoryData>()
-            let totalCount = try context.fetchCount(countDescriptor)
-            if totalCount > maxHistoryCount {
-                let oldestDescriptor = FetchDescriptor<FileHistoryData>(
-                    sortBy: [SortDescriptor(\.lastAccessDate, order: .forward)]
-                )
-                let oldest = try context.fetch(oldestDescriptor)
-                let deleteCount = totalCount - maxHistoryCount
-                for i in 0..<deleteCount {
-                    if i < oldest.count {
-                        context.delete(oldest[i])
-                    }
+                    importedArchives += 1
                 }
             }
 
             try context.save()
             loadHistory()
+            notifyHistoryUpdate()
 
-            return (true, "", importData.entryCount)
+            // 2. 個別画像のImport
+            importedImages = imageCatalog.importStandaloneImages(importData.standaloneImages, merge: merge)
+
+            // 3. セッションのImport
+            importedSessions = sessionGroup.importSessions(importData.sessions, merge: merge)
+
+            return ImportResult(
+                success: true,
+                message: "",
+                archiveCount: importedArchives,
+                standaloneImageCount: importedImages,
+                sessionCount: importedSessions
+            )
         } catch {
-            DebugLogger.log("❌ Failed to import history: \(error)", level: .minimal)
-            return (false, error.localizedDescription, 0)
+            DebugLogger.log("❌ Failed to import unified data: \(error)", level: .minimal)
+            return ImportResult(
+                success: false,
+                message: error.localizedDescription,
+                archiveCount: 0,
+                standaloneImageCount: 0,
+                sessionCount: 0
+            )
         }
     }
 }

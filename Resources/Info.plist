@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>BuildTimestamp</key>
-	<string>2026-01-30T12:50:00Z</string>
+	<string>2026-01-31T10:48:50Z</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDocumentTypes</key>
@@ -71,9 +71,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.0</string>
+	<string>0.3.0</string>
 	<key>CFBundleVersion</key>
-	<string>10</string>
+	<string>34</string>
 	<key>LSMultipleInstancesProhibited</key>
 	<true/>
 	<key>NSHighResolutionCapable</key>
@@ -81,6 +81,6 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 Analytical Engines
 MIT License
-Built: 2026-01-30 12:50 UTC</string>
+Built: 2026-01-31 10:48 UTC</string>
 </dict>
 </plist>

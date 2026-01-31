@@ -110,6 +110,16 @@ class ImageCatalogManager {
     /// カタログ更新通知用（初期画面がこれを監視する）
     private(set) var catalogVersion: Int = 0
 
+    /// 個別画像の件数
+    var standaloneCount: Int {
+        catalog.filter { $0.catalogType == .individual }.count
+    }
+
+    /// 書庫内画像の件数
+    var archiveContentCount: Int {
+        catalog.filter { $0.catalogType == .archived }.count
+    }
+
     /// 初期化エラー
     private(set) var initializationError: Error?
 
@@ -435,6 +445,7 @@ class ImageCatalogManager {
                 tags: tags
             )
             updateCatalogArrayDirectly(entry)
+            notifyCatalogUpdate()
         } catch {
             DebugLogger.log("❌ Failed to record standalone image: \(error)", level: .minimal)
         }
@@ -522,6 +533,7 @@ class ImageCatalogManager {
                 tags: tags
             )
             updateCatalogArrayDirectly(entry)
+            notifyCatalogUpdate()
         } catch {
             DebugLogger.log("❌ Failed to record archive content image: \(error)", level: .minimal)
         }
@@ -684,6 +696,127 @@ class ImageCatalogManager {
             notifyCatalogUpdate()
         } catch {
             DebugLogger.log("❌ Failed to clear image catalog: \(error)", level: .minimal)
+        }
+    }
+
+    /// 個別画像カタログのみクリア
+    func clearStandaloneCatalog() {
+        guard isInitialized, let context = modelContext else { return }
+
+        do {
+            let descriptor = FetchDescriptor<StandaloneImageData>()
+            let all = try context.fetch(descriptor)
+            for item in all {
+                context.delete(item)
+            }
+
+            try context.save()
+            catalog.removeAll { $0.catalogType == .individual }
+            notifyCatalogUpdate()
+        } catch {
+            DebugLogger.log("❌ Failed to clear standalone catalog: \(error)", level: .minimal)
+        }
+    }
+
+    /// 書庫内画像カタログのみクリア
+    func clearArchiveContentCatalog() {
+        guard isInitialized, let context = modelContext else { return }
+
+        do {
+            let descriptor = FetchDescriptor<ArchiveContentImageData>()
+            let all = try context.fetch(descriptor)
+            for item in all {
+                context.delete(item)
+            }
+
+            try context.save()
+            catalog.removeAll { $0.catalogType == .archived }
+            notifyCatalogUpdate()
+        } catch {
+            DebugLogger.log("❌ Failed to clear archive content catalog: \(error)", level: .minimal)
+        }
+    }
+
+    // MARK: - Import
+
+    /// 個別画像をImport
+    /// - Parameters:
+    ///   - images: インポートする画像エントリ
+    ///   - merge: trueならマージ、falseなら置換
+    /// - Returns: インポートされた件数
+    func importStandaloneImages(_ images: [ImageCatalogEntry], merge: Bool) -> Int {
+        guard isInitialized, let context = modelContext else {
+            DebugLogger.log("⚠️ importStandaloneImages skipped: not initialized", level: .normal)
+            return 0
+        }
+
+        // 個別画像のみをフィルタ（念のため）
+        let standaloneImages = images.filter { $0.catalogType == .individual }
+        guard !standaloneImages.isEmpty else { return 0 }
+
+        var importedCount = 0
+
+        do {
+            if !merge {
+                // Replace mode: delete all existing standalone images
+                let descriptor = FetchDescriptor<StandaloneImageData>()
+                let all = try context.fetch(descriptor)
+                for item in all {
+                    context.delete(item)
+                }
+                catalog.removeAll { $0.catalogType == .individual }
+            }
+
+            for entry in standaloneImages {
+                let searchKey = entry.fileKey
+                var descriptor = FetchDescriptor<StandaloneImageData>(
+                    predicate: #Predicate<StandaloneImageData> { $0.fileKey == searchKey }
+                )
+                descriptor.fetchLimit = 1
+                let existing = try context.fetch(descriptor)
+
+                if existing.isEmpty {
+                    // 新規追加
+                    let newData = StandaloneImageData(
+                        fileKey: entry.fileKey,
+                        filePath: entry.filePath,
+                        fileName: entry.fileName
+                    )
+                    newData.lastAccessDate = entry.lastAccessDate
+                    newData.accessCount = entry.accessCount
+                    newData.memo = entry.memo
+                    newData.imageWidth = entry.imageWidth
+                    newData.imageHeight = entry.imageHeight
+                    newData.fileSize = entry.fileSize
+                    newData.imageFormat = entry.imageFormat
+                    newData.setTags(entry.tags)
+                    context.insert(newData)
+                    importedCount += 1
+
+                    // メモリ上の配列にも追加
+                    catalog.insert(entry, at: 0)
+                } else if let existingData = existing.first {
+                    // 既存エントリのメモとタグを更新（インポートデータにある場合）
+                    if let importMemo = entry.memo, !importMemo.isEmpty {
+                        existingData.memo = importMemo
+                    }
+                    if !entry.tags.isEmpty {
+                        existingData.setTags(entry.tags)
+                    }
+                }
+            }
+
+            // 上限チェック
+            try enforceStandaloneLimit(context: context)
+
+            try context.save()
+            notifyCatalogUpdate()
+
+            DebugLogger.log("📥 Imported \(importedCount) standalone images", level: .normal)
+            return importedCount
+        } catch {
+            DebugLogger.log("❌ Failed to import standalone images: \(error)", level: .minimal)
+            return 0
         }
     }
 }

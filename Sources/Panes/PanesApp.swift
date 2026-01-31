@@ -448,9 +448,12 @@ struct ImageViewerApp: App {
         }
     }
 
-    /// 履歴をExport
+    /// 履歴をExport（統合形式：書庫ファイル + 個別画像 + セッション）
     private func exportHistory() {
-        guard let data = historyManager.exportHistory() else { return }
+        guard let data = historyManager.exportHistory(
+            imageCatalog: imageCatalogManager,
+            sessionGroup: sessionGroupManager
+        ) else { return }
 
         let savePanel = NSSavePanel()
         savePanel.allowedContentTypes = [.json]
@@ -496,7 +499,7 @@ struct ImageViewerApp: App {
         }
     }
 
-    /// 履歴をImport
+    /// 履歴をImport（統合形式：書庫ファイル + 個別画像 + セッション）
     private func importHistory(merge: Bool) {
         let openPanel = NSOpenPanel()
         openPanel.allowedContentTypes = [.json]
@@ -508,17 +511,26 @@ struct ImageViewerApp: App {
         if response == .OK, let url = openPanel.url {
             do {
                 let data = try Data(contentsOf: url)
-                let result = historyManager.importHistory(from: data, merge: merge)
+                let result = historyManager.importHistory(
+                    from: data,
+                    merge: merge,
+                    imageCatalog: imageCatalogManager,
+                    sessionGroup: sessionGroupManager
+                )
 
                 let alert = NSAlert()
                 if result.success {
                     alert.messageText = L("import_success_title")
                     let modeText = merge ? L("import_history_merged") : L("import_history_replaced")
-                    alert.informativeText = String(format: L("import_history_success_format"), result.importedCount, modeText)
+                    alert.informativeText = String(format: L("import_unified_success_format"),
+                                                   result.archiveCount,
+                                                   result.standaloneImageCount,
+                                                   result.sessionCount,
+                                                   modeText)
                     alert.alertStyle = .informational
                 } else {
                     alert.messageText = L("import_error_title")
-                    alert.informativeText = L("import_error_invalid_format")
+                    alert.informativeText = result.message.isEmpty ? L("import_error_invalid_format") : result.message
                     alert.alertStyle = .critical
                 }
                 alert.runModal()

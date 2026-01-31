@@ -98,22 +98,23 @@
 
 // MARK: - SettingsView - History Settings
 
-"section_history_settings" = "History Settings";
+"section_history_display_settings" = "History Display";
 "history_display_mode" = "History on Launch";
 "history_display_always_show" = "Show";
 "history_display_always_hide" = "Hide";
 "history_display_restore_last" = "Restore Last State";
-"max_history_count" = "Maximum History Count";
-"history_count_unit" = "items";
-"max_history_description" = "Maximum number of files to save in history";
 
 // MARK: - SettingsView - History Management
 
-"section_history_management" = "History Management";
-"current_history_count_format" = "Current history count: %d items";
-"clear_all" = "Clear All";
+"section_history_management" = "History Data";
 "reset_access_counts_label" = "Access counts";
 "reset_access_counts" = "Reset";
+"history_label_archive" = "Archives";
+"history_label_standalone_image" = "Images";
+"history_label_archive_content_image" = "Archive images";
+"history_label_session" = "Sessions";
+"history_max_prefix" = "max";
+"clear_all" = "Clear";
 
 // MARK: - Status Bar
 
@@ -228,8 +229,9 @@
 "export_history_panel_title" = "Export History";
 "import_history_panel_title" = "Import History";
 "import_history_success_format" = "Loaded %d history entries (%@)";
-"import_history_merged" = "merged with existing";
-"import_history_replaced" = "replaced existing";
+"import_unified_success_format" = "Loaded archives: %d, images: %d, sessions: %d (%@)";
+"import_history_merged" = "merged";
+"import_history_replaced" = "replaced";
 
 // MARK: - File Loading Settings
 
@@ -324,23 +326,10 @@
 // MARK: - Image Catalog Settings
 
 "section_image_catalog" = "Image Catalog";
-"section_image_catalog_settings" = "Image Catalog Settings";
 "image_catalog_filter" = "Show images";
 "image_catalog_filter_all" = "All";
 "image_catalog_filter_standalone" = "Standalone only";
 "image_catalog_filter_archive" = "Archive/Folder content only";
-"max_standalone_image_count" = "Standalone Image Limit";
-"max_standalone_image_description" = "Maximum number of standalone image records to save";
-"max_archive_content_image_count" = "Archive Content Image Limit";
-"max_archive_content_image_description" = "Maximum number of archive/folder content image records to save";
-"current_image_catalog_count_format" = "Current image catalog count: %d items";
-
-// MARK: - Session Group Settings
-
-"section_session_group_settings" = "Session Group Settings";
-"max_session_group_count" = "Session Group Limit";
-"max_session_group_description" = "Maximum number of named sessions to save";
-"current_session_group_count_format" = "Current session group count: %d items";
 
 // MARK: - Unified Search
 

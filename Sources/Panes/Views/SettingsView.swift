@@ -175,79 +175,18 @@ struct HistorySettingsTab: View {
         @Bindable var settings = settings
 
         Form {
-            Section(L("section_history_settings")) {
+            Section(L("section_history_display_settings")) {
                 Picker(L("history_display_mode"), selection: $settings.historyDisplayMode) {
                     Text(L("history_display_always_show")).tag(HistoryDisplayMode.alwaysShow)
                     Text(L("history_display_always_hide")).tag(HistoryDisplayMode.alwaysHide)
                     Text(L("history_display_restore_last")).tag(HistoryDisplayMode.restoreLast)
                 }
-
-                HStack {
-                    Text(L("max_history_count"))
-                    Spacer()
-                    TextField("", value: $settings.maxHistoryCount, format: .number)
-                        .frame(width: 60)
-                        .textFieldStyle(.roundedBorder)
-                    Text(L("history_count_unit"))
-                }
-                Text(L("max_history_description"))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-
-            Section(L("section_image_catalog_settings")) {
-                HStack {
-                    Text(L("max_standalone_image_count"))
-                    Spacer()
-                    TextField("", value: $settings.maxStandaloneImageCount, format: .number)
-                        .frame(width: 80)
-                        .textFieldStyle(.roundedBorder)
-                    Text(L("history_count_unit"))
-                }
-                Text(L("max_standalone_image_description"))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
-                HStack {
-                    Text(L("max_archive_content_image_count"))
-                    Spacer()
-                    TextField("", value: $settings.maxArchiveContentImageCount, format: .number)
-                        .frame(width: 80)
-                        .textFieldStyle(.roundedBorder)
-                    Text(L("history_count_unit"))
-                }
-                Text(L("max_archive_content_image_description"))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-
-            Section(L("section_session_group_settings")) {
-                HStack {
-                    Text(L("max_session_group_count"))
-                    Spacer()
-                    TextField("", value: $settings.maxSessionGroupCount, format: .number)
-                        .frame(width: 80)
-                        .textFieldStyle(.roundedBorder)
-                    Text(L("history_count_unit"))
-                }
-                Text(L("max_session_group_description"))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
             }
 
             Section(L("section_history_management")) {
                 // バージョントリガーを監視（配列は@ObservationIgnored）
                 let _ = historyManager.historyVersion
                 let _ = imageCatalogManager.catalogVersion
-
-                HStack {
-                    Text(L("current_history_count_format", historyManager.history.count))
-                    Spacer()
-                    Button(L("clear_all")) {
-                        historyManager.clearAllHistory()
-                    }
-                    .foregroundColor(.red)
-                }
 
                 HStack {
                     Text(L("reset_access_counts_label"))
@@ -258,17 +197,78 @@ struct HistorySettingsTab: View {
                     .disabled(historyManager.history.isEmpty)
                 }
 
+                // 書庫ファイル
                 HStack {
-                    Text(L("current_image_catalog_count_format", imageCatalogManager.catalog.count))
+                    Text(L("history_label_archive"))
+                        .frame(width: 80, alignment: .leading)
+                    Text("\(historyManager.history.count)")
+                        .frame(width: 60, alignment: .trailing)
+                        .monospacedDigit()
+                    Text("/ \(L("history_max_prefix"))")
+                    TextField("", value: $settings.maxHistoryCount, format: .number)
+                        .frame(width: 80)
+                        .textFieldStyle(.roundedBorder)
+                        .multilineTextAlignment(.trailing)
                     Spacer()
                     Button(L("clear_all")) {
-                        imageCatalogManager.clearAllCatalog()
+                        historyManager.clearAllHistory()
                     }
                     .foregroundColor(.red)
+                    .disabled(historyManager.history.isEmpty)
                 }
 
+                // 個別画像
                 HStack {
-                    Text(L("current_session_group_count_format", sessionGroupManager.sessionGroups.count))
+                    Text(L("history_label_standalone_image"))
+                        .frame(width: 80, alignment: .leading)
+                    Text("\(imageCatalogManager.standaloneCount)")
+                        .frame(width: 60, alignment: .trailing)
+                        .monospacedDigit()
+                    Text("/ \(L("history_max_prefix"))")
+                    TextField("", value: $settings.maxStandaloneImageCount, format: .number)
+                        .frame(width: 80)
+                        .textFieldStyle(.roundedBorder)
+                        .multilineTextAlignment(.trailing)
+                    Spacer()
+                    Button(L("clear_all")) {
+                        imageCatalogManager.clearStandaloneCatalog()
+                    }
+                    .foregroundColor(.red)
+                    .disabled(imageCatalogManager.standaloneCount == 0)
+                }
+
+                // 書庫内画像
+                HStack {
+                    Text(L("history_label_archive_content_image"))
+                        .frame(width: 80, alignment: .leading)
+                    Text("\(imageCatalogManager.archiveContentCount)")
+                        .frame(width: 60, alignment: .trailing)
+                        .monospacedDigit()
+                    Text("/ \(L("history_max_prefix"))")
+                    TextField("", value: $settings.maxArchiveContentImageCount, format: .number)
+                        .frame(width: 80)
+                        .textFieldStyle(.roundedBorder)
+                        .multilineTextAlignment(.trailing)
+                    Spacer()
+                    Button(L("clear_all")) {
+                        imageCatalogManager.clearArchiveContentCatalog()
+                    }
+                    .foregroundColor(.red)
+                    .disabled(imageCatalogManager.archiveContentCount == 0)
+                }
+
+                // セッション
+                HStack {
+                    Text(L("history_label_session"))
+                        .frame(width: 80, alignment: .leading)
+                    Text("\(sessionGroupManager.sessionGroups.count)")
+                        .frame(width: 60, alignment: .trailing)
+                        .monospacedDigit()
+                    Text("/ \(L("history_max_prefix"))")
+                    TextField("", value: $settings.maxSessionGroupCount, format: .number)
+                        .frame(width: 80)
+                        .textFieldStyle(.roundedBorder)
+                        .multilineTextAlignment(.trailing)
                     Spacer()
                     Button(L("clear_all")) {
                         sessionGroupManager.clearAllSessionGroups()
