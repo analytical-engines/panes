@@ -110,9 +110,50 @@ struct GeneralSettingsTab: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+
+            Section(L("section_initial_screen")) {
+                HStack {
+                    Text(L("background_image"))
+                    Spacer()
+                    if settings.initialScreenBackgroundImagePath.isEmpty {
+                        Text(L("background_image_none"))
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text(URL(fileURLWithPath: settings.initialScreenBackgroundImagePath).lastPathComponent)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+
+                HStack {
+                    Button(L("background_image_select")) {
+                        selectBackgroundImage()
+                    }
+                    if !settings.initialScreenBackgroundImagePath.isEmpty {
+                        Button(L("background_image_clear")) {
+                            settings.initialScreenBackgroundImagePath = ""
+                        }
+                    }
+                }
+            }
         }
         .formStyle(.grouped)
         .padding()
+    }
+
+    /// 背景画像を選択するファイルダイアログを表示
+    private func selectBackgroundImage() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.image]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.message = L("background_image_select_message")
+
+        if panel.runModal() == .OK, let url = panel.url {
+            settings.initialScreenBackgroundImagePath = url.path
+        }
     }
 }
 

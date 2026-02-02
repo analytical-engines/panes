@@ -49,6 +49,7 @@ class AppSettings {
         static let imageCatalogFilter = "imageCatalogFilter"
         static let defaultHistorySearchType = "defaultHistorySearchType"
         static let scrollWheelSensitivity = "scrollWheelSensitivity"
+        static let initialScreenBackgroundImagePath = "initialScreenBackgroundImagePath"
     }
 
     // MARK: - 表示設定
@@ -180,6 +181,11 @@ class AppSettings {
     /// 最後のウィンドウを閉じたらアプリを終了するか
     var quitOnLastWindowClosed: Bool {
         didSet { defaults.set(quitOnLastWindowClosed, forKey: Keys.quitOnLastWindowClosed) }
+    }
+
+    /// 初期画面の背景画像パス（空文字列の場合は背景なし）
+    var initialScreenBackgroundImagePath: String {
+        didSet { defaults.set(initialScreenBackgroundImagePath, forKey: Keys.initialScreenBackgroundImagePath) }
     }
 
     /// 新規ウィンドウ用のサイズを取得
@@ -353,6 +359,9 @@ class AppSettings {
         } else {
             quitOnLastWindowClosed = true  // デフォルト: 終了する
         }
+
+        // 初期画面の背景画像パス
+        initialScreenBackgroundImagePath = defaults.string(forKey: Keys.initialScreenBackgroundImagePath) ?? ""
     }
 
     // MARK: - 保存メソッド

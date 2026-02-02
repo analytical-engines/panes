@@ -98,6 +98,15 @@
 "quit_on_last_window_closed" = "最後のウィンドウを閉じたら終了";
 "quit_on_last_window_closed_description" = "オフにすると、全てのウィンドウを閉じてもアプリはDockに残ります";
 
+// MARK: - SettingsView - Initial Screen
+
+"section_initial_screen" = "初期画面";
+"background_image" = "背景画像";
+"background_image_none" = "なし";
+"background_image_select" = "選択...";
+"background_image_clear" = "クリア";
+"background_image_select_message" = "初期画面の背景画像を選択してください";
+
 // MARK: - SettingsView - History Settings
 
 "section_history_display_settings" = "履歴表示設定";

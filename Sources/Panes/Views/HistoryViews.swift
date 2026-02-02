@@ -45,37 +45,74 @@ struct InitialScreenView: View {
     let onOpenImageCatalogFile: (String, String?) -> Void  // (filePath, relativePath) for image catalog
     var onRestoreSession: ((SessionGroup) -> Void)? = nil
 
+    /// 背景画像を読み込む
+    private var backgroundImage: NSImage? {
+        let path = appSettings.initialScreenBackgroundImagePath
+        guard !path.isEmpty else { return nil }
+        return NSImage(contentsOfFile: path)
+    }
+
+    /// 背景画像モード（背景画像あり + 履歴非表示）
+    private var isBackgroundImageOnlyMode: Bool {
+        backgroundImage != nil && !historyState.showHistory
+    }
+
     var body: some View {
-        VStack(spacing: 20) {
-            Text(AppInfo.name)
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .foregroundColor(.white)
-
-            if let errorMessage = errorMessage {
-                Text(errorMessage)
-                    .foregroundColor(.red)
-            } else {
-                Text(L("drop_files_hint"))
-                    .foregroundColor(.gray)
+        ZStack {
+            // 背景画像（設定されている場合）
+            if let image = backgroundImage {
+                GeometryReader { geometry in
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .clipped()
+                }
+                .ignoresSafeArea()
             }
 
-            Button(L("open_file")) {
-                onOpenFile()
-            }
-            .buttonStyle(.borderedProminent)
+            // 背景画像モードではUIを非表示
+            if !isBackgroundImageOnlyMode {
+                VStack(spacing: 20) {
+                    Text(AppInfo.name)
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
 
-            // 履歴表示
-            HistoryListView(
-                historyState: historyState,
-                isSearchFocused: isSearchFocused,
-                onOpenHistoryFile: onOpenHistoryFile,
-                onOpenInNewWindow: onOpenInNewWindow,
-                onEditMemo: onEditMemo,
-                onEditImageMemo: onEditImageMemo,
-                onOpenImageFile: onOpenImageCatalogFile,
-                onRestoreSession: onRestoreSession
-            )
+                    if let errorMessage = errorMessage {
+                        Text(errorMessage)
+                            .foregroundColor(.red)
+                    } else {
+                        Text(L("drop_files_hint"))
+                            .foregroundColor(.gray)
+                    }
+
+                    Button(L("open_file")) {
+                        onOpenFile()
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    // 履歴表示
+                    HistoryListView(
+                        historyState: historyState,
+                        isSearchFocused: isSearchFocused,
+                        onOpenHistoryFile: onOpenHistoryFile,
+                        onOpenInNewWindow: onOpenInNewWindow,
+                        onEditMemo: onEditMemo,
+                        onEditImageMemo: onEditImageMemo,
+                        onOpenImageFile: onOpenImageCatalogFile,
+                        onRestoreSession: onRestoreSession
+                    )
+                }
+                .padding()
+                .background {
+                    // 背景画像がある場合のみ半透明背景を追加
+                    if backgroundImage != nil {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.black.opacity(0.7))
+                    }
+                }
+            }
         }
     }
 }

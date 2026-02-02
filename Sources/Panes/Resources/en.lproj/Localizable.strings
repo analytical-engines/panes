@@ -98,6 +98,15 @@
 "quit_on_last_window_closed" = "Quit when last window is closed";
 "quit_on_last_window_closed_description" = "When disabled, the app stays in Dock even after all windows are closed";
 
+// MARK: - SettingsView - Initial Screen
+
+"section_initial_screen" = "Initial Screen";
+"background_image" = "Background Image";
+"background_image_none" = "None";
+"background_image_select" = "Select...";
+"background_image_clear" = "Clear";
+"background_image_select_message" = "Select a background image for the initial screen";
+
 // MARK: - SettingsView - History Settings
 
 "section_history_display_settings" = "History Display";
