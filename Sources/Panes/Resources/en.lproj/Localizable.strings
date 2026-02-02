@@ -84,6 +84,8 @@
 "page_jump_count_unit" = "times";
 "scroll_wheel_sensitivity" = "Scroll Wheel Sensitivity";
 "scroll_wheel_sensitivity_help" = "Sensitivity for page turning with mouse wheel (higher = more sensitive)";
+"scroll_wheel_inverted" = "Invert Scroll Direction";
+"scroll_wheel_inverted_help" = "Invert the page turning direction with mouse wheel";
 
 // MARK: - SettingsView - Image Detection
 

@@ -75,6 +75,9 @@ struct GeneralSettingsTab: View {
                         .foregroundColor(.secondary)
                 }
                 .help(L("scroll_wheel_sensitivity_help"))
+
+                Toggle(L("scroll_wheel_inverted"), isOn: $settings.scrollWheelInverted)
+                    .help(L("scroll_wheel_inverted_help"))
             }
 
             Section(L("section_image_detection")) {

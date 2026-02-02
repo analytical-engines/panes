@@ -84,6 +84,8 @@
 "page_jump_count_unit" = "回";
 "scroll_wheel_sensitivity" = "ホイールスクロール感度";
 "scroll_wheel_sensitivity_help" = "マウスホイールでページをめくる際の感度（大きいほど敏感）";
+"scroll_wheel_inverted" = "スクロール方向を反転";
+"scroll_wheel_inverted_help" = "マウスホイールでのページめくり方向を反転します";
 
 // MARK: - SettingsView - Image Detection
 

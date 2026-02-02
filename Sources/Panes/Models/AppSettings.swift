@@ -49,6 +49,7 @@ class AppSettings {
         static let imageCatalogFilter = "imageCatalogFilter"
         static let defaultHistorySearchType = "defaultHistorySearchType"
         static let scrollWheelSensitivity = "scrollWheelSensitivity"
+        static let scrollWheelInverted = "scrollWheelInverted"
         static let initialScreenBackgroundImagePath = "initialScreenBackgroundImagePath"
     }
 
@@ -86,6 +87,11 @@ class AppSettings {
     /// マウスホイールでのページめくり感度（閾値: 小さいほど敏感）
     var scrollWheelSensitivity: Double {
         didSet { defaults.set(scrollWheelSensitivity, forKey: Keys.scrollWheelSensitivity) }
+    }
+
+    /// マウスホイールのスクロール方向を反転
+    var scrollWheelInverted: Bool {
+        didSet { defaults.set(scrollWheelInverted, forKey: Keys.scrollWheelInverted) }
     }
 
     // MARK: - 履歴設定
@@ -248,6 +254,9 @@ class AppSettings {
         } else {
             scrollWheelSensitivity = 2.5  // デフォルト: 2.5
         }
+
+        // マウスホイール方向反転の読み込み
+        scrollWheelInverted = defaults.bool(forKey: Keys.scrollWheelInverted)  // デフォルト: false
 
         // 書庫ファイル履歴最大件数の読み込み
         if defaults.object(forKey: Keys.maxHistoryCount) != nil {

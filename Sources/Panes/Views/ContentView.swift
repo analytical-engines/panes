@@ -1429,6 +1429,11 @@ struct ContentView: View {
                 return event
             }
 
+            // 履歴表示中はイベントを通す（履歴リストのスクロール用）
+            if self.historyState.showHistory {
+                return event
+            }
+
             // Command+ホイール → ズーム（既存動作）
             if event.modifierFlags.contains(.command) {
                 let delta = event.scrollingDeltaY
@@ -1468,7 +1473,10 @@ struct ContentView: View {
 
             // 累積値が閾値を超えたらページめくり
             if abs(ContentView.accumulatedScrollDelta) > threshold {
-                if ContentView.accumulatedScrollDelta > 0 {
+                let scrollUp = ContentView.accumulatedScrollDelta > 0
+                // 方向反転設定を適用
+                let goToPrevious = self.appSettings.scrollWheelInverted ? !scrollUp : scrollUp
+                if goToPrevious {
                     viewModel?.previousPage()
                 } else {
                     viewModel?.nextPage()
