@@ -88,7 +88,23 @@ struct ContentView: View {
                 currentFileName: viewModel.currentFileName,
                 singlePageIndicator: viewModel.singlePageIndicator,
                 pageInfo: viewModel.pageInfo,
-                contextMenuBuilder: { pageIndex in imageContextMenu(for: pageIndex) }
+                contextMenuBuilder: { pageIndex in imageContextMenu(for: pageIndex) },
+                onTapLeft: {
+                    // RTL: 左→次ページ, LTR: 左→前ページ
+                    if viewModel.readingDirection == .rightToLeft {
+                        viewModel.nextPage()
+                    } else {
+                        viewModel.previousPage()
+                    }
+                },
+                onTapRight: {
+                    // RTL: 右→前ページ, LTR: 右→次ページ
+                    if viewModel.readingDirection == .rightToLeft {
+                        viewModel.previousPage()
+                    } else {
+                        viewModel.nextPage()
+                    }
+                }
             )
             .pageIndicatorOverlay(
                 archiveName: viewModel.archiveFileName,
@@ -123,7 +139,23 @@ struct ContentView: View {
                 singlePageIndicator: viewModel.singlePageIndicator,
                 pageInfo: viewModel.pageInfo,
                 copiedPageIndex: copiedPageIndex,
-                contextMenuBuilder: { pageIndex in imageContextMenu(for: pageIndex) }
+                contextMenuBuilder: { pageIndex in imageContextMenu(for: pageIndex) },
+                onTapLeft: {
+                    // RTL: 左→次ページ, LTR: 左→前ページ
+                    if viewModel.readingDirection == .rightToLeft {
+                        viewModel.nextPage()
+                    } else {
+                        viewModel.previousPage()
+                    }
+                },
+                onTapRight: {
+                    // RTL: 右→前ページ, LTR: 右→次ページ
+                    if viewModel.readingDirection == .rightToLeft {
+                        viewModel.previousPage()
+                    } else {
+                        viewModel.nextPage()
+                    }
+                }
             )
             .pageIndicatorOverlay(
                 archiveName: viewModel.archiveFileName,
@@ -1382,13 +1414,11 @@ struct ContentView: View {
         }
     }
 
+    /// ホイールスクロールでページ送りする際の累積スクロール量
+    private static var accumulatedScrollDelta: CGFloat = 0
+
     private func setupScrollWheelMonitor() {
         scrollEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak viewModel] event in
-            // ⌘キーが押されているか確認
-            guard event.modifierFlags.contains(.command) else {
-                return event
-            }
-
             // 自分のウィンドウか確認
             guard self.myWindowNumber == NSApp.keyWindow?.windowNumber else {
                 return event
@@ -1399,17 +1429,53 @@ struct ContentView: View {
                 return event
             }
 
-            // スクロール量を取得（縦スクロールを使用）
-            let delta = event.scrollingDeltaY
-
-            // 感度調整（スクロール量に応じてズーム）
-            let zoomFactor: CGFloat = 1.0 + (delta * 0.01)
-
-            if let currentZoom = viewModel?.zoomLevel {
-                viewModel?.setZoom(currentZoom * zoomFactor)
+            // Command+ホイール → ズーム（既存動作）
+            if event.modifierFlags.contains(.command) {
+                let delta = event.scrollingDeltaY
+                let zoomFactor: CGFloat = 1.0 + (delta * 0.01)
+                if let currentZoom = viewModel?.zoomLevel {
+                    viewModel?.setZoom(currentZoom * zoomFactor)
+                }
+                return nil
             }
 
-            // イベントを消費（通常のスクロールとして処理しない）
+            // 修飾キーなし → ページめくり
+            // ズーム中（zoomLevel > 1.0）または縦横フィット時はスクロール用イベントを通す
+            if let zoomLevel = viewModel?.zoomLevel, zoomLevel > 1.0 {
+                return event
+            }
+            if let fittingMode = viewModel?.fittingMode, fittingMode == .height || fittingMode == .width {
+                return event
+            }
+
+            // スクロール量を累積して閾値を超えたらページ送り
+            let delta = event.scrollingDeltaY
+            // 感度を閾値に変換（感度が高い＝閾値が低い）
+            let threshold = 11.0 - self.appSettings.scrollWheelSensitivity
+
+            // スクロール開始時（phaseが.began）に累積値をリセット
+            if event.phase == .began {
+                ContentView.accumulatedScrollDelta = 0
+            }
+
+            // 慣性スクロール中は無視（意図しないページ送り防止）
+            if event.momentumPhase != [] {
+                return nil
+            }
+
+            // スクロール量を累積
+            ContentView.accumulatedScrollDelta += delta
+
+            // 累積値が閾値を超えたらページめくり
+            if abs(ContentView.accumulatedScrollDelta) > threshold {
+                if ContentView.accumulatedScrollDelta > 0 {
+                    viewModel?.previousPage()
+                } else {
+                    viewModel?.nextPage()
+                }
+                ContentView.accumulatedScrollDelta = 0  // リセット
+            }
+
             return nil
         }
     }

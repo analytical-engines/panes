@@ -46,6 +46,10 @@ struct SinglePageView<ContextMenu: View>: View {
     let singlePageIndicator: String
     let pageInfo: String
     let contextMenuBuilder: (Int) -> ContextMenu
+    /// 左半分クリック時のコールバック
+    var onTapLeft: (() -> Void)? = nil
+    /// 右半分クリック時のコールバック
+    var onTapRight: (() -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -108,6 +112,26 @@ struct SinglePageView<ContextMenu: View>: View {
                     }
                 }
             }
+            // タップでページめくり（ズーム中・縦横フィット時は無効）
+            .overlay {
+                if zoomLevel == 1.0 && fittingMode == .window {
+                    GeometryReader { geo in
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .simultaneousGesture(
+                                SpatialTapGesture()
+                                    .onEnded { value in
+                                        let isLeftHalf = value.location.x < geo.size.width / 2
+                                        if isLeftHalf {
+                                            onTapLeft?()
+                                        } else {
+                                            onTapRight?()
+                                        }
+                                    }
+                            )
+                    }
+                }
+            }
 
             if showStatusBar {
                 StatusBarView(
@@ -143,6 +167,10 @@ struct SpreadPageView<ContextMenu: View>: View {
     let pageInfo: String
     var copiedPageIndex: Int? = nil
     let contextMenuBuilder: (Int) -> ContextMenu
+    /// 左半分クリック時のコールバック
+    var onTapLeft: (() -> Void)? = nil
+    /// 右半分クリック時のコールバック
+    var onTapRight: (() -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -260,6 +288,26 @@ struct SpreadPageView<ContextMenu: View>: View {
                             contextMenuBuilder: contextMenuBuilder
                         )
                         .equatable()
+                    }
+                }
+            }
+            // タップでページめくり（ズーム中・縦横フィット時は無効）
+            .overlay {
+                if zoomLevel == 1.0 && fittingMode == .window {
+                    GeometryReader { geo in
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .simultaneousGesture(
+                                SpatialTapGesture()
+                                    .onEnded { value in
+                                        let isLeftHalf = value.location.x < geo.size.width / 2
+                                        if isLeftHalf {
+                                            onTapLeft?()
+                                        } else {
+                                            onTapRight?()
+                                        }
+                                    }
+                            )
                     }
                 }
             }

@@ -48,6 +48,7 @@ class AppSettings {
         static let quitOnLastWindowClosed = "quitOnLastWindowClosed"
         static let imageCatalogFilter = "imageCatalogFilter"
         static let defaultHistorySearchType = "defaultHistorySearchType"
+        static let scrollWheelSensitivity = "scrollWheelSensitivity"
     }
 
     // MARK: - 表示設定
@@ -79,6 +80,11 @@ class AppSettings {
     /// ページジャンプ回数
     var pageJumpCount: Int {
         didSet { defaults.set(pageJumpCount, forKey: Keys.pageJumpCount) }
+    }
+
+    /// マウスホイールでのページめくり感度（閾値: 小さいほど敏感）
+    var scrollWheelSensitivity: Double {
+        didSet { defaults.set(scrollWheelSensitivity, forKey: Keys.scrollWheelSensitivity) }
     }
 
     // MARK: - 履歴設定
@@ -228,6 +234,13 @@ class AppSettings {
             pageJumpCount = defaults.integer(forKey: Keys.pageJumpCount)
         } else {
             pageJumpCount = 5  // デフォルト: 5回
+        }
+
+        // マウスホイール感度の読み込み
+        if defaults.object(forKey: Keys.scrollWheelSensitivity) != nil {
+            scrollWheelSensitivity = defaults.double(forKey: Keys.scrollWheelSensitivity)
+        } else {
+            scrollWheelSensitivity = 2.5  // デフォルト: 2.5
         }
 
         // 書庫ファイル履歴最大件数の読み込み

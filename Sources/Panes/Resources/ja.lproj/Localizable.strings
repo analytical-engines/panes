@@ -82,6 +82,8 @@
 "show_status_bar" = "ステータスバーを表示";
 "page_jump_count" = "ページジャンプ回数";
 "page_jump_count_unit" = "回";
+"scroll_wheel_sensitivity" = "ホイールスクロール感度";
+"scroll_wheel_sensitivity_help" = "マウスホイールでページをめくる際の感度（大きいほど敏感）";
 
 // MARK: - SettingsView - Image Detection
 
