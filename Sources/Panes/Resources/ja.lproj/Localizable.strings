@@ -24,7 +24,7 @@
 // MARK: - SettingsView - Tabs
 
 "tab_general" = "一般";
-"tab_history" = "履歴";
+"tab_history" = "コンテンツ";
 "tab_shortcut" = "ショートカット";
 
 // MARK: - SettingsView - Shortcut Settings
@@ -109,17 +109,17 @@
 "background_image_clear" = "クリア";
 "background_image_select_message" = "初期画面の背景画像を選択してください";
 
-// MARK: - SettingsView - History Settings
+// MARK: - SettingsView - Content List Settings
 
-"section_history_display_settings" = "履歴表示設定";
-"history_display_mode" = "起動時の履歴表示";
+"section_history_display_settings" = "コンテンツリスト設定";
+"history_display_mode" = "起動時のコンテンツリスト表示";
 "history_display_always_show" = "表示";
 "history_display_always_hide" = "非表示";
 "history_display_restore_last" = "終了時の状態を復元";
 
-// MARK: - SettingsView - History Management
+// MARK: - SettingsView - Content Data Management
 
-"section_history_management" = "履歴情報の管理";
+"section_history_management" = "コンテンツデータの管理";
 "reset_access_counts_label" = "読み込み回数";
 "reset_access_counts" = "リセット";
 "history_label_archive" = "書庫ファイル";
@@ -136,10 +136,10 @@
 // MARK: - Menu Items
 
 "menu_close_file" = "ファイルを閉じる";
-"menu_show_history" = "履歴を表示";
-"menu_show_history_toggle" = "履歴を表示";
-"menu_hide_history" = "履歴を非表示";
-"menu_refresh_history" = "履歴を更新";
+"menu_show_history" = "コンテンツリストを表示";
+"menu_show_history_toggle" = "コンテンツリストを表示";
+"menu_hide_history" = "コンテンツリストを非表示";
+"menu_refresh_history" = "コンテンツリストを更新";
 "menu_single_view" = "単ページ表示";
 "menu_spread_view" = "見開き表示";
 "menu_reading_direction_rtl" = "ページ方向: 右から左";
@@ -233,15 +233,15 @@
 "reset_confirm_ok" = "初期化";
 "reset_confirm_cancel" = "キャンセル";
 
-// MARK: - History Export/Import
+// MARK: - Content Data Export/Import
 
-"menu_history" = "履歴";
-"menu_export_history" = "履歴をExport...";
-"menu_import_history_merge" = "履歴をImport（マージ）...";
-"menu_import_history_replace" = "履歴をImport（置換）...";
-"export_history_panel_title" = "履歴をExport";
-"import_history_panel_title" = "履歴をImport";
-"import_history_success_format" = "%d件の履歴を読み込みました（%@）";
+"menu_history" = "コンテンツデータ";
+"menu_export_history" = "コンテンツデータをExport...";
+"menu_import_history_merge" = "コンテンツデータをImport（マージ）...";
+"menu_import_history_replace" = "コンテンツデータをImport（置換）...";
+"export_history_panel_title" = "コンテンツデータをExport";
+"import_history_panel_title" = "コンテンツデータをImport";
+"import_history_success_format" = "%d件のデータを読み込みました（%@）";
 "import_unified_success_format" = "書庫: %d件、個別画像: %d件、セッション: %d件を読み込みました（%@）";
 "import_history_merged" = "マージ";
 "import_history_replaced" = "置換";

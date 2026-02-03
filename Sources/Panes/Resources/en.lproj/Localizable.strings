@@ -24,7 +24,7 @@
 // MARK: - SettingsView - Tabs
 
 "tab_general" = "General";
-"tab_history" = "History";
+"tab_history" = "Content";
 "tab_shortcut" = "Shortcuts";
 
 // MARK: - SettingsView - Shortcut Settings
@@ -109,17 +109,17 @@
 "background_image_clear" = "Clear";
 "background_image_select_message" = "Select a background image for the initial screen";
 
-// MARK: - SettingsView - History Settings
+// MARK: - SettingsView - Content List Settings
 
-"section_history_display_settings" = "History Display";
-"history_display_mode" = "History on Launch";
+"section_history_display_settings" = "Content List";
+"history_display_mode" = "Content List on Launch";
 "history_display_always_show" = "Show";
 "history_display_always_hide" = "Hide";
 "history_display_restore_last" = "Restore Last State";
 
-// MARK: - SettingsView - History Management
+// MARK: - SettingsView - Content Data Management
 
-"section_history_management" = "History Data";
+"section_history_management" = "Content Data";
 "reset_access_counts_label" = "Access counts";
 "reset_access_counts" = "Reset";
 "history_label_archive" = "Archives";
@@ -136,10 +136,10 @@
 // MARK: - Menu Items
 
 "menu_close_file" = "Close File";
-"menu_show_history" = "Show History";
-"menu_show_history_toggle" = "Show History";
-"menu_hide_history" = "Hide History";
-"menu_refresh_history" = "Refresh History";
+"menu_show_history" = "Show Content List";
+"menu_show_history_toggle" = "Show Content List";
+"menu_hide_history" = "Hide Content List";
+"menu_refresh_history" = "Refresh Content List";
 "menu_single_view" = "Single View";
 "menu_spread_view" = "Spread View";
 "menu_reading_direction_rtl" = "Page Direction: Right to Left";
@@ -233,15 +233,15 @@
 "reset_confirm_ok" = "Reset";
 "reset_confirm_cancel" = "Cancel";
 
-// MARK: - History Export/Import
+// MARK: - Content Data Export/Import
 
-"menu_history" = "History";
-"menu_export_history" = "Export History...";
-"menu_import_history_merge" = "Import History (Merge)...";
-"menu_import_history_replace" = "Import History (Replace)...";
-"export_history_panel_title" = "Export History";
-"import_history_panel_title" = "Import History";
-"import_history_success_format" = "Loaded %d history entries (%@)";
+"menu_history" = "Content Data";
+"menu_export_history" = "Export Content Data...";
+"menu_import_history_merge" = "Import Content Data (Merge)...";
+"menu_import_history_replace" = "Import Content Data (Replace)...";
+"export_history_panel_title" = "Export Content Data";
+"import_history_panel_title" = "Import Content Data";
+"import_history_success_format" = "Loaded %d data entries (%@)";
 "import_unified_success_format" = "Loaded archives: %d, images: %d, sessions: %d (%@)";
 "import_history_merged" = "merged";
 "import_history_replaced" = "replaced";
