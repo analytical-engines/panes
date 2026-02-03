@@ -118,6 +118,7 @@ struct SinglePageView<ContextMenu: View>: View {
                     GeometryReader { geo in
                         Color.clear
                             .contentShape(Rectangle())
+                            .contextMenu { contextMenuBuilder(pageIndex) }
                             .simultaneousGesture(
                                 SpatialTapGesture()
                                     .onEnded { value in
@@ -294,20 +295,77 @@ struct SpreadPageView<ContextMenu: View>: View {
             // タップでページめくり（ズーム中・縦横フィット時は無効）
             .overlay {
                 if zoomLevel == 1.0 && fittingMode == .window {
-                    GeometryReader { geo in
-                        Color.clear
-                            .contentShape(Rectangle())
-                            .simultaneousGesture(
-                                SpatialTapGesture()
-                                    .onEnded { value in
-                                        let isLeftHalf = value.location.x < geo.size.width / 2
-                                        if isLeftHalf {
-                                            onTapLeft?()
-                                        } else {
-                                            onTapRight?()
-                                        }
-                                    }
-                            )
+                    if secondPageImage != nil {
+                        // 見開き表示: 左右で異なるページのコンテキストメニューを表示
+                        // RTL: 左=secondPage, 右=firstPage / LTR: 左=firstPage, 右=secondPage
+                        let leftPageIndex = readingDirection == .rightToLeft ? secondPageIndex : firstPageIndex
+                        let rightPageIndex = readingDirection == .rightToLeft ? firstPageIndex : secondPageIndex
+                        HStack(spacing: 0) {
+                            Color.clear
+                                .contentShape(Rectangle())
+                                .contextMenu { contextMenuBuilder(leftPageIndex) }
+                                .onTapGesture { onTapLeft?() }
+                            Color.clear
+                                .contentShape(Rectangle())
+                                .contextMenu { contextMenuBuilder(rightPageIndex) }
+                                .onTapGesture { onTapRight?() }
+                        }
+                    } else {
+                        // 単ページ表示（見開きモード中）: 画像がある領域のみコンテキストメニューを表示
+                        GeometryReader { geo in
+                            HStack(spacing: 0) {
+                                switch singlePageAlignment {
+                                case .left:
+                                    // 左側に画像、右側は空
+                                    Color.clear
+                                        .contentShape(Rectangle())
+                                        .contextMenu { contextMenuBuilder(firstPageIndex) }
+                                        .simultaneousGesture(
+                                            SpatialTapGesture()
+                                                .onEnded { value in
+                                                    // 左半分全体がタップ領域
+                                                    onTapLeft?()
+                                                }
+                                        )
+                                    Color.clear
+                                        .contentShape(Rectangle())
+                                        .onTapGesture { onTapRight?() }
+                                        // 右側は画像がないのでコンテキストメニューなし
+                                case .right:
+                                    // 左側は空、右側に画像
+                                    Color.clear
+                                        .contentShape(Rectangle())
+                                        .onTapGesture { onTapLeft?() }
+                                        // 左側は画像がないのでコンテキストメニューなし
+                                    Color.clear
+                                        .contentShape(Rectangle())
+                                        .contextMenu { contextMenuBuilder(firstPageIndex) }
+                                        .simultaneousGesture(
+                                            SpatialTapGesture()
+                                                .onEnded { value in
+                                                    // 右半分全体がタップ領域
+                                                    onTapRight?()
+                                                }
+                                        )
+                                case .center:
+                                    // センター配置: 全体が1つの画像
+                                    Color.clear
+                                        .contentShape(Rectangle())
+                                        .contextMenu { contextMenuBuilder(firstPageIndex) }
+                                        .simultaneousGesture(
+                                            SpatialTapGesture()
+                                                .onEnded { value in
+                                                    let isLeftHalf = value.location.x < geo.size.width / 2
+                                                    if isLeftHalf {
+                                                        onTapLeft?()
+                                                    } else {
+                                                        onTapRight?()
+                                                    }
+                                                }
+                                        )
+                                }
+                            }
+                        }
                     }
                 }
             }
