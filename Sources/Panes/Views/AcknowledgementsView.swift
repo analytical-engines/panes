@@ -32,9 +32,9 @@ struct AcknowledgementsView: View {
         ),
         LibraryLicense(
             name: "Unrar.swift",
-            url: "https://github.com/mtaku3/Unrar.swift",
+            url: "https://github.com/mtgto/Unrar.swift",
             license: "MIT",
-            copyright: "Copyright (c) 2023 mtaku3"
+            copyright: "Copyright (c) 2021 mtgto"
         ),
         LibraryLicense(
             name: "swift-system",
@@ -44,9 +44,9 @@ struct AcknowledgementsView: View {
         ),
         LibraryLicense(
             name: "ZipArchive (swift-zip-archive)",
-            url: "https://github.com/ArakiTakaki/swift-zip-archive",
+            url: "https://github.com/adam-fowler/swift-zip-archive",
             license: "Apache 2.0",
-            copyright: "Copyright (c) 2023 ArakiTakaki"
+            copyright: "Copyright 2025 Adam Fowler"
         ),
     ]
 
