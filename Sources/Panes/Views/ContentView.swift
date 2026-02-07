@@ -82,6 +82,9 @@ struct ContentView: View {
     // ページ遷移スナップショットオーバーレイのオフセット
     @State private var transitionOverlayOffset: CGFloat = 0
 
+    // マウスドラッグスワイプ: 発火済みフラグ（ドラッグ中に1回だけ発火）
+    @State private var dragSwipeTriggered: Bool = false
+
     // メインビューのフォーカス管理
     @FocusState private var isMainViewFocused: Bool
 
@@ -149,6 +152,27 @@ struct ContentView: View {
                         }
                     }
                 }
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 20)
+                        .onChanged { value in
+                            guard !dragSwipeTriggered else { return }
+                            let horizontalDrag = value.translation.width
+                            // 水平方向が十分で、かつ縦より水平が優勢な場合のみ
+                            if abs(horizontalDrag) > 50 && abs(horizontalDrag) > abs(value.translation.height) {
+                                dragSwipeTriggered = true
+                                if horizontalDrag > 0 {
+                                    // 右にドラッグ → 前のページ
+                                    viewModel.previousPage()
+                                } else {
+                                    // 左にドラッグ → 次のページ
+                                    viewModel.nextPage()
+                                }
+                            }
+                        }
+                        .onEnded { _ in
+                            dragSwipeTriggered = false
+                        }
+                )
         }
     }
 
