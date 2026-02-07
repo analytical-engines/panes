@@ -55,6 +55,32 @@ enum PageDisplay: Equatable {
     }
 }
 
+// MARK: - AppMode
+
+/// アプリケーションのプライマリ状態
+enum AppMode: Equatable {
+    case initial                      // 初期画面（ファイル未選択）
+    case loading(phase: LoadingPhase) // ファイル読み込み中
+    case viewing                      // 画像閲覧中
+}
+
+/// ファイル読み込み中のフェーズ
+enum LoadingPhase: Equatable {
+    case preparing        // ファイル準備中
+    case restoringState   // 状態復元中
+    case loadingImage     // 画像読み込み中
+    case custom(String)   // カスタムメッセージ（書庫展開など）
+
+    var displayText: String {
+        switch self {
+        case .preparing: return L("loading_phase_processing")
+        case .restoringState: return L("loading_phase_restoring_state")
+        case .loadingImage: return L("loading_phase_loading_image")
+        case .custom(let message): return message
+        }
+    }
+}
+
 /// 書籍（画像アーカイブ）の表示状態を管理するViewModel
 @MainActor
 @Observable
@@ -498,8 +524,52 @@ class BookViewModel {
     // エラーメッセージ
     var errorMessage: String?
 
-    // 読み込み中のフェーズ（ローディング画面に表示）
-    var loadingPhase: String?
+    // MARK: - AppMode
+
+    /// アプリケーションのプライマリ状態
+    private(set) var appMode: AppMode = .initial
+
+    /// ファイルが開いているかどうか（後方互換用の計算プロパティ）
+    var hasOpenFile: Bool {
+        if case .viewing = appMode { return true }
+        return false
+    }
+
+    /// 読み込み中かどうか（後方互換用の計算プロパティ）
+    var isLoading: Bool {
+        if case .loading = appMode { return true }
+        return false
+    }
+
+    /// 読み込み中のフェーズ（ローディング画面に表示）- 後方互換用の計算プロパティ
+    var loadingPhase: String? {
+        if case .loading(let phase) = appMode {
+            return phase.displayText
+        }
+        return nil
+    }
+
+    /// 読み込みを開始
+    func startLoading(phase: LoadingPhase = .preparing) {
+        appMode = .loading(phase: phase)
+    }
+
+    /// 読み込みフェーズを更新
+    func updateLoadingPhase(_ phase: LoadingPhase) {
+        if case .loading = appMode {
+            appMode = .loading(phase: phase)
+        }
+    }
+
+    /// 読み込み完了（viewing状態に遷移）
+    func finishLoading() {
+        appMode = .viewing
+    }
+
+    /// 初期状態にリセット
+    func resetToInitial() {
+        appMode = .initial
+    }
 
     // 表示モード
     var viewMode: ViewMode = .single
@@ -546,6 +616,7 @@ class BookViewModel {
         let fileKey: String
         let filePath: String
         let pendingSource: ImageSource
+        let isPasswordProtected: Bool
     }
 
     /// ダイアログに表示する情報（ダイアログ表示中のみ有効）
@@ -643,11 +714,9 @@ class BookViewModel {
         errorMessage = nil
         pageDisplaySettings = PageDisplaySettings()
         currentFilePath = nil
-    }
 
-    /// ファイルが開いているかどうか
-    var hasOpenFile: Bool {
-        return imageSource != nil
+        // AppModeを初期状態にリセット
+        resetToInitial()
     }
 
     /// 現在表示中が書庫/フォルダ内の画像かどうか（個別画像ファイルでない）
@@ -735,7 +804,8 @@ class BookViewModel {
     /// - Parameters:
     ///   - source: 画像ソース
     ///   - recordToHistory: 書庫履歴に記録するかどうか（デフォルト: true）
-    func openSource(_ source: ImageSource, recordToHistory: Bool = true) {
+    ///   - isPasswordProtected: パスワード保護されたアーカイブかどうか（デフォルト: false）
+    func openSource(_ source: ImageSource, recordToHistory: Bool = true, isPasswordProtected: Bool = false) {
         let openSourceStart = CFAbsoluteTimeGetCurrent()
 
         guard source.imageCount > 0 else {
@@ -776,13 +846,13 @@ class BookViewModel {
 
         // 個別画像ファイルの場合はファイル同一性チェックをスキップ（書庫履歴に記録しないため）
         if source.isStandaloneImageSource {
-            completeOpenSource(source, recordAccess: true)
+            completeOpenSource(source, recordAccess: true, isPasswordProtected: isPasswordProtected)
             return
         }
 
         // 書庫履歴に記録しない場合はファイル同一性チェックもスキップ
         if !recordToHistory {
-            completeOpenSource(source, recordAccess: false)
+            completeOpenSource(source, recordAccess: false, isPasswordProtected: isPasswordProtected)
             return
         }
 
@@ -805,7 +875,7 @@ class BookViewModel {
             switch checkResult {
             case .exactMatch, .newFile:
                 // 完全一致または新規ファイル: そのまま開く
-                completeOpenSource(source, recordAccess: true)
+                completeOpenSource(source, recordAccess: true, isPasswordProtected: isPasswordProtected)
 
             case .differentName(let existingEntry):
                 // ファイル名が異なる: ダイアログを表示
@@ -814,13 +884,14 @@ class BookViewModel {
                     existingEntry: existingEntry,
                     fileKey: fileKey,
                     filePath: url.path,
-                    pendingSource: source
+                    pendingSource: source,
+                    isPasswordProtected: isPasswordProtected
                 )
                 showFileIdentityDialog = true
             }
         } else {
             // 履歴マネージャーがない場合やfileKeyが取得できない場合はそのまま開く
-            completeOpenSource(source, recordAccess: false)
+            completeOpenSource(source, recordAccess: false, isPasswordProtected: isPasswordProtected)
         }
 
         let openSourceTime = (CFAbsoluteTimeGetCurrent() - openSourceStart) * 1000
@@ -842,12 +913,13 @@ class BookViewModel {
                 filePath: info.filePath,
                 fileName: info.newFileName,
                 existingEntry: info.existingEntry,
-                choice: choice
+                choice: choice,
+                isPasswordProtected: info.isPasswordProtected
             )
 
             // ソースを開く（履歴は既に記録済み）
             // 「別のファイルとして扱う」の場合はデフォルト設定が自然に適用される
-            completeOpenSource(info.pendingSource, recordAccess: false)
+            completeOpenSource(info.pendingSource, recordAccess: false, isPasswordProtected: info.isPasswordProtected)
         }
         // キャンセルの場合は何もしない（ファイルを開かない）
 
@@ -859,7 +931,7 @@ class BookViewModel {
 
     /// パスワードダイアログを表示
     private func showPasswordDialogFor(url: URL, errorMessage: String? = nil) {
-        loadingPhase = nil  // ローディング状態をリセット
+        resetToInitial()  // ローディング状態をリセット
         passwordDialogInfo = PasswordDialogInfo(
             url: url,
             fileName: url.lastPathComponent,
@@ -890,7 +962,7 @@ class BookViewModel {
     func handlePasswordCancel() {
         showPasswordDialog = false
         passwordDialogInfo = nil
-        loadingPhase = nil  // ローディング状態をリセット
+        resetToInitial()  // ローディング状態をリセット
         errorMessage = L("error_password_protected")
     }
 
@@ -920,8 +992,8 @@ class BookViewModel {
 
         return await MainActor.run {
             if let source = source, source.imageCount > 0 {
-                // 成功: ソースを開く
-                openSource(source)
+                // 成功: ソースを開く（パスワード保護フラグを設定）
+                openSource(source, isPasswordProtected: true)
                 return true
             } else {
                 // 失敗: パスワードが間違っている可能性
@@ -935,7 +1007,7 @@ class BookViewModel {
     }
 
     /// ソースを開く処理の完了（共通部分）
-    private func completeOpenSource(_ source: ImageSource, recordAccess: Bool) {
+    private func completeOpenSource(_ source: ImageSource, recordAccess: Bool, isPasswordProtected: Bool = false) {
         let totalStart = CFAbsoluteTimeGetCurrent()
 
         // 前のソースのキャッシュをクリア
@@ -962,14 +1034,15 @@ class BookViewModel {
             historyManager?.recordAccess(
                 fileKey: fileKey,
                 filePath: url.path,
-                fileName: source.sourceName
+                fileName: source.sourceName,
+                isPasswordProtected: isPasswordProtected
             )
         }
         let recordTime = (CFAbsoluteTimeGetCurrent() - recordStart) * 1000
         DebugLogger.log("⏱️ completeOpenSource: recordAccess: \(String(format: "%.1f", recordTime))ms", level: .normal)
 
         // フェーズ3: 表示状態を復元
-        loadingPhase = L("loading_phase_restoring_state")
+        updateLoadingPhase(.restoringState)
 
         // 保存された表示状態を復元
         let restoreStart = CFAbsoluteTimeGetCurrent()
@@ -978,7 +1051,7 @@ class BookViewModel {
         DebugLogger.log("⏱️ completeOpenSource: restoreViewState: \(String(format: "%.1f", restoreTime))ms", level: .normal)
 
         // フェーズ4: 画像を読み込む
-        loadingPhase = L("loading_phase_loading_image")
+        updateLoadingPhase(.loadingImage)
 
         // 画像を読み込む（復元されたページ）
         let loadStart = CFAbsoluteTimeGetCurrent()
@@ -986,14 +1059,14 @@ class BookViewModel {
         let loadTime = (CFAbsoluteTimeGetCurrent() - loadStart) * 1000
         DebugLogger.log("⏱️ completeOpenSource: loadCurrentPage: \(String(format: "%.1f", loadTime))ms", level: .normal)
 
-        // 読み込み完了
-        loadingPhase = nil
+        // 読み込み完了 - viewing状態に遷移
+        finishLoading()
 
         let totalTime = (CFAbsoluteTimeGetCurrent() - totalStart) * 1000
         DebugLogger.log("⏱️ completeOpenSource total: \(String(format: "%.1f", totalTime))ms", level: .normal)
 
         // デバッグ：読み込み完了時のWindowCoordinator状態を確認
-        DebugLogger.log("📬 File opened: hasOpenFile=\(hasOpenFile)", level: .verbose)
+        DebugLogger.log("📬 File opened: hasOpenFile=\(hasOpenFile), appMode=\(appMode)", level: .verbose)
         WindowCoordinator.shared.logCurrentState()
         // Note: メニュー状態はNSMenuDelegateで動的に更新されるため、notifyHistoryUpdate()は不要
     }
@@ -1014,19 +1087,22 @@ class BookViewModel {
             return
         }
 
+        // loading状態に遷移
+        startLoading(phase: .preparing)
+
         // バックグラウンドで読み込み、完了後にUI更新
         Task {
             // 進捗報告用コールバック
             let onPhaseChange: @Sendable (String) async -> Void = { [weak self] phase in
                 await MainActor.run {
-                    self?.loadingPhase = phase
+                    self?.updateLoadingPhase(.custom(phase))
                 }
             }
 
             // エラー報告用コールバック（MainActorで直接errorMessageに設定）
             let onError: @Sendable (String) async -> Void = { [weak self] error in
                 await MainActor.run {
-                    self?.loadingPhase = nil
+                    self?.resetToInitial()
                     self?.errorMessage = error
                 }
             }
@@ -1034,12 +1110,12 @@ class BookViewModel {
             let source = await Self.loadImageSource(from: urls, onPhaseChange: onPhaseChange, onError: onError)
             if let source = source {
                 // フェーズ: ソースを処理
-                loadingPhase = L("loading_phase_processing")
+                updateLoadingPhase(.preparing)
                 await Task.yield()
 
                 self.openSource(source, recordToHistory: recordToHistory)
             } else {
-                loadingPhase = nil
+                resetToInitial()
                 // エラーコールバックで設定されていない場合のみ汎用エラーを設定
                 if self.errorMessage == nil {
                     self.errorMessage = L("error_cannot_open_file")

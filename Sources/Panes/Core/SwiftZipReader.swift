@@ -161,6 +161,9 @@ class SwiftZipReader {
             if errorString.contains("encrypted") || errorString.contains("password") {
                 needsPassword = true
                 DebugLogger.log("ERROR: SwiftZipReader: Password required for \(filename)", level: .minimal)
+            } else if errorString.contains("unsupportedCompressionMethod") {
+                // Deflate64などの非対応圧縮形式
+                DebugLogger.log("ERROR: SwiftZipReader: Unsupported compression method for \(filename) (possibly Deflate64)", level: .minimal)
             } else {
                 DebugLogger.log("ERROR: SwiftZipReader: Failed to extract \(filename): \(error)", level: .minimal)
             }

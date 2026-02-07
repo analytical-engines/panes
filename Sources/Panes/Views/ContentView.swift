@@ -71,10 +71,44 @@ struct ContentView: View {
 
     @ViewBuilder
     private var mainContent: some View {
-        // isWaitingForFileを最優先でチェック（D&D時にローディング画面を表示するため）
-        if isWaitingForFile {
+        switch viewModel.appMode {
+        case .initial:
+            // 初期画面（ファイル未選択）
+            InitialScreenView(
+                errorMessage: viewModel.errorMessage,
+                historyState: historyState,
+                isSearchFocused: $isHistorySearchFocused,
+                onOpenFile: openFilePicker,
+                onOpenHistoryFile: openHistoryFile,
+                onOpenInNewWindow: openInNewWindow,
+                onEditMemo: { fileKey, currentMemo in
+                    modalState.openMemoEditForHistory(fileKey: fileKey, memo: currentMemo)
+                },
+                onEditImageMemo: { id, currentMemo in
+                    modalState.openMemoEditForCatalog(catalogId: id, memo: currentMemo)
+                },
+                onOpenImageCatalogFile: openImageCatalogFile,
+                onRestoreSession: { session in
+                    sessionGroupManager.updateLastAccessed(id: session.id)
+                    sessionManager.restoreSessionGroup(session)
+                }
+            )
+            .contextMenu { initialScreenContextMenu }
+
+        case .loading:
+            // ファイル読み込み中
             LoadingView(phase: viewModel.loadingPhase)
-        } else if viewModel.viewMode == .single, let image = viewModel.currentImage {
+
+        case .viewing:
+            // 画像閲覧中
+            viewingContent
+        }
+    }
+
+    /// 画像閲覧中のコンテンツ（viewing状態用）
+    @ViewBuilder
+    private var viewingContent: some View {
+        if viewModel.viewMode == .single, let image = viewModel.currentImage {
             SinglePageView(
                 image: image,
                 pageIndex: viewModel.currentPage,
@@ -170,26 +204,8 @@ struct ContentView: View {
                 onJumpToPage: { viewModel.goToPage($0) }
             )
         } else {
-            InitialScreenView(
-                errorMessage: viewModel.errorMessage,
-                historyState: historyState,
-                isSearchFocused: $isHistorySearchFocused,
-                onOpenFile: openFilePicker,
-                onOpenHistoryFile: openHistoryFile,
-                onOpenInNewWindow: openInNewWindow,
-                onEditMemo: { fileKey, currentMemo in
-                    modalState.openMemoEditForHistory(fileKey: fileKey, memo: currentMemo)
-                },
-                onEditImageMemo: { id, currentMemo in
-                    modalState.openMemoEditForCatalog(catalogId: id, memo: currentMemo)
-                },
-                onOpenImageCatalogFile: openImageCatalogFile,
-                onRestoreSession: { session in
-                    sessionGroupManager.updateLastAccessed(id: session.id)
-                    sessionManager.restoreSessionGroup(session)
-                }
-            )
-            .contextMenu { initialScreenContextMenu }
+            // viewing状態だが画像がまだ読み込まれていない場合のフォールバック
+            LoadingView(phase: viewModel.loadingPhase)
         }
     }
 
@@ -1361,6 +1377,8 @@ struct ContentView: View {
         alert.messageText = L("session_restore_error_title")
         alert.informativeText = String(format: L("session_restore_file_not_found"), fileName)
         alert.alertStyle = .warning
+        // ウィンドウスイッチャーに表示されないように設定
+        alert.window.collectionBehavior = [.transient, .ignoresCycle]
         alert.runModal()
     }
 

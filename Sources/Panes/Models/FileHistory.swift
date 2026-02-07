@@ -27,6 +27,8 @@ struct FileHistoryEntry: Codable, Identifiable {
     var sortMethod: String?
     /// ソート逆順
     var sortReversed: Bool?
+    /// パスワード保護されているか
+    var isPasswordProtected: Bool?
 
     /// ファイルがアクセス可能かどうか（表示時にチェック、LazyVStackにより表示行のみ）
     var isAccessible: Bool {
@@ -54,7 +56,7 @@ struct FileHistoryEntry: Codable, Identifiable {
     // Codable用のCodingKeys
     private enum CodingKeys: String, CodingKey {
         case id, fileKey, pageSettingsRef, filePath, fileName, lastAccessDate, accessCount, memo
-        case viewMode, savedPage, readingDirection, sortMethod, sortReversed
+        case viewMode, savedPage, readingDirection, sortMethod, sortReversed, isPasswordProtected
     }
 
     init(fileKey: String, filePath: String, fileName: String) {
@@ -71,10 +73,11 @@ struct FileHistoryEntry: Codable, Identifiable {
         self.readingDirection = nil
         self.sortMethod = nil
         self.sortReversed = nil
+        self.isPasswordProtected = nil
     }
 
     init(id: String, fileKey: String, pageSettingsRef: String?, filePath: String, fileName: String, lastAccessDate: Date, accessCount: Int, memo: String? = nil,
-         viewMode: String? = nil, savedPage: Int? = nil, readingDirection: String? = nil, sortMethod: String? = nil, sortReversed: Bool? = nil) {
+         viewMode: String? = nil, savedPage: Int? = nil, readingDirection: String? = nil, sortMethod: String? = nil, sortReversed: Bool? = nil, isPasswordProtected: Bool? = nil) {
         self.id = id
         self.fileKey = fileKey
         self.pageSettingsRef = pageSettingsRef
@@ -88,6 +91,7 @@ struct FileHistoryEntry: Codable, Identifiable {
         self.readingDirection = readingDirection
         self.sortMethod = sortMethod
         self.sortReversed = sortReversed
+        self.isPasswordProtected = isPasswordProtected
     }
 
     // Decodable
@@ -106,6 +110,7 @@ struct FileHistoryEntry: Codable, Identifiable {
         self.readingDirection = try container.decodeIfPresent(String.self, forKey: .readingDirection)
         self.sortMethod = try container.decodeIfPresent(String.self, forKey: .sortMethod)
         self.sortReversed = try container.decodeIfPresent(Bool.self, forKey: .sortReversed)
+        self.isPasswordProtected = try container.decodeIfPresent(Bool.self, forKey: .isPasswordProtected)
     }
 
     /// エントリIDを生成（ファイル名+fileKeyのハッシュ）
@@ -859,7 +864,8 @@ class FileHistoryManager {
         fileName: String,
         lastAccessDate: Date,
         accessCount: Int,
-        memo: String?
+        memo: String?,
+        isPasswordProtected: Bool? = nil
     ) {
         // 既存エントリを探して削除
         history.removeAll { $0.id == id }
@@ -873,7 +879,8 @@ class FileHistoryManager {
             fileName: fileName,
             lastAccessDate: lastAccessDate,
             accessCount: accessCount,
-            memo: memo
+            memo: memo,
+            isPasswordProtected: isPasswordProtected
         )
         history.insert(entry, at: 0)
 
@@ -950,15 +957,15 @@ class FileHistoryManager {
     // MARK: - Record Access
 
     /// ファイルアクセスを記録
-    func recordAccess(fileKey: String, filePath: String, fileName: String) {
-        DebugLogger.log("📊 recordAccess called: \(fileName)", level: .normal)
+    func recordAccess(fileKey: String, filePath: String, fileName: String, isPasswordProtected: Bool = false) {
+        DebugLogger.log("📊 recordAccess called: \(fileName), isPasswordProtected=\(isPasswordProtected)", level: .normal)
 
         guard isInitialized else {
             // SwiftData未初期化時は記録しない
             DebugLogger.log("⚠️ recordAccess skipped: SwiftData not initialized", level: .normal)
             return
         }
-        recordAccessWithSwiftData(fileKey: fileKey, filePath: filePath, fileName: fileName)
+        recordAccessWithSwiftData(fileKey: fileKey, filePath: filePath, fileName: fileName, isPasswordProtected: isPasswordProtected)
     }
 
     /// ユーザーの選択に基づいてファイルアクセスを記録
@@ -968,24 +975,26 @@ class FileHistoryManager {
     ///   - fileName: ファイル名
     ///   - existingEntry: 既存の履歴エントリ（ページ設定の参照元）
     ///   - choice: ユーザーの選択
+    ///   - isPasswordProtected: パスワード保護されたアーカイブかどうか
     func recordAccessWithChoice(
         fileKey: String,
         filePath: String,
         fileName: String,
         existingEntry: FileHistoryEntry,
-        choice: FileIdentityChoice
+        choice: FileIdentityChoice,
+        isPasswordProtected: Bool = false
     ) {
         switch choice {
         case .treatAsSame:
             // 同一ファイルとして扱う：新しいエントリを作成し、pageSettingsRefで参照
             // 既存エントリがページ設定を持っていればそのIDを参照、なければ参照先を辿る
             let pageSettingsOwner = existingEntry.pageSettingsRef ?? existingEntry.id
-            recordAccessWithPageSettingsRef(fileKey: fileKey, filePath: filePath, fileName: fileName, pageSettingsRef: pageSettingsOwner)
+            recordAccessWithPageSettingsRef(fileKey: fileKey, filePath: filePath, fileName: fileName, pageSettingsRef: pageSettingsOwner, isPasswordProtected: isPasswordProtected)
 
         case .copySettings:
             // ページ設定を引き継ぐ：新しいエントリを作成し、設定をコピー
             let existingSettings = loadPageDisplaySettingsWithRef(for: existingEntry)
-            recordAccessAsNewEntry(fileKey: fileKey, filePath: filePath, fileName: fileName)
+            recordAccessAsNewEntry(fileKey: fileKey, filePath: filePath, fileName: fileName, isPasswordProtected: isPasswordProtected)
             if let settings = existingSettings {
                 // 新しいエントリに設定を保存
                 let newEntryId = FileHistoryEntry.generateId(fileName: fileName, fileKey: fileKey)
@@ -994,21 +1003,21 @@ class FileHistoryManager {
 
         case .treatAsDifferent:
             // 別のファイルとして扱う：新しいエントリを作成（設定なし）
-            recordAccessAsNewEntry(fileKey: fileKey, filePath: filePath, fileName: fileName)
+            recordAccessAsNewEntry(fileKey: fileKey, filePath: filePath, fileName: fileName, isPasswordProtected: isPasswordProtected)
         }
     }
 
     /// pageSettingsRefを指定してアクセスを記録
-    private func recordAccessWithPageSettingsRef(fileKey: String, filePath: String, fileName: String, pageSettingsRef: String) {
+    private func recordAccessWithPageSettingsRef(fileKey: String, filePath: String, fileName: String, pageSettingsRef: String, isPasswordProtected: Bool = false) {
         guard isInitialized else {
             DebugLogger.log("⚠️ recordAccessWithPageSettingsRef skipped: SwiftData not initialized", level: .normal)
             return
         }
-        recordAccessWithPageSettingsRefSwiftData(fileKey: fileKey, filePath: filePath, fileName: fileName, pageSettingsRef: pageSettingsRef)
+        recordAccessWithPageSettingsRefSwiftData(fileKey: fileKey, filePath: filePath, fileName: fileName, pageSettingsRef: pageSettingsRef, isPasswordProtected: isPasswordProtected)
     }
 
     /// SwiftDataでpageSettingsRefを指定してアクセスを記録
-    private func recordAccessWithPageSettingsRefSwiftData(fileKey: String, filePath: String, fileName: String, pageSettingsRef: String) {
+    private func recordAccessWithPageSettingsRefSwiftData(fileKey: String, filePath: String, fileName: String, pageSettingsRef: String, isPasswordProtected: Bool = false) {
         guard let context = modelContext else { return }
 
         do {
@@ -1025,6 +1034,7 @@ class FileHistoryManager {
             let now = Date()
             var newAccessCount = 1
             var memo: String? = nil
+            var passwordProtected: Bool? = isPasswordProtected ? true : nil
 
             if let existing = results.first {
                 // 既存エントリを更新
@@ -1032,11 +1042,19 @@ class FileHistoryManager {
                 existing.accessCount += 1
                 existing.filePath = filePath
                 existing.pageSettingsRef = pageSettingsRef
+                // パスワード保護フラグは一度trueになったら維持
+                if isPasswordProtected {
+                    existing.isPasswordProtected = true
+                }
                 newAccessCount = existing.accessCount
                 memo = existing.memo
+                passwordProtected = existing.isPasswordProtected
             } else {
                 // 新規エントリを作成
                 let newData = FileHistoryData(fileKey: fileKey, pageSettingsRef: pageSettingsRef, filePath: filePath, fileName: fileName)
+                if isPasswordProtected {
+                    newData.isPasswordProtected = true
+                }
                 context.insert(newData)
 
                 // 上限チェック
@@ -1054,7 +1072,8 @@ class FileHistoryManager {
                 fileName: fileName,
                 lastAccessDate: now,
                 accessCount: newAccessCount,
-                memo: memo
+                memo: memo,
+                isPasswordProtected: passwordProtected
             )
         } catch {
             DebugLogger.log("❌ Failed to record access with pageSettingsRef: \(error)", level: .minimal)
@@ -1080,20 +1099,23 @@ class FileHistoryManager {
     }
 
     /// 新規エントリとしてアクセスを記録（既存エントリを更新しない）
-    private func recordAccessAsNewEntry(fileKey: String, filePath: String, fileName: String) {
+    private func recordAccessAsNewEntry(fileKey: String, filePath: String, fileName: String, isPasswordProtected: Bool = false) {
         guard isInitialized else {
             DebugLogger.log("⚠️ recordAccessAsNewEntry skipped: SwiftData not initialized", level: .normal)
             return
         }
-        recordAccessAsNewEntryWithSwiftData(fileKey: fileKey, filePath: filePath, fileName: fileName)
+        recordAccessAsNewEntryWithSwiftData(fileKey: fileKey, filePath: filePath, fileName: fileName, isPasswordProtected: isPasswordProtected)
     }
 
     /// SwiftDataで新規エントリとして記録
-    private func recordAccessAsNewEntryWithSwiftData(fileKey: String, filePath: String, fileName: String) {
+    private func recordAccessAsNewEntryWithSwiftData(fileKey: String, filePath: String, fileName: String, isPasswordProtected: Bool = false) {
         guard let context = modelContext else { return }
 
         do {
             let newData = FileHistoryData(fileKey: fileKey, filePath: filePath, fileName: fileName)
+            if isPasswordProtected {
+                newData.isPasswordProtected = true
+            }
             context.insert(newData)
 
             // 上限チェック
@@ -1125,7 +1147,8 @@ class FileHistoryManager {
                 fileName: fileName,
                 lastAccessDate: now,
                 accessCount: 1,
-                memo: nil
+                memo: nil,
+                isPasswordProtected: isPasswordProtected ? true : nil
             )
         } catch {
             DebugLogger.log("❌ Failed to record access as new entry: \(error)", level: .minimal)
@@ -1133,7 +1156,7 @@ class FileHistoryManager {
     }
 
     /// SwiftDataでアクセス記録
-    private func recordAccessWithSwiftData(fileKey: String, filePath: String, fileName: String) {
+    private func recordAccessWithSwiftData(fileKey: String, filePath: String, fileName: String, isPasswordProtected: Bool) {
         guard let context = modelContext else { return }
 
         do {
@@ -1148,18 +1171,27 @@ class FileHistoryManager {
             let now = Date()
             var newAccessCount = 1
             var memo: String? = nil
+            var passwordProtected: Bool? = isPasswordProtected ? true : nil
 
             if let historyData = existing.first {
                 // 既存エントリを更新
                 historyData.lastAccessDate = now
                 historyData.accessCount += 1
                 historyData.filePath = filePath
+                // パスワード保護フラグは一度trueになったら維持
+                if isPasswordProtected {
+                    historyData.isPasswordProtected = true
+                }
                 newAccessCount = historyData.accessCount
                 memo = historyData.memo
+                passwordProtected = historyData.isPasswordProtected
             } else {
                 // 新規エントリを作成
                 DebugLogger.log("📊 recordAccess: creating new entry for \(fileName), id=\(entryId)", level: .normal)
                 let newData = FileHistoryData(fileKey: fileKey, filePath: filePath, fileName: fileName)
+                if isPasswordProtected {
+                    newData.isPasswordProtected = true
+                }
                 context.insert(newData)
 
                 try enforceHistoryLimit(context: context)
@@ -1176,7 +1208,8 @@ class FileHistoryManager {
                 fileName: fileName,
                 lastAccessDate: now,
                 accessCount: newAccessCount,
-                memo: memo
+                memo: memo,
+                isPasswordProtected: passwordProtected
             )
         } catch {
             DebugLogger.log("❌ Failed to record access: \(error)", level: .minimal)

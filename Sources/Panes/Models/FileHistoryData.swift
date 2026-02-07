@@ -41,6 +41,9 @@ final class FileHistoryData {
     /// ソート逆順
     var sortReversed: Bool?
 
+    /// パスワード保護されているか
+    var isPasswordProtected: Bool?
+
     /// ワークスペースID（""=デフォルト、将来のworkspace機能で使用）
     var workspaceId: String = ""
 
@@ -93,7 +96,8 @@ final class FileHistoryData {
             savedPage: savedPage,
             readingDirection: readingDirection,
             sortMethod: sortMethod,
-            sortReversed: sortReversed
+            sortReversed: sortReversed,
+            isPasswordProtected: isPasswordProtected
         )
     }
 

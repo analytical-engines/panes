@@ -356,6 +356,10 @@ struct HistoryListView: View {
                                 Button(action: { insertSearchFilter("type:session ") }) {
                                     Label(L("search_type_session"), systemImage: "square.stack.3d.up")
                                 }
+                                Divider()
+                                Button(action: { insertSearchFilter("is:locked ") }) {
+                                    Label(L("search_filter_locked"), systemImage: "lock.fill")
+                                }
                             } label: {
                                 Image(systemName: "line.3.horizontal.decrease.circle")
                                     .foregroundColor(.gray)
@@ -579,7 +583,12 @@ struct HistoryListView: View {
         "type:session "
     ]
 
-    /// 入力補完候補を計算する（type:プレフィックス用）
+    /// is:プレフィックスの候補リスト
+    private let isFilterSuggestions = [
+        "is:locked "
+    ]
+
+    /// 入力補完候補を計算する（type:/is:プレフィックス用）
     private func computeSuggestions(
         from searchResult: UnifiedSearchResult,
         query: String
@@ -588,8 +597,15 @@ struct HistoryListView: View {
 
         let lowercaseQuery = query.lowercased()
 
-        // 既にtype:プレフィックスが完成している場合は候補なし
+        // 既にtype:プレフィックスが完成している場合
         if lowercaseQuery.hasPrefix("type:") && lowercaseQuery.contains(" ") {
+            // スペース後のテキストでis:候補をチェック
+            let afterSpace = String(lowercaseQuery.split(separator: " ", maxSplits: 1).last ?? "")
+            return computeIsFilterSuggestions(afterSpace)
+        }
+
+        // 既にis:プレフィックスが完成している場合
+        if lowercaseQuery.hasPrefix("is:") && lowercaseQuery.contains(" ") {
             return []
         }
 
@@ -609,6 +625,25 @@ struct HistoryListView: View {
             }
         }
 
+        // "i", "is", "is:" などで始まる場合にis:候補を表示
+        return computeIsFilterSuggestions(lowercaseQuery)
+    }
+
+    /// is:フィルター候補を計算
+    private func computeIsFilterSuggestions(_ lowercaseQuery: String) -> [String] {
+        let isPrefix = "is:"
+        if isPrefix.hasPrefix(lowercaseQuery) || lowercaseQuery.hasPrefix("is:") {
+            if lowercaseQuery.hasPrefix("is:") {
+                let afterIs = String(lowercaseQuery.dropFirst(3))  // "is:" の後
+                return isFilterSuggestions.filter {
+                    let suggestionAfterIs = String($0.dropFirst(3).dropLast())  // "is:" と末尾スペースを除去
+                    return suggestionAfterIs.hasPrefix(afterIs)
+                }
+            } else {
+                // "i", "is" の場合は全候補
+                return isFilterSuggestions
+            }
+        }
         return []
     }
 
@@ -1198,6 +1233,11 @@ struct HistoryEntryRow: View {
             }) {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack {
+                        // パスワード保護マーク
+                        if entry.isPasswordProtected == true {
+                            Text("🔒")
+                                .font(.caption)
+                        }
                         Text(entry.fileName)
                             .foregroundColor(isAccessible ? .white : .gray)
                         Spacer()

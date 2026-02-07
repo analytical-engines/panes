@@ -354,6 +354,7 @@
 "search_type_archived" = "書庫内画像";
 "search_filter_all" = "すべて";
 "search_filter_menu_title" = "絞り込み";
+"search_filter_locked" = "パスワード保護";
 
 // MARK: - Session Groups
 

@@ -17,10 +17,17 @@ struct ParsedSearchQuery {
     let keywords: [String]
     /// 元のクエリ文字列
     let originalQuery: String
+    /// パスワード保護ファイルのみを検索するか
+    let isPasswordProtected: Bool?
 
     /// キーワードが空かどうか
     var hasKeyword: Bool {
         !keywords.isEmpty
+    }
+
+    /// フィルターが適用されているか（キーワードまたはis:locked）
+    var hasFilter: Bool {
+        !keywords.isEmpty || isPasswordProtected != nil
     }
 
     /// 書庫を検索対象に含むか
@@ -78,6 +85,7 @@ struct ParsedSearchQuery {
 enum HistorySearchParser {
     /// メタキーワードのプレフィックス
     private static let typePrefix = "type:"
+    private static let isPrefix = "is:"
 
     /// サポートされるtype:の値
     private static let supportedTypes: [String: SearchTargetType] = [
@@ -91,6 +99,13 @@ enum HistorySearchParser {
         "sessions": .session
     ]
 
+    /// サポートされるis:の値
+    private static let supportedIsFilters: Set<String> = [
+        "locked",
+        "password",
+        "protected"
+    ]
+
     /// 検索クエリをパースする
     /// - Parameters:
     ///   - query: ユーザー入力のクエリ文字列
@@ -101,19 +116,21 @@ enum HistorySearchParser {
     /// 空白を含むキーワードやメタキーワードのエスケープに使用できます。
     /// 例: `"My Comic"` → 「My Comic」を検索
     /// 例: `'type:archive'` → 「type:archive」という文字列を検索
+    /// 例: `is:locked` → パスワード保護されたファイルのみ検索
     static func parse(_ query: String, defaultType: SearchTargetType = .archive) -> ParsedSearchQuery {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
 
         guard !trimmed.isEmpty else {
-            return ParsedSearchQuery(targetType: defaultType, keywords: [], originalQuery: query)
+            return ParsedSearchQuery(targetType: defaultType, keywords: [], originalQuery: query, isPasswordProtected: nil)
         }
 
         // 引用符を考慮してトークン化
         let tokens = tokenize(trimmed)
 
-        // type:キーワードを探す
+        // type:キーワードとis:キーワードを探す
         var targetType: SearchTargetType = defaultType
         var keywordTokens: [String] = []
+        var isPasswordProtected: Bool? = nil
 
         for token in tokens {
             // 引用符で囲まれたトークンはメタキーワードとして解釈しない
@@ -127,6 +144,14 @@ enum HistorySearchParser {
                 }
                 // 無効なtype:はキーワードとして扱う
                 keywordTokens.append(token.value)
+            } else if token.value.lowercased().hasPrefix(isPrefix) {
+                let isValue = String(token.value.dropFirst(isPrefix.count)).lowercased()
+                if supportedIsFilters.contains(isValue) {
+                    isPasswordProtected = true
+                    continue
+                }
+                // 無効なis:はキーワードとして扱う
+                keywordTokens.append(token.value)
             } else if !token.value.isEmpty {
                 keywordTokens.append(token.value)
             }
@@ -135,7 +160,8 @@ enum HistorySearchParser {
         return ParsedSearchQuery(
             targetType: targetType,
             keywords: keywordTokens,
-            originalQuery: query
+            originalQuery: query,
+            isPasswordProtected: isPasswordProtected
         )
     }
 
@@ -242,6 +268,15 @@ enum UnifiedSearchFilter {
     /// 書庫エントリがクエリにマッチするかチェック
     static func matches(_ entry: FileHistoryEntry, query: ParsedSearchQuery) -> Bool {
         guard query.includesArchives else { return false }
+
+        // パスワード保護フィルター
+        if let requiresPassword = query.isPasswordProtected {
+            let entryIsProtected = entry.isPasswordProtected ?? false
+            if requiresPassword != entryIsProtected {
+                return false
+            }
+        }
+
         guard query.hasKeyword else { return true }
 
         // 全てのキーワードがいずれかのフィールドにマッチする必要がある（AND検索）
