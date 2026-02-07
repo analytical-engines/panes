@@ -279,16 +279,19 @@ class SessionManager {
     private func showLoadingPanel() {
         let panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 280, height: 120),
-            styleMask: [.titled, .fullSizeContentView],
+            styleMask: [.utilityWindow, .titled, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
-        panel.title = ""
+        panel.title = "Loading..."
         panel.titlebarAppearsTransparent = true
         panel.isMovableByWindowBackground = true
         panel.backgroundColor = NSColor.windowBackgroundColor
         panel.level = .floating
         panel.isReleasedWhenClosed = false
+        // ウィンドウスイッチャー（⌘+Tab、Mission Control）に表示されないように設定
+        panel.collectionBehavior = [.transient, .ignoresCycle]
+        panel.hidesOnDeactivate = false
         // SwiftUIビューをホスト
         let hostingView = NSHostingView(rootView: LoadingPanelContent(
             restoredCount: processedWindowCount,
