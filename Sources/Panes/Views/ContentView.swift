@@ -63,6 +63,25 @@ struct ContentView: View {
     // ピンチジェスチャー用のベースライン（ジェスチャー開始時のズームレベル）
     @State private var magnificationGestureBaseline: CGFloat = 1.0
 
+    // ピンチジェスチャー中のビジュアルスケール（GPUトランスフォーム用）
+    // ジェスチャー中はsetZoom()を呼ばず、scaleEffectのみで表示し、終了時に確定する
+    @State private var pinchGestureScale: CGFloat = 1.0
+
+    /// ページ遷移オーバーレイのスライド方向（-1=左, +1=右）
+    private var transitionSlideDirection: CGFloat {
+        let isForward = viewModel.lastNavigationDirection == .forward
+        if viewModel.readingDirection == .rightToLeft {
+            // RTL: 次ページ→旧画面が左へ退場、前ページ→右へ退場
+            return isForward ? -1 : 1
+        } else {
+            // LTR: 次ページ→旧画面が右へ退場、前ページ→左へ退場
+            return isForward ? 1 : -1
+        }
+    }
+
+    // ページ遷移スナップショットオーバーレイのオフセット
+    @State private var transitionOverlayOffset: CGFloat = 0
+
     // メインビューのフォーカス管理
     @FocusState private var isMainViewFocused: Bool
 
@@ -102,6 +121,34 @@ struct ContentView: View {
         case .viewing:
             // 画像閲覧中
             viewingContent
+                .overlay {
+                    // ページ遷移スナップショットオーバーレイ（旧画面がスライドアウト）
+                    if let snapshot = viewModel.transitionSnapshot {
+                        GeometryReader { geo in
+                            ZStack {
+                                // 背景色で隙間を埋める（画像サイズ不一致対策）
+                                Color.black
+                                Image(nsImage: snapshot)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                            }
+                            .frame(width: geo.size.width, height: geo.size.height)
+                            .offset(x: transitionOverlayOffset)
+                        }
+                    }
+                }
+                .onChange(of: viewModel.transitionSnapshot) { _, newValue in
+                    if newValue != nil {
+                        // スナップショットが設定された → スライドアウトアニメーション開始
+                        // カスタムカーブ: 最初は小さく加速→後半は等速でスライド
+                        withAnimation(.timingCurve(0.4, 0.0, 0.7, 1.0, duration: 0.2)) {
+                            transitionOverlayOffset = transitionSlideDirection * 1200
+                        } completion: {
+                            viewModel.transitionSnapshot = nil
+                            transitionOverlayOffset = 0
+                        }
+                    }
+                }
         }
     }
 
@@ -649,6 +696,7 @@ struct ContentView: View {
                 }
 
             mainContent
+                .scaleEffect(pinchGestureScale)
 
             // 画像表示中の履歴オーバーレイ
             if viewModel.hasOpenFile && historyState.showHistory {
@@ -658,17 +706,22 @@ struct ContentView: View {
         .gesture(
             MagnificationGesture()
                 .onChanged { value in
-                    // ピンチジェスチャー中：ベースラインから相対的にズームを適用
-                    if viewModel.hasOpenFile {
-                        viewModel.setZoom(magnificationGestureBaseline * value)
-                    }
+                    // ピンチジェスチャー中：GPUスケールのみ適用（再レンダリングなし）
+                    guard viewModel.hasOpenFile else { return }
+
+                    // 感度を下げるためダンピングを適用（0.5 = 半分の感度）
+                    let dampening: CGFloat = 0.5
+                    pinchGestureScale = 1.0 + (value - 1.0) * dampening
                 }
                 .onEnded { value in
-                    // ジェスチャー終了時：最終値を確定してベースラインを更新
-                    if viewModel.hasOpenFile {
-                        viewModel.setZoom(magnificationGestureBaseline * value)
-                        magnificationGestureBaseline = viewModel.zoomLevel
-                    }
+                    // ジェスチャー終了時：実際のズームを確定しビジュアルスケールをリセット
+                    guard viewModel.hasOpenFile else { return }
+
+                    let dampening: CGFloat = 0.5
+                    let dampedValue = 1.0 + (value - 1.0) * dampening
+                    viewModel.setZoom(magnificationGestureBaseline * dampedValue)
+                    magnificationGestureBaseline = viewModel.zoomLevel
+                    pinchGestureScale = 1.0
                 }
         )
         .onAppear {
@@ -1432,8 +1485,16 @@ struct ContentView: View {
         }
     }
 
-    /// ホイールスクロールでページ送りする際の累積スクロール量
-    private static var accumulatedScrollDelta: CGFloat = 0
+    /// スワイプ/スクロール用の状態（水平・縦共通）
+    private enum SwipeState {
+        case idle       // 待機中
+        case tracking   // 追跡中（まだ発火していない）
+        case triggered  // 発火済み（ジェスチャー終了まで待機）
+    }
+    private static var swipeState: SwipeState = .idle
+    private static var accumulatedDeltaX: CGFloat = 0
+    private static var accumulatedDeltaY: CGFloat = 0
+    private static let swipeThreshold: CGFloat = 50.0
 
     private func setupScrollWheelMonitor() {
         scrollEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak viewModel] event in
@@ -1471,40 +1532,85 @@ struct ContentView: View {
                 return event
             }
 
-            // スクロール量を累積して閾値を超えたらページ送り
-            let delta = event.scrollingDeltaY
-            // 感度を閾値に変換（感度が高い＝閾値が低い）
-            let threshold = 11.0 - self.appSettings.scrollWheelSensitivity
-
-            // スクロール開始時（phaseが.began）に累積値をリセット
-            if event.phase == .began {
-                ContentView.accumulatedScrollDelta = 0
-            }
-
-            // 慣性スクロール中は無視（意図しないページ送り防止）
+            // 慣性スクロールは無視
             if event.momentumPhase != [] {
                 return nil
             }
 
-            // スクロール量を累積
-            ContentView.accumulatedScrollDelta += delta
+            // 新しいジェスチャーが開始されたらリセット
+            if event.phase == .began {
+                ContentView.swipeState = .idle
+                ContentView.accumulatedDeltaX = 0
+                ContentView.accumulatedDeltaY = 0
+            }
 
-            // 累積値が閾値を超えたらページめくり
-            if abs(ContentView.accumulatedScrollDelta) > threshold {
-                let scrollUp = ContentView.accumulatedScrollDelta > 0
-                // 方向反転設定を適用
-                let goToPrevious = self.appSettings.scrollWheelInverted ? !scrollUp : scrollUp
-                if goToPrevious {
-                    viewModel?.previousPage()
-                } else {
-                    viewModel?.nextPage()
+            switch ContentView.swipeState {
+            case .idle:
+                // ジェスチャー開始
+                if event.phase == .began || event.phase == .changed {
+                    ContentView.swipeState = .tracking
+                    ContentView.accumulatedDeltaX = event.scrollingDeltaX
+                    ContentView.accumulatedDeltaY = event.scrollingDeltaY
                 }
-                ContentView.accumulatedScrollDelta = 0  // リセット
+
+            case .tracking:
+                // ジェスチャー終了チェック
+                if event.phase == .ended || event.phase == .cancelled {
+                    ContentView.swipeState = .idle
+                    ContentView.accumulatedDeltaX = 0
+                    ContentView.accumulatedDeltaY = 0
+                    return nil
+                }
+
+                // 累積
+                ContentView.accumulatedDeltaX += event.scrollingDeltaX
+                ContentView.accumulatedDeltaY += event.scrollingDeltaY
+
+                // 閾値チェック（水平または縦のどちらか優勢な方で判定）
+                let absX = abs(ContentView.accumulatedDeltaX)
+                let absY = abs(ContentView.accumulatedDeltaY)
+
+                if absX > ContentView.swipeThreshold || absY > ContentView.swipeThreshold {
+                    ContentView.swipeState = .triggered
+
+                    // 水平が優勢
+                    if absX > absY {
+                        if ContentView.accumulatedDeltaX > 0 {
+                            // 右方向へスワイプ → 前のページ
+                            viewModel?.previousPage()
+                        } else {
+                            // 左方向へスワイプ → 次のページ
+                            viewModel?.nextPage()
+                        }
+                    } else {
+                        // 縦が優勢
+                        let goToPrevious: Bool
+                        if ContentView.accumulatedDeltaY > 0 {
+                            goToPrevious = !self.appSettings.scrollWheelInverted
+                        } else {
+                            goToPrevious = self.appSettings.scrollWheelInverted
+                        }
+                        if goToPrevious {
+                            viewModel?.previousPage()
+                        } else {
+                            viewModel?.nextPage()
+                        }
+                    }
+                }
+
+            case .triggered:
+                // ジェスチャー終了を待つ（beganは上で処理済み）
+                if event.phase == .ended || event.phase == .cancelled {
+                    ContentView.swipeState = .idle
+                    ContentView.accumulatedDeltaX = 0
+                    ContentView.accumulatedDeltaY = 0
+                }
             }
 
             return nil
         }
     }
+
 
     /// カスタムショートカットのアクションを実行
     /// - Returns: アクションが実行された場合はtrue

@@ -507,6 +507,67 @@ class BookViewModel {
     // 現在のページ番号（0始まり）
     var currentPage: Int = 0
 
+    /// ページ遷移の方向（アニメーション用）
+    enum PageNavigationDirection {
+        case forward   // 次ページ方向
+        case backward  // 前ページ方向
+    }
+
+    /// 最後のページ遷移の方向（トランジションアニメーション用）
+    var lastNavigationDirection: PageNavigationDirection = .forward
+
+    /// ページ遷移アニメーション用スナップショット（旧ページの画像）
+    /// View側がこれを検知してオーバーレイ→スライドアウトする
+    var transitionSnapshot: NSImage? = nil
+
+    /// 遷移前のスナップショットを保存する
+    private func saveTransitionSnapshot() {
+        if viewMode == .single {
+            transitionSnapshot = currentImage
+        } else {
+            // 見開き: 2枚を横に並べて合成
+            transitionSnapshot = compositeSpreadSnapshot()
+        }
+    }
+
+    /// 見開き2ページを横並びで1枚のNSImageに合成する
+    private func compositeSpreadSnapshot() -> NSImage? {
+        guard let first = firstPageImage else { return nil }
+        guard let second = secondPageImage else { return first }
+
+        let firstSize = first.size
+        let secondSize = second.size
+        let height = max(firstSize.height, secondSize.height)
+        let totalWidth = firstSize.width + secondSize.width
+
+        let composite = NSImage(size: NSSize(width: totalWidth, height: height))
+        composite.lockFocus()
+
+        // 読み方向に応じて左右を配置
+        // RTL: first=右側, second=左側
+        // LTR: first=左側, second=右側
+        let leftImage: NSImage
+        let rightImage: NSImage
+        let leftSize: NSSize
+        let rightSize: NSSize
+        if readingDirection == .rightToLeft {
+            leftImage = second; leftSize = secondSize
+            rightImage = first; rightSize = firstSize
+        } else {
+            leftImage = first; leftSize = firstSize
+            rightImage = second; rightSize = secondSize
+        }
+
+        // 縦中央揃えで描画
+        let leftY = (height - leftSize.height) / 2
+        leftImage.draw(in: NSRect(x: 0, y: leftY, width: leftSize.width, height: leftSize.height))
+        let rightY = (height - rightSize.height) / 2
+        rightImage.draw(in: NSRect(x: leftSize.width, y: rightY, width: rightSize.width, height: rightSize.height))
+
+        composite.unlockFocus()
+        return composite
+    }
+
     // 現在の表示状態
     private(set) var currentDisplay: PageDisplay = .single(0)
 
@@ -1226,6 +1287,7 @@ class BookViewModel {
     /// 次のページへ
     func nextPage() {
         guard imageSource != nil else { return }
+        lastNavigationDirection = .forward
 
         // 現在の表示状態から次の表示状態を計算
         guard let nextDisplay = calculateNextDisplay(
@@ -1233,7 +1295,8 @@ class BookViewModel {
             isSinglePage: { self.isPageSingle($0) }
         ) else { return }
 
-        // 表示を更新
+        // スナップショット保存→表示更新
+        saveTransitionSnapshot()
         updateCurrentPage(for: nextDisplay)
         loadImages(for: nextDisplay)
         saveViewState()
@@ -1244,6 +1307,7 @@ class BookViewModel {
     /// 前のページへ
     func previousPage() {
         guard imageSource != nil else { return }
+        lastNavigationDirection = .backward
 
         // 現在の表示状態から前の表示状態を計算
         guard let prevDisplay = calculatePreviousDisplay(
@@ -1251,7 +1315,8 @@ class BookViewModel {
             isSinglePage: { self.isPageSingle($0) }
         ) else { return }
 
-        // 表示を更新
+        // スナップショット保存→表示更新
+        saveTransitionSnapshot()
         updateCurrentPage(for: prevDisplay)
         loadImages(for: prevDisplay)
         saveViewState()
@@ -1262,6 +1327,7 @@ class BookViewModel {
     /// 先頭ページへ移動
     func goToFirstPage() {
         guard imageSource != nil else { return }
+        lastNavigationDirection = .backward
 
         // 見開きモードの場合は最初の表示可能なページを探す
         var firstVisiblePage = 0
@@ -1274,6 +1340,7 @@ class BookViewModel {
             }
         }
 
+        saveTransitionSnapshot()
         currentPage = firstVisiblePage
         loadCurrentPage()
         saveViewState()
@@ -1320,6 +1387,7 @@ class BookViewModel {
         var display = currentDisplay
 
         if targetPage > currentDisplay.maxIndex {
+            lastNavigationDirection = .forward
             // 順方向に進む
             while display.maxIndex < targetPage {
                 guard let next = calculateNextDisplay(from: display, isSinglePage: isSinglePage) else {
@@ -1328,6 +1396,7 @@ class BookViewModel {
                 display = next
             }
         } else {
+            lastNavigationDirection = .backward
             // 逆方向に戻る
             while display.minIndex > targetPage {
                 guard let prev = calculatePreviousDisplay(from: display, isSinglePage: isSinglePage) else {
@@ -1339,6 +1408,7 @@ class BookViewModel {
 
         // 表示を更新
         if display != currentDisplay {
+            saveTransitionSnapshot()
             updateCurrentPage(for: display)
             loadImages(for: display)
             saveViewState()
@@ -1396,6 +1466,7 @@ class BookViewModel {
         }
 
         if newPage >= 0 && newPage < source.imageCount {
+            saveTransitionSnapshot()
             currentPage = newPage
             loadCurrentPage()
             saveViewState()
@@ -1405,9 +1476,11 @@ class BookViewModel {
     /// 最終ページへ移動
     func goToLastPage() {
         guard let source = imageSource else { return }
+        lastNavigationDirection = .forward
 
         // 単ページモードの場合は常に最後の画像を表示
         if viewMode == .single {
+            saveTransitionSnapshot()
             currentPage = source.imageCount - 1
             loadCurrentPage()
             saveViewState()
@@ -1416,6 +1489,7 @@ class BookViewModel {
 
         // 見開きモードの場合：calculateDisplayForLastPageを使用
         let display = calculateDisplayForLastPage()
+        saveTransitionSnapshot()
         currentDisplay = display
         currentPage = display.minIndex
         loadImages(for: display)
@@ -1425,6 +1499,7 @@ class BookViewModel {
     /// 指定した回数だけページをめくって進む
     func skipForward(pages: Int = 5) {
         guard imageSource != nil else { return }
+        lastNavigationDirection = .forward
 
         let isSinglePage: (Int) -> Bool = { [weak self] page in
             self?.isPageSingle(page) ?? false
@@ -1441,6 +1516,7 @@ class BookViewModel {
 
         // 表示を更新
         if display != currentDisplay {
+            saveTransitionSnapshot()
             updateCurrentPage(for: display)
             loadImages(for: display)
             saveViewState()
@@ -1450,6 +1526,7 @@ class BookViewModel {
     /// 指定した回数だけページをめくって戻る
     func skipBackward(pages: Int = 5) {
         guard imageSource != nil else { return }
+        lastNavigationDirection = .backward
 
         let isSinglePage: (Int) -> Bool = { [weak self] page in
             self?.isPageSingle(page) ?? false
@@ -1466,6 +1543,7 @@ class BookViewModel {
 
         // 表示を更新
         if display != currentDisplay {
+            saveTransitionSnapshot()
             updateCurrentPage(for: display)
             loadImages(for: display)
             saveViewState()

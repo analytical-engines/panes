@@ -131,3 +131,168 @@ private class WindowNumberGetterView: NSView {
         }
     }
 }
+
+// MARK: - Swipe Gesture View
+
+/// トラックパッドスワイプジェスチャーを処理するビュー
+/// システム環境設定の「ページ間をスワイプ」に連動
+struct SwipeGestureView<Content: View>: NSViewRepresentable {
+    let content: Content
+    let isEnabled: Bool
+    let onSwipeLeft: () -> Void
+    let onSwipeRight: () -> Void
+
+    init(
+        isEnabled: Bool = true,
+        onSwipeLeft: @escaping () -> Void,
+        onSwipeRight: @escaping () -> Void,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.content = content()
+        self.isEnabled = isEnabled
+        self.onSwipeLeft = onSwipeLeft
+        self.onSwipeRight = onSwipeRight
+    }
+
+    func makeNSView(context: Context) -> SwipeableContainerView {
+        let containerView = SwipeableContainerView()
+        containerView.onSwipeLeft = onSwipeLeft
+        containerView.onSwipeRight = onSwipeRight
+        containerView.isSwipeEnabled = isEnabled
+
+        let hostingView = NSHostingView(rootView: content)
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
+        containerView.addSubview(hostingView)
+
+        NSLayoutConstraint.activate([
+            hostingView.topAnchor.constraint(equalTo: containerView.topAnchor),
+            hostingView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+            hostingView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
+            hostingView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor)
+        ])
+
+        context.coordinator.hostingView = hostingView
+        return containerView
+    }
+
+    func updateNSView(_ containerView: SwipeableContainerView, context: Context) {
+        containerView.onSwipeLeft = onSwipeLeft
+        containerView.onSwipeRight = onSwipeRight
+        containerView.isSwipeEnabled = isEnabled
+
+        if let hostingView = context.coordinator.hostingView {
+            hostingView.rootView = content
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    class Coordinator {
+        weak var hostingView: NSHostingView<Content>?
+    }
+}
+
+/// スワイプジェスチャーを受け付けるNSView
+class SwipeableContainerView: NSView {
+    var onSwipeLeft: (() -> Void)?
+    var onSwipeRight: (() -> Void)?
+    var isSwipeEnabled: Bool = true
+
+    /// スワイプ状態
+    private enum SwipeState: CustomStringConvertible {
+        case idle           // 待機中
+        case tracking       // ジェスチャー追跡中（まだ発火していない）
+        case triggered      // 発火済み（ジェスチャー終了まで待機）
+
+        var description: String {
+            switch self {
+            case .idle: return "idle"
+            case .tracking: return "tracking"
+            case .triggered: return "triggered"
+            }
+        }
+    }
+
+    private var state: SwipeState = .idle
+    /// スワイプ検出用の累積値
+    private var accumulatedDeltaX: CGFloat = 0
+    /// スワイプ検出の閾値
+    private let swipeThreshold: CGFloat = 50.0
+
+    override var acceptsFirstResponder: Bool { true }
+
+    private func phaseString(_ phase: NSEvent.Phase) -> String {
+        var parts: [String] = []
+        if phase.contains(.began) { parts.append("began") }
+        if phase.contains(.stationary) { parts.append("stationary") }
+        if phase.contains(.changed) { parts.append("changed") }
+        if phase.contains(.ended) { parts.append("ended") }
+        if phase.contains(.cancelled) { parts.append("cancelled") }
+        if phase.contains(.mayBegin) { parts.append("mayBegin") }
+        return parts.isEmpty ? "none(\(phase.rawValue))" : parts.joined(separator: ",")
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        guard isSwipeEnabled else {
+            super.scrollWheel(with: event)
+            return
+        }
+
+        // デバッグログ
+        DebugLogger.log("📜 scrollWheel: phase=\(phaseString(event.phase)) momentum=\(phaseString(event.momentumPhase)) deltaX=\(String(format: "%.1f", event.scrollingDeltaX)) state=\(state) accumulated=\(String(format: "%.1f", accumulatedDeltaX))", level: .minimal)
+
+        // 縦スクロールが優勢な場合は通常のスクロールとして扱う
+        if abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX) * 2 {
+            super.scrollWheel(with: event)
+            return
+        }
+
+        // 慣性スクロールは無視
+        if event.momentumPhase != [] {
+            return
+        }
+
+        switch state {
+        case .idle:
+            // ジェスチャー開始
+            if event.phase == .began || event.phase == .changed {
+                state = .tracking
+                accumulatedDeltaX = event.scrollingDeltaX
+                DebugLogger.log("📜 → state changed to tracking", level: .minimal)
+            }
+
+        case .tracking:
+            // ジェスチャー終了チェック
+            if event.phase == .ended || event.phase == .cancelled {
+                DebugLogger.log("📜 → gesture ended, back to idle", level: .minimal)
+                state = .idle
+                accumulatedDeltaX = 0
+                return
+            }
+
+            // 累積
+            accumulatedDeltaX += event.scrollingDeltaX
+
+            // 閾値チェック
+            if accumulatedDeltaX > swipeThreshold {
+                state = .triggered
+                DebugLogger.log("📜 → TRIGGERED right swipe!", level: .minimal)
+                onSwipeRight?()
+            } else if accumulatedDeltaX < -swipeThreshold {
+                state = .triggered
+                DebugLogger.log("📜 → TRIGGERED left swipe!", level: .minimal)
+                onSwipeLeft?()
+            }
+
+        case .triggered:
+            // ジェスチャー終了を待つ（それまで何もしない）
+            if event.phase == .ended || event.phase == .cancelled {
+                DebugLogger.log("📜 → gesture ended after trigger, back to idle", level: .minimal)
+                state = .idle
+                accumulatedDeltaX = 0
+            }
+        }
+    }
+}
