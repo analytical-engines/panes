@@ -68,14 +68,15 @@ struct ContentView: View {
     @State private var pinchGestureScale: CGFloat = 1.0
 
     /// ページ遷移オーバーレイのスライド方向（-1=左, +1=右）
+    /// スワイプ方向と一致させる: RTLでは次=右スワイプ→右退場、LTRでは次=左スワイプ→左退場
     private var transitionSlideDirection: CGFloat {
         let isForward = viewModel.lastNavigationDirection == .forward
         if viewModel.readingDirection == .rightToLeft {
-            // RTL: 次ページ→旧画面が左へ退場、前ページ→右へ退場
-            return isForward ? -1 : 1
-        } else {
-            // LTR: 次ページ→旧画面が右へ退場、前ページ→左へ退場
+            // RTL: 次ページ(右スワイプ)→右へ退場、前ページ(左スワイプ)→左へ退場
             return isForward ? 1 : -1
+        } else {
+            // LTR: 次ページ(左スワイプ)→左へ退場、前ページ(右スワイプ)→右へ退場
+            return isForward ? -1 : 1
         }
     }
 
@@ -161,11 +162,19 @@ struct ContentView: View {
                             if abs(horizontalDrag) > 50 && abs(horizontalDrag) > abs(value.translation.height) {
                                 dragSwipeTriggered = true
                                 if horizontalDrag > 0 {
-                                    // 右にドラッグ → 前のページ
-                                    viewModel.previousPage()
+                                    // 右にドラッグ → RTL:次ページ, LTR:前ページ
+                                    if viewModel.readingDirection == .rightToLeft {
+                                        viewModel.nextPage()
+                                    } else {
+                                        viewModel.previousPage()
+                                    }
                                 } else {
-                                    // 左にドラッグ → 次のページ
-                                    viewModel.nextPage()
+                                    // 左にドラッグ → RTL:前ページ, LTR:次ページ
+                                    if viewModel.readingDirection == .rightToLeft {
+                                        viewModel.previousPage()
+                                    } else {
+                                        viewModel.nextPage()
+                                    }
                                 }
                             }
                         }
@@ -1599,12 +1608,13 @@ struct ContentView: View {
 
                     // 水平が優勢
                     if absX > absY {
+                        let isRTL = viewModel?.readingDirection == .rightToLeft
                         if ContentView.accumulatedDeltaX > 0 {
-                            // 右方向へスワイプ → 前のページ
-                            viewModel?.previousPage()
+                            // 右方向へスワイプ → RTL:次ページ, LTR:前ページ
+                            if isRTL { viewModel?.nextPage() } else { viewModel?.previousPage() }
                         } else {
-                            // 左方向へスワイプ → 次のページ
-                            viewModel?.nextPage()
+                            // 左方向へスワイプ → RTL:前ページ, LTR:次ページ
+                            if isRTL { viewModel?.previousPage() } else { viewModel?.nextPage() }
                         }
                     } else {
                         // 縦が優勢
@@ -1756,7 +1766,12 @@ struct ContentView: View {
             // Shift+←: 右→左なら正方向シフト、左→右なら逆方向シフト
             viewModel.shiftPage(forward: viewModel.readingDirection == .rightToLeft)
         } else {
-            viewModel.nextPage()
+            // ←: RTL→次ページ（読み進む方向）、LTR→前ページ
+            if viewModel.readingDirection == .rightToLeft {
+                viewModel.nextPage()
+            } else {
+                viewModel.previousPage()
+            }
         }
         return .handled
     }
@@ -1770,7 +1785,12 @@ struct ContentView: View {
             // Shift+→: 右→左なら逆方向シフト、左→右なら正方向シフト
             viewModel.shiftPage(forward: viewModel.readingDirection == .leftToRight)
         } else {
-            viewModel.previousPage()
+            // →: RTL→前ページ、LTR→次ページ（読み進む方向）
+            if viewModel.readingDirection == .rightToLeft {
+                viewModel.previousPage()
+            } else {
+                viewModel.nextPage()
+            }
         }
         return .handled
     }
