@@ -1233,13 +1233,13 @@ struct HistoryEntryRow: View {
             }) {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack {
+                        Text(entry.fileName)
+                            .foregroundColor(isAccessible ? .white : .gray)
                         // パスワード保護マーク
                         if entry.isPasswordProtected == true {
                             Text("🔒")
                                 .font(.caption)
                         }
-                        Text(entry.fileName)
-                            .foregroundColor(isAccessible ? .white : .gray)
                         Spacer()
                         Text(L("access_count_format", entry.accessCount))
                             .foregroundColor(.gray)
