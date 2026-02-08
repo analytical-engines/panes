@@ -795,7 +795,7 @@ struct HistoryListView: View {
                         .font(.caption2)
                     Image(systemName: "doc.richtext")
                         .font(.caption)
-                    Text(L("search_type_standalone"))
+                    Text(L("search_type_individual"))
                         .font(.caption.bold())
                     Text("(\(images.count))")
                         .font(.caption2)
