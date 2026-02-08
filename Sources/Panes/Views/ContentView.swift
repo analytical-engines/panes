@@ -1518,16 +1518,15 @@ struct ContentView: View {
         }
     }
 
-    /// スワイプ/スクロール用の状態（水平・縦共通）
-    private enum SwipeState {
+    /// トラックパッドスワイプ用の状態
+    private enum TrackpadSwipeState {
         case idle       // 待機中
         case tracking   // 追跡中（まだ発火していない）
         case triggered  // 発火済み（ジェスチャー終了まで待機）
     }
-    private static var swipeState: SwipeState = .idle
-    private static var accumulatedDeltaX: CGFloat = 0
-    private static var accumulatedDeltaY: CGFloat = 0
-    private static let swipeThreshold: CGFloat = 50.0
+    private static var trackpadSwipeState: TrackpadSwipeState = .idle
+    private static var trackpadAccumulatedDeltaX: CGFloat = 0
+    private static let trackpadSwipeThreshold: CGFloat = 50.0
 
     private func setupScrollWheelMonitor() {
         scrollEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak viewModel] event in
@@ -1541,12 +1540,7 @@ struct ContentView: View {
                 return event
             }
 
-            // 履歴表示中はイベントを通す（履歴リストのスクロール用）
-            if self.historyState.showHistory {
-                return event
-            }
-
-            // Command+ホイール → ズーム（既存動作）
+            // Command+ホイール → ズーム
             if event.modifierFlags.contains(.command) {
                 let delta = event.scrollingDeltaY
                 let zoomFactor: CGFloat = 1.0 + (delta * 0.01)
@@ -1556,8 +1550,17 @@ struct ContentView: View {
                 return nil
             }
 
-            // 修飾キーなし → ページめくり
-            // ズーム中（zoomLevel > 1.0）または縦横フィット時はスクロール用イベントを通す
+            // トラックパッドのみページめくり（マウスホイールは無視）
+            guard event.hasPreciseScrollingDeltas else {
+                return event
+            }
+
+            // 履歴表示中はイベントを通す（履歴リストのスクロール用）
+            if self.historyState.showHistory {
+                return event
+            }
+
+            // ズーム中または縦横フィット時はスクロール用イベントを通す
             if let zoomLevel = viewModel?.zoomLevel, zoomLevel > 1.0 {
                 return event
             }
@@ -1570,74 +1573,47 @@ struct ContentView: View {
                 return nil
             }
 
-            // 新しいジェスチャーが開始されたらリセット
-            if event.phase == .began {
-                ContentView.swipeState = .idle
-                ContentView.accumulatedDeltaX = 0
-                ContentView.accumulatedDeltaY = 0
+            // 縦スクロールが優勢な場合は通常のスクロールとして扱う
+            if abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX) * 2 {
+                return event
             }
 
-            switch ContentView.swipeState {
+            // 新しいジェスチャーが開始されたらリセット
+            if event.phase == .began {
+                ContentView.trackpadSwipeState = .idle
+                ContentView.trackpadAccumulatedDeltaX = 0
+            }
+
+            switch ContentView.trackpadSwipeState {
             case .idle:
-                // ジェスチャー開始
                 if event.phase == .began || event.phase == .changed {
-                    ContentView.swipeState = .tracking
-                    ContentView.accumulatedDeltaX = event.scrollingDeltaX
-                    ContentView.accumulatedDeltaY = event.scrollingDeltaY
+                    ContentView.trackpadSwipeState = .tracking
+                    ContentView.trackpadAccumulatedDeltaX = event.scrollingDeltaX
                 }
 
             case .tracking:
-                // ジェスチャー終了チェック
                 if event.phase == .ended || event.phase == .cancelled {
-                    ContentView.swipeState = .idle
-                    ContentView.accumulatedDeltaX = 0
-                    ContentView.accumulatedDeltaY = 0
+                    ContentView.trackpadSwipeState = .idle
+                    ContentView.trackpadAccumulatedDeltaX = 0
                     return nil
                 }
 
-                // 累積
-                ContentView.accumulatedDeltaX += event.scrollingDeltaX
-                ContentView.accumulatedDeltaY += event.scrollingDeltaY
+                ContentView.trackpadAccumulatedDeltaX += event.scrollingDeltaX
 
-                // 閾値チェック（水平または縦のどちらか優勢な方で判定）
-                let absX = abs(ContentView.accumulatedDeltaX)
-                let absY = abs(ContentView.accumulatedDeltaY)
-
-                if absX > ContentView.swipeThreshold || absY > ContentView.swipeThreshold {
-                    ContentView.swipeState = .triggered
-
-                    // 水平が優勢
-                    if absX > absY {
-                        let isRTL = viewModel?.readingDirection == .rightToLeft
-                        if ContentView.accumulatedDeltaX > 0 {
-                            // 右方向へスワイプ → RTL:次ページ, LTR:前ページ
-                            if isRTL { viewModel?.nextPage() } else { viewModel?.previousPage() }
-                        } else {
-                            // 左方向へスワイプ → RTL:前ページ, LTR:次ページ
-                            if isRTL { viewModel?.previousPage() } else { viewModel?.nextPage() }
-                        }
+                if abs(ContentView.trackpadAccumulatedDeltaX) > ContentView.trackpadSwipeThreshold {
+                    ContentView.trackpadSwipeState = .triggered
+                    let isRTL = viewModel?.readingDirection == .rightToLeft
+                    if ContentView.trackpadAccumulatedDeltaX > 0 {
+                        if isRTL { viewModel?.nextPage() } else { viewModel?.previousPage() }
                     } else {
-                        // 縦が優勢
-                        let goToPrevious: Bool
-                        if ContentView.accumulatedDeltaY > 0 {
-                            goToPrevious = !self.appSettings.scrollWheelInverted
-                        } else {
-                            goToPrevious = self.appSettings.scrollWheelInverted
-                        }
-                        if goToPrevious {
-                            viewModel?.previousPage()
-                        } else {
-                            viewModel?.nextPage()
-                        }
+                        if isRTL { viewModel?.previousPage() } else { viewModel?.nextPage() }
                     }
                 }
 
             case .triggered:
-                // ジェスチャー終了を待つ（beganは上で処理済み）
                 if event.phase == .ended || event.phase == .cancelled {
-                    ContentView.swipeState = .idle
-                    ContentView.accumulatedDeltaX = 0
-                    ContentView.accumulatedDeltaY = 0
+                    ContentView.trackpadSwipeState = .idle
+                    ContentView.trackpadAccumulatedDeltaX = 0
                 }
             }
 
@@ -1696,6 +1672,9 @@ struct ContentView: View {
     }
 
     private func handleOnDisappear() {
+        // ファイルを閉じて画像ソースを解放（ビュー再評価による不要なZIP展開を防止）
+        viewModel.closeFile()
+
         teardownEventMonitors()
 
         // 通知オブザーバを解除（メモリリーク防止）

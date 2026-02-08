@@ -68,6 +68,9 @@ class SessionManager {
 
     /// ローディングパネル
     private var loadingPanel: NSPanel?
+    /// ローディングパネル用のオブザーバー
+    private var appActiveObserver: NSObjectProtocol?
+    private var appResignObserver: NSObjectProtocol?
 
     // MARK: - File Open Queue
 
@@ -279,16 +282,17 @@ class SessionManager {
     private func showLoadingPanel() {
         let panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 280, height: 120),
-            styleMask: [.utilityWindow, .titled, .fullSizeContentView],
+            styleMask: [.utilityWindow, .nonactivatingPanel, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
-        panel.title = "Loading..."
         panel.titlebarAppearsTransparent = true
-        panel.isMovableByWindowBackground = true
         panel.backgroundColor = NSColor.windowBackgroundColor
         panel.level = .floating
         panel.isReleasedWhenClosed = false
+        // ドラッグ不可にする
+        panel.isMovable = false
+        panel.isMovableByWindowBackground = false
         // ウィンドウスイッチャー（⌘+Tab、Mission Control）に表示されないように設定
         panel.collectionBehavior = [.transient, .ignoresCycle]
         panel.hidesOnDeactivate = false
@@ -303,11 +307,37 @@ class SessionManager {
         panel.makeKeyAndOrderFront(nil)
 
         loadingPanel = panel
+
+        // アプリが非アクティブになったらパネルを通常レベルに下げ、
+        // アクティブに戻ったらfloatingに戻す（他アプリの邪魔にならないように）
+        appActiveObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.loadingPanel?.level = .floating
+        }
+        appResignObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.loadingPanel?.level = .normal
+        }
+
         DebugLogger.log("📋 Loading panel shown", level: .normal)
     }
 
     /// ローディングパネルを閉じる
     private func hideLoadingPanel() {
+        if let observer = appActiveObserver {
+            NotificationCenter.default.removeObserver(observer)
+            appActiveObserver = nil
+        }
+        if let observer = appResignObserver {
+            NotificationCenter.default.removeObserver(observer)
+            appResignObserver = nil
+        }
         loadingPanel?.close()
         loadingPanel = nil
         DebugLogger.log("📋 Loading panel hidden", level: .normal)

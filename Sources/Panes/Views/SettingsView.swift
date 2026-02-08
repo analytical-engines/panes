@@ -65,19 +65,6 @@ struct GeneralSettingsTab: View {
                         .foregroundColor(.secondary)
                 }
 
-                HStack {
-                    Text(L("scroll_wheel_sensitivity"))
-                    Spacer()
-                    Slider(value: $settings.scrollWheelSensitivity, in: 1.0...10.0, step: 0.5)
-                        .frame(width: 150)
-                    Text(String(format: "%.1f", settings.scrollWheelSensitivity))
-                        .frame(width: 35, alignment: .trailing)
-                        .foregroundColor(.secondary)
-                }
-                .help(L("scroll_wheel_sensitivity_help"))
-
-                Toggle(L("scroll_wheel_inverted"), isOn: $settings.scrollWheelInverted)
-                    .help(L("scroll_wheel_inverted_help"))
             }
 
             Section(L("section_image_detection")) {
