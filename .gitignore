@@ -29,3 +29,12 @@ Packages/
 # Temporary files
 *.tmp
 *.log
+
+# AI assistant configs
+CLAUDE.md
+AGENTS.md
+
+# Node.js (tooling)
+node_modules/
+package.json
+package-lock.json
