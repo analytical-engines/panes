@@ -1480,13 +1480,12 @@ struct ContentView: View {
                 return event
             }
 
-            // モーダル表示中はSwiftUIに委譲（メモ編集等）
-            if self.modalState.showMemoEdit || self.modalState.showImageInfo {
+            switch self.interactionMode {
+            case .modal:
+                // モーダルダイアログ表示中は全キーをSwiftUIに委譲
                 return event
-            }
 
-            // Phase 1: 検索フィールドにフォーカス中
-            if self.isHistorySearchFocused {
+            case .searchField:
                 // ↓キー: サジェスト非表示時はリストへフォーカス移動
                 if event.keyCode == 125 && self.canNavigateHistory && !self.historyState.isShowingSuggestions {
                     self.exitSearchField()
@@ -1494,10 +1493,9 @@ struct ContentView: View {
                 }
                 // その他はSwiftUIに委譲（テキスト編集、サジェスト操作優先）
                 return event
-            }
 
-            // Phase 2: 履歴リストのUI操作（固定、カスタマイズ対象外）
-            if self.canNavigateHistoryList {
+            case .historyList:
+                // ↑↓PageUp/Down/Returnで履歴操作
                 switch event.keyCode {
                 case 126: // ↑
                     self.handleHistoryUpArrow()
@@ -1514,71 +1512,31 @@ struct ContentView: View {
                 case 36: // Return
                     self.handleHistoryReturn(isShift: event.modifierFlags.contains(.shift))
                     return nil
-                default: break
+                default:
+                    break
                 }
-            }
+                // 共通キー処理（Escape等）
+                return self.handleCommonKeys(event, viewModel: viewModel)
 
-            // Phase 3: CustomShortcutManager（デフォルト+カスタムバインディング）
-            if let action = CustomShortcutManager.shared.findAction(for: event) {
-                DebugLogger.log("🔑 Shortcut: \(action.rawValue)", level: .normal)
-                if self.executeShortcutAction(action, viewModel: viewModel) {
-                    return nil
-                }
-            }
-
-            // Phase 4: 矢印キー（読み方向連動、固定）
-            if viewModel?.hasOpenFile == true {
-                switch event.keyCode {
-                case 123: // ←
-                    let isRTL = viewModel?.readingDirection == .rightToLeft
-                    if event.modifierFlags.contains(.shift) {
-                        viewModel?.shiftPage(forward: isRTL == true)
-                    } else {
-                        if isRTL == true { viewModel?.nextPage() } else { viewModel?.previousPage() }
-                    }
-                    return nil
-                case 124: // →
-                    let isRTL = viewModel?.readingDirection == .rightToLeft
-                    if event.modifierFlags.contains(.shift) {
-                        viewModel?.shiftPage(forward: isRTL != true)
-                    } else {
-                        if isRTL == true { viewModel?.previousPage() } else { viewModel?.nextPage() }
-                    }
-                    return nil
-                default: break
-                }
-            }
-
-            // Phase 5: その他の固定動作
-            // Escape: 履歴を閉じる
-            if event.keyCode == 53 && self.historyState.showHistory {
-                self.historyState.closeHistory()
-                self.isHistorySearchFocused = false
-                self.focusMainView()
-                return nil
-            }
-
-            // M: メモ編集（初期画面、履歴アイテム選択時のみ）
-            if event.keyCode == 46 && !event.modifierFlags.contains(.command)
-                && !event.modifierFlags.contains(.control)
-                && !event.modifierFlags.contains(.option) {
-                if !(viewModel?.hasOpenFile ?? false) {
-                    if let selected = self.historyState.selectedItem {
-                        self.handleMemoEdit(selected: selected)
+            case .viewing:
+                // CustomShortcutManager（デフォルト+カスタムバインディング）
+                if let action = CustomShortcutManager.shared.findAction(for: event) {
+                    DebugLogger.log("🔑 Shortcut: \(action.rawValue)", level: .normal)
+                    if self.executeShortcutAction(action, viewModel: viewModel) {
                         return nil
                     }
                 }
-            }
-
-            // Return: 履歴アイテムを開く（履歴表示中のみ）
-            if event.keyCode == 36 && self.historyState.showHistory && !self.isHistorySearchFocused {
-                if self.historyState.selectedItem != nil {
-                    self.handleHistoryReturn(isShift: event.modifierFlags.contains(.shift))
+                // 矢印キー（読み方向連動）
+                if self.handleArrowKeys(event, viewModel: viewModel) {
                     return nil
                 }
-            }
+                // 共通キー処理（Escape等）
+                return self.handleCommonKeys(event, viewModel: viewModel)
 
-            return event
+            case .initial:
+                // 共通キー処理（Escape、M、Return）
+                return self.handleCommonKeys(event, viewModel: viewModel)
+            }
         }
     }
 
@@ -1794,6 +1752,29 @@ struct ContentView: View {
 
     // MARK: - Key Handlers
 
+    /// キーイベントの処理モードを表す列挙型
+    /// setupKeyDownMonitor() で switch ベースのディスパッチに使用
+    private enum InteractionMode {
+        case modal       // モーダルダイアログ表示中 → 全キーをSwiftUIに委譲
+        case searchField // 検索フィールドフォーカス中 → テキスト編集優先
+        case historyList // 履歴リストナビゲーション中 → ↑↓PageUp/Down/Return
+        case viewing     // 画像閲覧中 → ショートカット、矢印キー
+        case initial     // 初期画面 → メモ編集、履歴操作
+    }
+
+    /// 現在のインタラクションモードを既存の状態から計算
+    private var interactionMode: InteractionMode {
+        // モーダル（4種全て: メモ編集、画像情報、パスワード、ファイル同一性）
+        if modalState.showMemoEdit || modalState.showImageInfo
+            || viewModel.showPasswordDialog || viewModel.showFileIdentityDialog {
+            return .modal
+        }
+        if isHistorySearchFocused { return .searchField }
+        if canNavigateHistoryList { return .historyList }
+        if viewModel.hasOpenFile { return .viewing }
+        return .initial
+    }
+
     /// 履歴ナビゲーションが可能な状態か（履歴表示中かつ履歴あり）
     private var canNavigateHistory: Bool {
         historyState.canNavigateHistory
@@ -1869,6 +1850,66 @@ struct ContentView: View {
         case .session:
             break
         }
+    }
+
+    /// 矢印キーのページ遷移処理（viewingモード専用）
+    /// - Returns: キーが処理された場合はtrue
+    private func handleArrowKeys(_ event: NSEvent, viewModel: BookViewModel?) -> Bool {
+        guard viewModel?.hasOpenFile == true else { return false }
+        switch event.keyCode {
+        case 123: // ←
+            let isRTL = viewModel?.readingDirection == .rightToLeft
+            if event.modifierFlags.contains(.shift) {
+                viewModel?.shiftPage(forward: isRTL == true)
+            } else {
+                if isRTL == true { viewModel?.nextPage() } else { viewModel?.previousPage() }
+            }
+            return true
+        case 124: // →
+            let isRTL = viewModel?.readingDirection == .rightToLeft
+            if event.modifierFlags.contains(.shift) {
+                viewModel?.shiftPage(forward: isRTL != true)
+            } else {
+                if isRTL == true { viewModel?.previousPage() } else { viewModel?.nextPage() }
+            }
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Escape（履歴閉じ）、M（メモ編集）、Return（履歴オープン）の共通処理
+    /// historyList/viewing/initialで共有
+    private func handleCommonKeys(_ event: NSEvent, viewModel: BookViewModel?) -> NSEvent? {
+        // Escape: 履歴を閉じる
+        if event.keyCode == 53 && historyState.showHistory {
+            historyState.closeHistory()
+            isHistorySearchFocused = false
+            focusMainView()
+            return nil
+        }
+
+        // M: メモ編集（初期画面、履歴アイテム選択時のみ）
+        if event.keyCode == 46 && !event.modifierFlags.contains(.command)
+            && !event.modifierFlags.contains(.control)
+            && !event.modifierFlags.contains(.option) {
+            if !(viewModel?.hasOpenFile ?? false) {
+                if let selected = historyState.selectedItem {
+                    handleMemoEdit(selected: selected)
+                    return nil
+                }
+            }
+        }
+
+        // Return: 履歴アイテムを開く（履歴表示中のみ）
+        if event.keyCode == 36 && historyState.showHistory && !isHistorySearchFocused {
+            if historyState.selectedItem != nil {
+                handleHistoryReturn(isShift: event.modifierFlags.contains(.shift))
+                return nil
+            }
+        }
+
+        return event
     }
 
     private func openFilePicker() {
