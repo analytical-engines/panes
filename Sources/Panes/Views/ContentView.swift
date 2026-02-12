@@ -1480,6 +1480,11 @@ struct ContentView: View {
                 return event
             }
 
+            // モーダル表示中はSwiftUIに委譲（メモ編集等）
+            if self.modalState.showMemoEdit || self.modalState.showImageInfo {
+                return event
+            }
+
             // Phase 1: 検索フィールドにフォーカス中
             if self.isHistorySearchFocused {
                 // ↓キー: サジェスト非表示時はリストへフォーカス移動
