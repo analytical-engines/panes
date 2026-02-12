@@ -43,6 +43,8 @@
 "shortcut_zoom_out" = "縮小";
 "shortcut_reset_zoom" = "表示サイズのリセット";
 "shortcut_close_file" = "ファイルを閉じる";
+"shortcut_shift_page_forward" = "見開きシフト（正方向）";
+"shortcut_shift_page_backward" = "見開きシフト（逆方向）";
 "shortcut_add_button" = "追加";
 "shortcut_press_key" = "キーを入力してください";
 "shortcut_press_key_description" = "ショートカットに設定するキーを押してください\n（Escでキャンセル）";
@@ -392,6 +394,10 @@
 "shortcut_close_file" = "ファイルを閉じる";
 "shortcut_fit_to_window" = "ウィンドウに合わせる";
 "shortcut_fit_to_original" = "実際のサイズで表示";
+"shortcut_shift_page_forward" = "見開きシフト（正方向）";
+"shortcut_shift_page_backward" = "見開きシフト（逆方向）";
+"shortcut_arrow_keys_note" = "矢印キーは読み方向に連動するため、カスタマイズ対象外です。";
+"shortcut_reset_defaults" = "デフォルトに戻す";
 
 // MARK: - Acknowledgements
 

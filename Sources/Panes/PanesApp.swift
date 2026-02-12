@@ -37,6 +37,7 @@ struct ImageViewerApp: App {
     @State private var appSettings = AppSettings()
     @State private var sessionManager = SessionManager()
     @State private var sessionGroupManager = SessionGroupManager()
+    @State private var shortcutManager = CustomShortcutManager.shared
     @Environment(\.openWindow) private var openWindow
 
     /// キーウィンドウのViewModel（WindowCoordinator経由）
@@ -88,7 +89,7 @@ struct ImageViewerApp: App {
                 }) {
                     Label(L("menu_close_file"), systemImage: "xmark")
                 }
-                .keyboardShortcut("w", modifiers: [.command, .shift])
+                .modifier(DynamicShortcut(action: .closeFile, manager: shortcutManager))
 
                 Button(action: {
                     editCurrentFileMemo()
@@ -252,14 +253,14 @@ struct ImageViewerApp: App {
                     }) {
                         Label(L("menu_zoom_in"), systemImage: "plus.magnifyingglass")
                     }
-                    .keyboardShortcut("+", modifiers: .command)
+                    .modifier(DynamicShortcut(action: .zoomIn, manager: shortcutManager))
 
                     Button(action: {
                         focusedViewModel?.zoomOut()
                     }) {
                         Label(L("menu_zoom_out"), systemImage: "minus.magnifyingglass")
                     }
-                    .keyboardShortcut("-", modifiers: .command)
+                    .modifier(DynamicShortcut(action: .zoomOut, manager: shortcutManager))
                 }
                 // Note: .disabled()はAppDelegateのmenuNeedsUpdateで動的に制御
 

@@ -985,22 +985,8 @@ struct ContentView: View {
                 focusMainView(selectFirstHistoryItem: true)
             }
         ))
-        .onKeyPress(keys: [.leftArrow]) { handleLeftArrow($0) }
-        .onKeyPress(keys: [.rightArrow]) { handleRightArrow($0) }
-        .onKeyPress(keys: [.upArrow]) { handleUpArrow($0) }
-        .onKeyPress(keys: [.downArrow]) { handleDownArrow($0) }
-        .onKeyPress(keys: [.pageUp]) { handlePageUp($0) }
-        .onKeyPress(keys: [.pageDown]) { handlePageDown($0) }
-        .onKeyPress(characters: .init(charactersIn: "\r\n")) { handleReturn($0) }
-        .onKeyPress(characters: CharacterSet(charactersIn: "mM")) { handleMemoEdit($0) }
-        .onKeyPress(keys: [.space]) { handleSpace($0) }
-        .onKeyPress(characters: CharacterSet(charactersIn: "fF")) { handleFKey($0) }
-        .onKeyPress(.escape) { handleEscape() }
-        .onKeyPress(.home) { viewModel.goToFirstPage(); return .handled }
-        .onKeyPress(.end) { viewModel.goToLastPage(); return .handled }
-        .onKeyPress(keys: [.tab]) { handleTab($0) }
-        .onKeyPress(characters: CharacterSet(charactersIn: "iI")) { handleImageInfo($0) }
-        .onKeyPress(characters: CharacterSet(charactersIn: "oO")) { handleOpenFile($0) }
+        // キー入力は setupKeyDownMonitor() のNSEventモニタで一元管理
+        // HistoryViews.swiftの検索フィールド用.onKeyPressは別途維持
         .onReceive(NotificationCenter.default.publisher(for: .windowDidBecomeKey)) { notification in
             let start = CFAbsoluteTimeGetCurrent()
             // 自分のウィンドウがフォーカスを得た場合のみ履歴を更新
@@ -1494,26 +1480,99 @@ struct ContentView: View {
                 return event
             }
 
-            // カスタムショートカットをチェック
-            if let action = CustomShortcutManager.shared.findAction(for: event) {
-                DebugLogger.log("🔑 Custom shortcut: \(action.rawValue)", level: .normal)
-                if self.executeShortcutAction(action, viewModel: viewModel) {
-                    return nil  // イベントを消費
-                }
-            }
-
-            // 既存のハードコードショートカット（Shift+Tab）
-            if event.keyCode == 48 {
-                DebugLogger.log("🔑 Tab key detected", level: .verbose)
-
-                if event.modifierFlags.contains(.shift) {
-                    DebugLogger.log("   ✅ Shift+Tab detected in my window, skipping backward", level: .normal)
-                    viewModel?.skipBackward(pages: self.appSettings.pageJumpCount)
+            // Phase 1: 検索フィールドにフォーカス中
+            if self.isHistorySearchFocused {
+                // ↓キー: サジェスト非表示時はリストへフォーカス移動
+                if event.keyCode == 125 && self.canNavigateHistory && !self.historyState.isShowingSuggestions {
+                    self.exitSearchField()
                     return nil
-                } else {
-                    DebugLogger.log("   Tab without shift, passing through", level: .verbose)
+                }
+                // その他はSwiftUIに委譲（テキスト編集、サジェスト操作優先）
+                return event
+            }
+
+            // Phase 2: 履歴リストのUI操作（固定、カスタマイズ対象外）
+            if self.canNavigateHistoryList {
+                switch event.keyCode {
+                case 126: // ↑
+                    self.handleHistoryUpArrow()
+                    return nil
+                case 125: // ↓
+                    self.handleHistoryDownArrow()
+                    return nil
+                case 116: // PageUp
+                    self.historyState.selectItem(byOffset: -self.pageScrollCount)
+                    return nil
+                case 121: // PageDown
+                    self.historyState.selectItem(byOffset: self.pageScrollCount)
+                    return nil
+                case 36: // Return
+                    self.handleHistoryReturn(isShift: event.modifierFlags.contains(.shift))
+                    return nil
+                default: break
                 }
             }
+
+            // Phase 3: CustomShortcutManager（デフォルト+カスタムバインディング）
+            if let action = CustomShortcutManager.shared.findAction(for: event) {
+                DebugLogger.log("🔑 Shortcut: \(action.rawValue)", level: .normal)
+                if self.executeShortcutAction(action, viewModel: viewModel) {
+                    return nil
+                }
+            }
+
+            // Phase 4: 矢印キー（読み方向連動、固定）
+            if viewModel?.hasOpenFile == true {
+                switch event.keyCode {
+                case 123: // ←
+                    let isRTL = viewModel?.readingDirection == .rightToLeft
+                    if event.modifierFlags.contains(.shift) {
+                        viewModel?.shiftPage(forward: isRTL == true)
+                    } else {
+                        if isRTL == true { viewModel?.nextPage() } else { viewModel?.previousPage() }
+                    }
+                    return nil
+                case 124: // →
+                    let isRTL = viewModel?.readingDirection == .rightToLeft
+                    if event.modifierFlags.contains(.shift) {
+                        viewModel?.shiftPage(forward: isRTL != true)
+                    } else {
+                        if isRTL == true { viewModel?.previousPage() } else { viewModel?.nextPage() }
+                    }
+                    return nil
+                default: break
+                }
+            }
+
+            // Phase 5: その他の固定動作
+            // Escape: 履歴を閉じる
+            if event.keyCode == 53 && self.historyState.showHistory {
+                self.historyState.closeHistory()
+                self.isHistorySearchFocused = false
+                self.focusMainView()
+                return nil
+            }
+
+            // M: メモ編集（初期画面、履歴アイテム選択時のみ）
+            if event.keyCode == 46 && !event.modifierFlags.contains(.command)
+                && !event.modifierFlags.contains(.control)
+                && !event.modifierFlags.contains(.option) {
+                if !(viewModel?.hasOpenFile ?? false) {
+                    if let selected = self.historyState.selectedItem {
+                        self.handleMemoEdit(selected: selected)
+                        return nil
+                    }
+                }
+            }
+
+            // Return: 履歴アイテムを開く（履歴表示中のみ）
+            if event.keyCode == 36 && self.historyState.showHistory && !self.isHistorySearchFocused {
+                if self.historyState.selectedItem != nil {
+                    self.handleHistoryReturn(isShift: event.modifierFlags.contains(.shift))
+                    return nil
+                }
+            }
+
             return event
         }
     }
@@ -1622,12 +1681,12 @@ struct ContentView: View {
     }
 
 
-    /// カスタムショートカットのアクションを実行
+    /// ショートカットアクションを実行
     /// - Returns: アクションが実行された場合はtrue
     private func executeShortcutAction(_ action: ShortcutAction, viewModel: BookViewModel?) -> Bool {
         guard let viewModel = viewModel else { return false }
 
-        // ファイルが開いていない場合は一部のアクションのみ許可
+        // ファイルが開いていない場合はアクション不可
         if !viewModel.hasOpenFile {
             return false
         }
@@ -1645,6 +1704,10 @@ struct ContentView: View {
             viewModel.goToFirstPage()
         case .goToLastPage:
             viewModel.goToLastPage()
+        case .shiftPageForward:
+            viewModel.shiftPage(forward: true)
+        case .shiftPageBackward:
+            viewModel.shiftPage(forward: false)
         case .toggleFullScreen:
             toggleFullScreen()
         case .toggleViewMode:
@@ -1736,47 +1799,12 @@ struct ContentView: View {
         historyState.canNavigateHistoryList && !isHistorySearchFocused
     }
 
-    private func handleLeftArrow(_ press: KeyPress) -> KeyPress.Result {
-        // 検索フィールドにフォーカス中はテキスト編集を優先
-        guard !isHistorySearchFocused else { return .ignored }
-        // ファイルを開いている時のみページ送り
-        guard viewModel.hasOpenFile else { return .ignored }
-        if press.modifiers.contains(.shift) {
-            // Shift+←: 右→左なら正方向シフト、左→右なら逆方向シフト
-            viewModel.shiftPage(forward: viewModel.readingDirection == .rightToLeft)
-        } else {
-            // ←: RTL→次ページ（読み進む方向）、LTR→前ページ
-            if viewModel.readingDirection == .rightToLeft {
-                viewModel.nextPage()
-            } else {
-                viewModel.previousPage()
-            }
-        }
-        return .handled
-    }
+    /// PageUp/PageDownで移動するアイテム数
+    private let pageScrollCount = 10
 
-    private func handleRightArrow(_ press: KeyPress) -> KeyPress.Result {
-        // 検索フィールドにフォーカス中はテキスト編集を優先
-        guard !isHistorySearchFocused else { return .ignored }
-        // ファイルを開いている時のみページ送り
-        guard viewModel.hasOpenFile else { return .ignored }
-        if press.modifiers.contains(.shift) {
-            // Shift+→: 右→左なら逆方向シフト、左→右なら正方向シフト
-            viewModel.shiftPage(forward: viewModel.readingDirection == .leftToRight)
-        } else {
-            // →: RTL→前ページ、LTR→次ページ（読み進む方向）
-            if viewModel.readingDirection == .rightToLeft {
-                viewModel.previousPage()
-            } else {
-                viewModel.nextPage()
-            }
-        }
-        return .handled
-    }
+    // MARK: - 履歴リストUI操作ハンドラ（NSEventモニタから呼び出し）
 
-    private func handleUpArrow(_ press: KeyPress) -> KeyPress.Result {
-        guard canNavigateHistoryList else { return .ignored }
-
+    private func handleHistoryUpArrow() {
         if let current = historyState.selectedItem,
            let currentIndex = historyState.visibleItems.firstIndex(where: { $0.id == current.id }) {
             if currentIndex > 0 {
@@ -1787,165 +1815,55 @@ struct ContentView: View {
                 isHistorySearchFocused = true
             }
         } else {
-            // 選択がなければ最後のアイテムを選択
             historyState.selectedItem = historyState.visibleItems.last
         }
-        return .handled
     }
 
-    private func handleDownArrow(_ press: KeyPress) -> KeyPress.Result {
-        guard canNavigateHistory else { return .ignored }
-        guard !historyState.isShowingSuggestions else { return .ignored }
-
-        // 検索フィールドにフォーカス中は、フォーカスを外してリストの先頭を選択
-        if isHistorySearchFocused {
-            exitSearchField()
-            return .handled
-        }
-
+    private func handleHistoryDownArrow() {
         if let current = historyState.selectedItem,
            let currentIndex = historyState.visibleItems.firstIndex(where: { $0.id == current.id }) {
             if currentIndex < historyState.visibleItems.count - 1 {
                 historyState.selectedItem = historyState.visibleItems[currentIndex + 1]
             }
         } else {
-            // 選択がなければ最初のアイテムを選択
             historyState.selectedItem = historyState.visibleItems.first
         }
-        return .handled
     }
 
-    /// PageUp/PageDownで移動するアイテム数
-    private let pageScrollCount = 10
-
-    private func handlePageUp(_ press: KeyPress) -> KeyPress.Result {
-        guard canNavigateHistoryList else { return .ignored }
-        historyState.selectItem(byOffset: -pageScrollCount)
-        return .handled
-    }
-
-    private func handlePageDown(_ press: KeyPress) -> KeyPress.Result {
-        guard canNavigateHistoryList else { return .ignored }
-        historyState.selectItem(byOffset: pageScrollCount)
-        return .handled
-    }
-
-    private func handleReturn(_ press: KeyPress) -> KeyPress.Result {
-        // 履歴表示中に履歴アイテムを開く（Enter: 現在のウィンドウ、Shift+Enter: 新規ウィンドウ）
-        guard historyState.showHistory else { return .ignored }
-        guard !isHistorySearchFocused else { return .ignored }  // 検索フィールドにフォーカス中は無視（IME変換確定と干渉するため）
-        guard let selected = historyState.selectedItem else { return .ignored }
-
-        let openInNew = press.modifiers.contains(.shift)  // ⇧+Enterで新しいウィンドウ
+    private func handleHistoryReturn(isShift: Bool) {
+        guard let selected = historyState.selectedItem else { return }
 
         switch selected {
         case .archive(_, let filePath):
-            if openInNew {
-                openInNewWindow(path: filePath)
-            } else {
-                openHistoryFile(path: filePath)
-            }
+            if isShift { openInNewWindow(path: filePath) }
+            else { openHistoryFile(path: filePath) }
         case .standaloneImage(_, let filePath):
-            if openInNew {
-                openInNewWindow(path: filePath)
-            } else {
-                openImageCatalogFile(path: filePath, relativePath: nil)
-            }
+            if isShift { openInNewWindow(path: filePath) }
+            else { openImageCatalogFile(path: filePath, relativePath: nil) }
         case .archivedImage(_, let parentPath, let relativePath):
-            if openInNew {
-                openInNewWindow(path: parentPath)  // 親アーカイブを新しいウィンドウで開く
-            } else {
-                openImageCatalogFile(path: parentPath, relativePath: relativePath.isEmpty ? nil : relativePath)
-            }
+            if isShift { openInNewWindow(path: parentPath) }
+            else { openImageCatalogFile(path: parentPath, relativePath: relativePath.isEmpty ? nil : relativePath) }
         case .session(let sessionId):
-            // セッションは複数ウィンドウを復元するのでShiftは無視
             if let session = sessionGroupManager.sessionGroups.first(where: { $0.id == sessionId }) {
                 sessionGroupManager.updateLastAccessed(id: session.id)
                 sessionManager.restoreSessionGroup(session)
             }
         }
-        return .handled
     }
 
-    private func handleMemoEdit(_ press: KeyPress) -> KeyPress.Result {
-        // 初期画面でのみメモ編集
-        guard !viewModel.hasOpenFile else { return .ignored }
-        guard !isHistorySearchFocused else { return .ignored }  // 検索フィールド入力中は無視
-        guard let selected = historyState.selectedItem else { return .ignored }
-
+    private func handleMemoEdit(selected: SelectableHistoryItem) {
         switch selected {
         case .archive(let id, _):
-            // 履歴エントリからidとmemoを取得（updateMemoはidで検索する）
             if let entry = historyManager.history.first(where: { $0.id == id }) {
                 modalState.openMemoEditForHistory(fileKey: entry.id, memo: entry.memo)
             }
         case .standaloneImage(let id, _), .archivedImage(let id, _, _):
-            // 画像カタログエントリからmemoを取得
             if let entry = imageCatalogManager.catalog.first(where: { $0.id == id }) {
                 modalState.openMemoEditForCatalog(catalogId: id, memo: entry.memo)
             }
         case .session:
-            // セッションにはメモ機能なし
-            return .ignored
+            break
         }
-        return .handled
-    }
-
-    private func handleSpace(_ press: KeyPress) -> KeyPress.Result {
-        // 検索フィールドにフォーカス中はテキスト入力を優先
-        guard !isHistorySearchFocused else { return .ignored }
-        // ファイルを開いている時のみページ送り
-        guard viewModel.hasOpenFile else { return .ignored }
-        if press.modifiers.contains(.shift) { viewModel.previousPage() }
-        else { viewModel.nextPage() }
-        return .handled
-    }
-
-    private func handleFKey(_ press: KeyPress) -> KeyPress.Result {
-        // ⌘⌃F でフルスクリーン切り替え
-        // 注: ⌘F（履歴トグル）はメニューショートカットで処理（TextFieldフォーカス中でも動作するため）
-        if press.modifiers.contains(.command) && press.modifiers.contains(.control) {
-            toggleFullScreen()
-            return .handled
-        }
-        return .ignored
-    }
-
-    private func handleEscape() -> KeyPress.Result {
-        // Escapeで履歴を閉じる（グローバル）
-        if historyState.showHistory {
-            historyState.closeHistory()
-            isHistorySearchFocused = false
-            // メインビューにフォーカスを戻す
-            focusMainView()
-            return .handled
-        }
-        return .ignored
-    }
-
-    private func handleTab(_ press: KeyPress) -> KeyPress.Result {
-        // 検索フィールドにフォーカス中はTextField側で処理（補完確定など）
-        if isHistorySearchFocused { return .ignored }
-        viewModel.skipForward(pages: appSettings.pageJumpCount)
-        return .handled
-    }
-
-    private func handleImageInfo(_ press: KeyPress) -> KeyPress.Result {
-        // ⌘I で画像情報表示
-        if press.modifiers.contains(.command) && viewModel.hasOpenFile {
-            modalState.toggleImageInfo()
-            return .handled
-        }
-        return .ignored
-    }
-
-    private func handleOpenFile(_ press: KeyPress) -> KeyPress.Result {
-        // ⌘O でファイルを開く
-        if press.modifiers.contains(.command) {
-            openFilePicker()
-            return .handled
-        }
-        return .ignored
     }
 
     private func openFilePicker() {

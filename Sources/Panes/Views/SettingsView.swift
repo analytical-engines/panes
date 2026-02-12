@@ -344,6 +344,18 @@ struct ShortcutSettingsTab: View {
                     )
                 }
             }
+
+            Section {
+                HStack {
+                    Text(L("shortcut_arrow_keys_note"))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Button(L("shortcut_reset_defaults")) {
+                        shortcutManager.resetToDefaults()
+                    }
+                }
+            }
         }
         .formStyle(.grouped)
         .padding()
@@ -352,7 +364,7 @@ struct ShortcutSettingsTab: View {
                 action: action,
                 shortcutManager: shortcutManager,
                 onCapture: { binding in
-                    shortcutManager.addShortcut(binding, for: action)
+                    shortcutManager.addCustomShortcut(binding, for: action)
                     capturingAction = nil
                 },
                 onCancel: {
@@ -363,15 +375,11 @@ struct ShortcutSettingsTab: View {
     }
 }
 
-/// ショートカット行
+/// ショートカット行（三層表示: デフォルト + カスタム + 追加ボタン）
 struct ShortcutRow: View {
     let action: ShortcutAction
     let shortcutManager: CustomShortcutManager
     let onAddPressed: () -> Void
-
-    private var bindings: [KeyBinding] {
-        shortcutManager.shortcuts[action] ?? []
-    }
 
     var body: some View {
         HStack {
@@ -380,24 +388,36 @@ struct ShortcutRow: View {
 
             Spacer()
 
-            // 割り当てられたキーをチップで表示
             HStack(spacing: 4) {
-                // 固定ショートカット（変更不可）
-                ForEach(action.hardcodedShortcuts, id: \.self) { key in
-                    HardcodedKeyChip(keyDisplay: key)
-                }
-
-                // 固定とカスタムの間にスペース
-                if !action.hardcodedShortcuts.isEmpty {
-                    Spacer()
-                        .frame(width: 12)
-                }
-
-                // カスタムショートカット（削除可能）
-                ForEach(Array(bindings.enumerated()), id: \.offset) { _, binding in
-                    KeyBindingChip(binding: binding) {
-                        shortcutManager.removeShortcut(binding, from: action)
+                ForEach(shortcutManager.displayBindings(for: action)) { item in
+                    switch item.type {
+                    case .defaultBinding:
+                        DefaultKeyChip(binding: item.binding) {
+                            shortcutManager.removeDefaultBinding(item.binding, from: action)
+                        }
+                    case .customBinding:
+                        CustomKeyChip(binding: item.binding) {
+                            shortcutManager.removeCustomShortcut(item.binding, from: action)
+                        }
                     }
+                }
+
+                // 削除されたデフォルトがある場合、復元ボタンを表示
+                let removed = shortcutManager.removedDefaultBindings(for: action)
+                if !removed.isEmpty {
+                    Menu {
+                        ForEach(removed, id: \.displayString) { binding in
+                            Button(binding.displayString) {
+                                shortcutManager.restoreDefaultBinding(binding, for: action)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "arrow.counterclockwise.circle")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
                 }
 
                 // 追加ボタン
@@ -412,10 +432,10 @@ struct ShortcutRow: View {
     }
 }
 
-/// キーバインディングのチップ表示
-struct KeyBindingChip: View {
+/// デフォルトバインディングのチップ（削除可能、青色系）
+struct DefaultKeyChip: View {
     let binding: KeyBinding
-    let onDelete: () -> Void
+    let onRemove: () -> Void
 
     @State private var isHovering = false
 
@@ -425,7 +445,36 @@ struct KeyBindingChip: View {
                 .font(.system(.caption, design: .monospaced))
 
             if isHovering {
-                Button(action: onDelete) {
+                Button(action: onRemove) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(Color.accentColor.opacity(0.15))
+        .cornerRadius(4)
+        .onHover { isHovering = $0 }
+    }
+}
+
+/// カスタムバインディングのチップ（削除可能、グレー系）
+struct CustomKeyChip: View {
+    let binding: KeyBinding
+    let onRemove: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Text(binding.displayString)
+                .font(.system(.caption, design: .monospaced))
+
+            if isHovering {
+                Button(action: onRemove) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.caption2)
                         .foregroundColor(.secondary)
@@ -437,26 +486,7 @@ struct KeyBindingChip: View {
         .padding(.vertical, 2)
         .background(Color.secondary.opacity(0.2))
         .cornerRadius(4)
-        .onHover { hovering in
-            isHovering = hovering
-        }
-    }
-}
-
-/// 固定ショートカットの表示（変更不可）
-struct HardcodedKeyChip: View {
-    let keyDisplay: String
-
-    var body: some View {
-        Text(keyDisplay)
-            .font(.system(.caption, design: .monospaced))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .foregroundColor(.secondary)
-            .overlay(
-                RoundedRectangle(cornerRadius: 4)
-                    .stroke(Color.secondary.opacity(0.5), lineWidth: 1)
-            )
+        .onHover { isHovering = $0 }
     }
 }
 
@@ -513,8 +543,13 @@ struct KeyCaptureView: View {
         .alert(L("shortcut_conflict_title"), isPresented: $showConflictAlert) {
             Button(L("shortcut_overwrite"), role: .destructive) {
                 if let binding = conflictBinding, let existingAction = conflictAction {
-                    // 既存のショートカットを削除して新しいものを追加
-                    shortcutManager.removeShortcut(binding, from: existingAction)
+                    // 既存のバインディングを削除して新しいものを追加
+                    // デフォルトバインディングか、カスタムバインディングかを判定
+                    if existingAction.defaultBindings.contains(binding) {
+                        shortcutManager.removeDefaultBinding(binding, from: existingAction)
+                    } else {
+                        shortcutManager.removeCustomShortcut(binding, from: existingAction)
+                    }
                     onCapture(binding)
                 }
             }

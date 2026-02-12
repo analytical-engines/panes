@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import SwiftUI
 import Observation
 
 /// カスタムショートカットで実行可能なアクション
@@ -11,6 +12,8 @@ enum ShortcutAction: String, CaseIterable, Codable, Identifiable {
     case skipBackward = "skipBackward"
     case goToFirstPage = "goToFirstPage"
     case goToLastPage = "goToLastPage"
+    case shiftPageForward = "shiftPageForward"
+    case shiftPageBackward = "shiftPageBackward"
     case toggleFullScreen = "toggleFullScreen"
     case toggleViewMode = "toggleViewMode"
     case toggleReadingDirection = "toggleReadingDirection"
@@ -29,6 +32,8 @@ enum ShortcutAction: String, CaseIterable, Codable, Identifiable {
         case .skipBackward: return L("shortcut_skip_backward")
         case .goToFirstPage: return L("shortcut_first_page")
         case .goToLastPage: return L("shortcut_last_page")
+        case .shiftPageForward: return L("shortcut_shift_page_forward")
+        case .shiftPageBackward: return L("shortcut_shift_page_backward")
         case .toggleFullScreen: return L("shortcut_fullscreen")
         case .toggleViewMode: return L("shortcut_view_mode")
         case .toggleReadingDirection: return L("shortcut_reading_direction")
@@ -40,23 +45,53 @@ enum ShortcutAction: String, CaseIterable, Codable, Identifiable {
         }
     }
 
-    /// 固定ショートカット（メニューバー等で定義済み、変更不可）
-    var hardcodedShortcuts: [String] {
+    /// デフォルトバインディング（初期値、ユーザーが削除・変更可能）
+    var defaultBindings: [KeyBinding] {
         switch self {
-        case .nextPage: return []
-        case .previousPage: return ["⇧Tab"]
-        case .skipForward: return []
-        case .skipBackward: return []
-        case .goToFirstPage: return []
-        case .goToLastPage: return []
-        case .toggleFullScreen: return []
-        case .toggleViewMode: return ["⇧⌘M"]
-        case .toggleReadingDirection: return ["⇧⌘R"]
-        case .zoomIn: return ["⌘+"]
-        case .zoomOut: return ["⌘-"]
-        case .closeFile: return ["⇧⌘W"]
-        case .fitToWindow: return []
-        case .fitToOriginalSize: return []
+        case .nextPage: return [
+            KeyBinding(keyCode: 49, keyDisplay: "Space", modifiers: []),
+        ]
+        case .previousPage: return [
+            KeyBinding(keyCode: 49, keyDisplay: "Space", modifiers: .shift),
+        ]
+        case .skipForward: return [
+            KeyBinding(keyCode: 48, keyDisplay: "Tab", modifiers: []),
+        ]
+        case .skipBackward: return [
+            KeyBinding(keyCode: 48, keyDisplay: "Tab", modifiers: .shift),
+        ]
+        case .goToFirstPage: return [
+            KeyBinding(keyCode: 115, keyDisplay: "Home", modifiers: []),
+        ]
+        case .goToLastPage: return [
+            KeyBinding(keyCode: 119, keyDisplay: "End", modifiers: []),
+        ]
+        case .toggleFullScreen: return [
+            KeyBinding(keyCode: 3, keyDisplay: "F", modifiers: [.control, .command]),
+        ]
+        case .toggleViewMode: return []
+        case .zoomIn: return [
+            KeyBinding(keyCode: 24, keyDisplay: "+", modifiers: [.command]),
+        ]
+        case .zoomOut: return [
+            KeyBinding(keyCode: 27, keyDisplay: "-", modifiers: [.command]),
+        ]
+        case .closeFile: return [
+            KeyBinding(keyCode: 13, keyDisplay: "W", modifiers: [.shift, .command]),
+        ]
+        default: return []
+        }
+    }
+
+    /// メニュー表示用: このアクションがメニュー項目に対応する場合のデフォルトKeyEquivalent
+    var menuKeyEquivalent: (key: Character, modifiers: EventModifiers)? {
+        switch self {
+        case .toggleViewMode: return nil
+        case .zoomIn: return ("+", .command)
+        case .zoomOut: return ("-", .command)
+        case .closeFile: return ("w", [.command, .shift])
+        case .toggleFullScreen: return ("f", [.control, .command])
+        default: return nil
         }
     }
 }
@@ -105,6 +140,16 @@ struct KeyBinding: Codable, Equatable, Hashable {
             return flags
         }
 
+        /// SwiftUI EventModifiersに変換
+        func toEventModifiers() -> EventModifiers {
+            var mods: EventModifiers = []
+            if contains(.shift) { mods.insert(.shift) }
+            if contains(.control) { mods.insert(.control) }
+            if contains(.option) { mods.insert(.option) }
+            if contains(.command) { mods.insert(.command) }
+            return mods
+        }
+
         /// 表示用文字列
         var displayString: String {
             var parts: [String] = []
@@ -143,8 +188,25 @@ struct KeyBinding: Codable, Equatable, Hashable {
         return modifiers.displayString + keyDisplay
     }
 
+    /// SwiftUI KeyboardShortcutに変換（メニュー表示用）
+    var keyEquivalentCharacter: Character? {
+        // 特殊キーはKeyEquivalentに変換できない場合がある
+        switch keyCode {
+        case 48: return "\t"          // Tab
+        case 49: return " "           // Space
+        case 36: return "\r"          // Return
+        case 53: return "\u{1B}"      // Escape
+        default:
+            // 通常の文字キー: keyDisplayからCharacterを生成
+            if let char = keyDisplay.lowercased().first {
+                return char
+            }
+            return nil
+        }
+    }
+
     /// キーコードから表示文字列を生成
-    private static func keyDisplayString(for event: NSEvent) -> String {
+    static func keyDisplayString(for event: NSEvent) -> String {
         // 特殊キーの処理
         switch event.keyCode {
         case 48: return "Tab"
@@ -171,50 +233,80 @@ struct KeyBinding: Codable, Equatable, Hashable {
     }
 }
 
-/// カスタムショートカットの管理
+// MARK: - バインディングの種別
+
+/// バインディングの種別（UI表示用）
+enum BindingType {
+    case defaultBinding   // デフォルト（削除可能、復元可能）
+    case customBinding    // ユーザー追加（削除可能）
+}
+
+/// 表示用バインディング情報
+struct DisplayBinding: Identifiable {
+    let id = UUID()
+    let binding: KeyBinding
+    let type: BindingType
+}
+
+// MARK: - CustomShortcutManager
+
+/// カスタムショートカットの管理（三層モデル）
+///
+/// - OS固定: HardcodedShortcutで管理（⌘Q, ⌘W等）、変更不可
+/// - デフォルト: ShortcutAction.defaultBindingsで定義、ユーザーが削除可能
+/// - カスタム: ユーザーが自由に追加
 @MainActor
 @Observable
 final class CustomShortcutManager {
     /// シングルトン
     static let shared = CustomShortcutManager()
 
-    /// アクションごとのキーバインディング（複数可）
-    private(set) var shortcuts: [ShortcutAction: [KeyBinding]] = [:]
+    /// ユーザー追加のカスタムバインディング
+    private(set) var customShortcuts: [ShortcutAction: [KeyBinding]] = [:]
 
-    private let userDefaultsKey = "customKeyboardShortcuts"
+    /// ユーザーが削除したデフォルトバインディング
+    private(set) var removedDefaults: [ShortcutAction: [KeyBinding]] = [:]
+
+    private let customShortcutsKey = "customKeyboardShortcuts"
+    private let removedDefaultsKey = "removedDefaultShortcuts"
 
     private init() {
-        loadShortcuts()
+        loadState()
     }
 
-    /// ショートカットを追加
-    func addShortcut(_ binding: KeyBinding, for action: ShortcutAction) {
-        if shortcuts[action] == nil {
-            shortcuts[action] = []
+    // MARK: - 有効バインディングの取得
+
+    /// アクションの有効バインディング一覧（デフォルト−削除+カスタム）
+    func effectiveBindings(for action: ShortcutAction) -> [KeyBinding] {
+        let defaults = action.defaultBindings.filter { binding in
+            !(removedDefaults[action]?.contains(binding) ?? false)
         }
-        // 重複チェック
-        if !shortcuts[action]!.contains(binding) {
-            shortcuts[action]!.append(binding)
-            saveShortcuts()
+        let custom = customShortcuts[action] ?? []
+        return defaults + custom
+    }
+
+    /// 表示用バインディング一覧（種別付き）
+    func displayBindings(for action: ShortcutAction) -> [DisplayBinding] {
+        var result: [DisplayBinding] = []
+
+        let activeDefaults = action.defaultBindings.filter { binding in
+            !(removedDefaults[action]?.contains(binding) ?? false)
         }
+        for binding in activeDefaults {
+            result.append(DisplayBinding(binding: binding, type: .defaultBinding))
+        }
+
+        for binding in (customShortcuts[action] ?? []) {
+            result.append(DisplayBinding(binding: binding, type: .customBinding))
+        }
+
+        return result
     }
 
-    /// ショートカットを削除
-    func removeShortcut(_ binding: KeyBinding, from action: ShortcutAction) {
-        shortcuts[action]?.removeAll { $0 == binding }
-        saveShortcuts()
-    }
-
-    /// アクションの全ショートカットを削除
-    func removeAllShortcuts(for action: ShortcutAction) {
-        shortcuts[action] = nil
-        saveShortcuts()
-    }
-
-    /// NSEventに対応するアクションを検索
+    /// NSEventに対応するアクションを検索（全有効バインディングから）
     func findAction(for event: NSEvent) -> ShortcutAction? {
-        for (action, bindings) in shortcuts {
-            for binding in bindings {
+        for action in ShortcutAction.allCases {
+            for binding in effectiveBindings(for: action) {
                 if binding.matches(event) {
                     return action
                 }
@@ -223,85 +315,146 @@ final class CustomShortcutManager {
         return nil
     }
 
-    /// KeyBindingに対応するアクションを検索（衝突チェック用）
+    /// 指定キーバインディングがいずれかのアクションに割り当てられているか検索（衝突チェック用）
     func findAction(for binding: KeyBinding) -> ShortcutAction? {
-        for (action, bindings) in shortcuts {
-            if bindings.contains(binding) {
+        for action in ShortcutAction.allCases {
+            if effectiveBindings(for: action).contains(binding) {
                 return action
             }
         }
         return nil
     }
 
-    /// 保存
-    private func saveShortcuts() {
+    /// 指定キーコード+モディファイアがいずれかのアクションに割り当てられているか
+    func hasBinding(keyCode: UInt16, modifiers: KeyBinding.ModifierFlags) -> Bool {
+        for action in ShortcutAction.allCases {
+            for binding in effectiveBindings(for: action) {
+                if binding.keyCode == keyCode && binding.modifiers == modifiers {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    // MARK: - カスタムバインディング操作
+
+    /// カスタムショートカットを追加
+    func addCustomShortcut(_ binding: KeyBinding, for action: ShortcutAction) {
+        if customShortcuts[action] == nil {
+            customShortcuts[action] = []
+        }
+        if !customShortcuts[action]!.contains(binding) {
+            customShortcuts[action]!.append(binding)
+            saveState()
+        }
+    }
+
+    /// カスタムショートカットを削除
+    func removeCustomShortcut(_ binding: KeyBinding, from action: ShortcutAction) {
+        customShortcuts[action]?.removeAll { $0 == binding }
+        saveState()
+    }
+
+    // MARK: - デフォルトバインディング操作
+
+    /// デフォルトバインディングを削除
+    func removeDefaultBinding(_ binding: KeyBinding, from action: ShortcutAction) {
+        if removedDefaults[action] == nil {
+            removedDefaults[action] = []
+        }
+        if !removedDefaults[action]!.contains(binding) {
+            removedDefaults[action]!.append(binding)
+            saveState()
+        }
+    }
+
+    /// 削除したデフォルトバインディングを復元
+    func restoreDefaultBinding(_ binding: KeyBinding, for action: ShortcutAction) {
+        removedDefaults[action]?.removeAll { $0 == binding }
+        saveState()
+    }
+
+    /// アクションの削除されたデフォルト一覧
+    func removedDefaultBindings(for action: ShortcutAction) -> [KeyBinding] {
+        return removedDefaults[action] ?? []
+    }
+
+    // MARK: - リセット
+
+    /// 全カスタマイズをリセット（デフォルトに戻す）
+    func resetToDefaults() {
+        customShortcuts = [:]
+        removedDefaults = [:]
+        saveState()
+    }
+
+    // MARK: - メニュー連動
+
+    /// アクションの最初の有効バインディングからSwiftUI KeyboardShortcutを生成
+    func keyboardShortcut(for action: ShortcutAction) -> (key: KeyEquivalent, modifiers: EventModifiers)? {
+        guard let binding = effectiveBindings(for: action).first else { return nil }
+        guard let char = binding.keyEquivalentCharacter else { return nil }
+        return (KeyEquivalent(char), binding.modifiers.toEventModifiers())
+    }
+
+    // MARK: - 永続化
+
+    private func saveState() {
         let encoder = JSONEncoder()
-        if let data = try? encoder.encode(shortcuts) {
-            UserDefaults.standard.set(data, forKey: userDefaultsKey)
+        if let customData = try? encoder.encode(customShortcuts) {
+            UserDefaults.standard.set(customData, forKey: customShortcutsKey)
+        }
+        if let removedData = try? encoder.encode(removedDefaults) {
+            UserDefaults.standard.set(removedData, forKey: removedDefaultsKey)
         }
     }
 
-    /// 読み込み
-    private func loadShortcuts() {
-        guard let data = UserDefaults.standard.data(forKey: userDefaultsKey) else { return }
+    private func loadState() {
         let decoder = JSONDecoder()
-        if let loaded = try? decoder.decode([ShortcutAction: [KeyBinding]].self, from: data) {
-            shortcuts = loaded
+
+        if let customData = UserDefaults.standard.data(forKey: customShortcutsKey),
+           let loaded = try? decoder.decode([ShortcutAction: [KeyBinding]].self, from: customData) {
+            customShortcuts = loaded
         }
+
+        if let removedData = UserDefaults.standard.data(forKey: removedDefaultsKey),
+           let loaded = try? decoder.decode([ShortcutAction: [KeyBinding]].self, from: removedData) {
+            removedDefaults = loaded
+        }
+
+        migrateIfNeeded()
     }
 
-    /// 全カスタムショートカットをクリア
-    func clearAll() {
-        shortcuts = [:]
-        saveShortcuts()
+    /// 旧データからの移行: カスタムがデフォルトと重複している場合は除去
+    private func migrateIfNeeded() {
+        var changed = false
+        for action in ShortcutAction.allCases {
+            let defaults = action.defaultBindings
+            if var custom = customShortcuts[action] {
+                let before = custom.count
+                custom.removeAll { defaults.contains($0) }
+                if custom.count != before {
+                    customShortcuts[action] = custom.isEmpty ? nil : custom
+                    changed = true
+                }
+            }
+        }
+        if changed {
+            saveState()
+        }
     }
 }
 
-/// ハードコーディングされた（変更不可の）ショートカット
+// MARK: - HardcodedShortcut（OS固定のみ）
+
+/// OS管理の変更不可ショートカット（キーキャプチャ時の衝突チェック用）
 struct HardcodedShortcut {
     let displayName: String
     let keyDisplay: String
 
-    /// キーコードとモディファイアからハードコーディングされたショートカットを検索
+    /// キーコードとモディファイアからOS固定ショートカットを検索
     static func find(keyCode: UInt16, modifiers: KeyBinding.ModifierFlags) -> HardcodedShortcut? {
-        // ⇧⌘W (keyCode 13 = W)
-        if keyCode == 13 && modifiers == [.shift, .command] {
-            return HardcodedShortcut(displayName: L("menu_close_file"), keyDisplay: "⇧⌘W")
-        }
-        // ⇧⌘M (keyCode 46 = M)
-        if keyCode == 46 && modifiers == [.shift, .command] {
-            return HardcodedShortcut(displayName: L("shortcut_view_mode"), keyDisplay: "⇧⌘M")
-        }
-        // ⌘F (keyCode 3 = F) - 履歴表示トグル
-        if keyCode == 3 && modifiers == [.command] {
-            return HardcodedShortcut(displayName: L("menu_show_history"), keyDisplay: "⌘F")
-        }
-        // ⌘+ (keyCode 24 = +/=)
-        if keyCode == 24 && modifiers == [.command] {
-            return HardcodedShortcut(displayName: L("shortcut_zoom_in"), keyDisplay: "⌘+")
-        }
-        // ⌘- (keyCode 27 = -)
-        if keyCode == 27 && modifiers == [.command] {
-            return HardcodedShortcut(displayName: L("shortcut_zoom_out"), keyDisplay: "⌘-")
-        }
-        // ⇧⌘R (keyCode 15 = R)
-        if keyCode == 15 && modifiers == [.shift, .command] {
-            return HardcodedShortcut(displayName: L("shortcut_reading_direction"), keyDisplay: "⇧⌘R")
-        }
-        // ⌘B (keyCode 11 = B)
-        if keyCode == 11 && modifiers == [.command] {
-            return HardcodedShortcut(displayName: L("menu_show_status_bar"), keyDisplay: "⌘B")
-        }
-        // ⇧⌘S (keyCode 1 = S)
-        if keyCode == 1 && modifiers == [.shift, .command] {
-            return HardcodedShortcut(displayName: L("menu_save_session"), keyDisplay: "⇧⌘S")
-        }
-        // ⇧Tab (keyCode 48 = Tab)
-        if keyCode == 48 && modifiers == [.shift] {
-            return HardcodedShortcut(displayName: L("shortcut_previous_page"), keyDisplay: "⇧Tab")
-        }
-
-        // システムショートカット
         // ⌘Q (keyCode 12 = Q) - Quit
         if keyCode == 12 && modifiers == [.command] {
             return HardcodedShortcut(displayName: L("system_shortcut_quit"), keyDisplay: "⌘Q")
@@ -358,8 +511,24 @@ struct HardcodedShortcut {
         return nil
     }
 
-    /// KeyBindingからハードコーディングされたショートカットを検索
+    /// KeyBindingからOS固定ショートカットを検索
     static func find(for binding: KeyBinding) -> HardcodedShortcut? {
         return find(keyCode: binding.keyCode, modifiers: binding.modifiers)
+    }
+}
+
+// MARK: - メニューショートカット連動用ViewModifier
+
+/// CustomShortcutManagerの設定に応じてメニューのキーボードショートカットを動的に変更する
+struct DynamicShortcut: ViewModifier {
+    let action: ShortcutAction
+    let manager: CustomShortcutManager
+
+    func body(content: Content) -> some View {
+        if let shortcut = manager.keyboardShortcut(for: action) {
+            content.keyboardShortcut(shortcut.key, modifiers: shortcut.modifiers)
+        } else {
+            content
+        }
     }
 }

@@ -43,6 +43,8 @@
 "shortcut_zoom_out" = "Zoom Out";
 "shortcut_reset_zoom" = "Reset Zoom";
 "shortcut_close_file" = "Close File";
+"shortcut_shift_page_forward" = "Shift Page Forward";
+"shortcut_shift_page_backward" = "Shift Page Backward";
 "shortcut_add_button" = "Add";
 "shortcut_press_key" = "Press a key";
 "shortcut_press_key_description" = "Press the key you want to assign\n(Esc to cancel)";
@@ -392,6 +394,10 @@
 "shortcut_close_file" = "Close File";
 "shortcut_fit_to_window" = "Fit to Window";
 "shortcut_fit_to_original" = "Original Size";
+"shortcut_shift_page_forward" = "Shift Page Forward";
+"shortcut_shift_page_backward" = "Shift Page Backward";
+"shortcut_arrow_keys_note" = "Arrow keys follow reading direction and are not customizable.";
+"shortcut_reset_defaults" = "Reset to Defaults";
 
 // MARK: - Acknowledgements
 
