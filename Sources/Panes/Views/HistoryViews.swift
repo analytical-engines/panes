@@ -137,7 +137,8 @@ struct HistoryListView: View {
 
     /// 入力補完用
     @State private var selectedSuggestionIndex: Int = 0
-    @State private var suggestions: [String] = []
+    @State private var suggestions: [SearchSuggestionItem] = []
+    @State private var searchBarHeight: CGFloat = 0
 
     let onOpenHistoryFile: (String) -> Void
     let onOpenInNewWindow: (String) -> Void  // filePath
@@ -278,7 +279,7 @@ struct HistoryListView: View {
                                 }
                                 .onChange(of: historyState.filterText) { _, newValue in
                                     // 候補を更新
-                                    suggestions = computeSuggestions(from: searchResult, query: newValue)
+                                    suggestions = SearchSuggestionEngine.computeSuggestions(for: newValue)
                                     historyState.isShowingSuggestions = !suggestions.isEmpty && isSearchFocused.wrappedValue
                                     selectedSuggestionIndex = 0
                                 }
@@ -370,39 +371,22 @@ struct HistoryListView: View {
                         .padding(8)
                         .background(Color.white.opacity(0.1))
                         .cornerRadius(6)
-
-                        // ドロップダウン候補リスト
-                        if historyState.isShowingSuggestions && !suggestions.isEmpty {
-                            VStack(alignment: .leading, spacing: 0) {
-                                ForEach(Array(suggestions.enumerated()), id: \.offset) { index, suggestion in
-                                    HStack {
-                                        Text(suggestion)
-                                            .foregroundColor(.white)
-                                        Spacer()
-                                        if index == selectedSuggestionIndex {
-                                            Text("Tab")
-                                                .font(.caption2)
-                                                .foregroundColor(.gray)
-                                                .padding(.horizontal, 4)
-                                                .padding(.vertical, 2)
-                                                .background(Color.white.opacity(0.1))
-                                                .cornerRadius(3)
-                                        }
-                                    }
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 6)
-                                    .background(index == selectedSuggestionIndex ? Color.accentColor.opacity(0.3) : Color.clear)
-                                    .onTapGesture {
-                                        applySuggestion(suggestion)
-                                    }
-                                }
+                        .background(
+                            GeometryReader { geo in
+                                Color.clear.onAppear { searchBarHeight = geo.size.height }
                             }
-                            .background(Color.black.opacity(0.8))
-                            .cornerRadius(6)
-                            .padding(.top, 2)
+                        )
+                        .overlay(alignment: .topLeading) {
+                            // ドロップダウン候補リスト（検索バー直下にオーバーレイ表示）
+                            if historyState.isShowingSuggestions && !suggestions.isEmpty {
+                                suggestionDropdownView()
+                                    .offset(y: searchBarHeight + 2)
+                            }
                         }
+
                     }
                     .padding(.top, 20)
+                    .zIndex(1)
 
                     // 検索結果のセクション表示
                     ScrollViewReader { proxy in
@@ -575,97 +559,62 @@ struct HistoryListView: View {
         }
     }
 
-    /// type:プレフィックスの候補リスト
-    private let typeFilterSuggestions = [
-        "type:archive ",
-        "type:individual ",
-        "type:archived ",
-        "type:session "
-    ]
-
-    /// is:プレフィックスの候補リスト
-    private let isFilterSuggestions = [
-        "is:locked "
-    ]
-
-    /// 入力補完候補を計算する（type:/is:プレフィックス用）
-    private func computeSuggestions(
-        from searchResult: UnifiedSearchResult,
-        query: String
-    ) -> [String] {
-        guard !query.isEmpty else { return [] }
-
-        let lowercaseQuery = query.lowercased()
-
-        // 既にtype:プレフィックスが完成している場合
-        if lowercaseQuery.hasPrefix("type:") && lowercaseQuery.contains(" ") {
-            // スペース後のテキストでis:候補をチェック
-            let afterSpace = String(lowercaseQuery.split(separator: " ", maxSplits: 1).last ?? "")
-            return computeIsFilterSuggestions(afterSpace)
-        }
-
-        // 既にis:プレフィックスが完成している場合
-        if lowercaseQuery.hasPrefix("is:") && lowercaseQuery.contains(" ") {
-            return []
-        }
-
-        // "t", "ty", "typ", "type", "type:" などで始まる場合にtype:候補を表示
-        let typePrefix = "type:"
-        if typePrefix.hasPrefix(lowercaseQuery) || lowercaseQuery.hasPrefix("type:") {
-            // type:の後の部分でフィルタリング
-            if lowercaseQuery.hasPrefix("type:") {
-                let afterType = String(lowercaseQuery.dropFirst(5))  // "type:" の後
-                return typeFilterSuggestions.filter {
-                    let suggestionAfterType = String($0.dropFirst(5).dropLast())  // "type:" と末尾スペースを除去
-                    return suggestionAfterType.hasPrefix(afterType)
+    /// サジェストドロップダウンビュー（カーソル位置直下に表示）
+    @ViewBuilder
+    private func suggestionDropdownView() -> some View {
+        let alignmentPrefix = suggestions.first?.alignmentPrefix ?? ""
+        // 検索バーの内部レイアウトを非表示で複製し、テキスト位置を正確に合わせる
+        HStack {
+            // 🔍アイコンと同じ幅を確保（HStackのデフォルトスペーシングも再現）
+            Image(systemName: "magnifyingglass").hidden()
+            HStack(spacing: 0) {
+                // "あ type:" 等の幅を確保（同じフォントレンダリングなので正確）
+                Text(alignmentPrefix)
+                    .foregroundColor(.clear)
+                    .allowsHitTesting(false)
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(suggestions.enumerated()), id: \.offset) { index, suggestion in
+                        HStack(spacing: 8) {
+                            Text(suggestion.displayText)
+                                .foregroundColor(.white)
+                            if index == selectedSuggestionIndex {
+                                Text("Tab")
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 2)
+                                    .background(Color.white.opacity(0.1))
+                                    .cornerRadius(3)
+                            }
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .background(index == selectedSuggestionIndex ? Color.accentColor.opacity(0.3) : Color.clear)
+                        .onTapGesture {
+                            applySuggestion(suggestion)
+                        }
+                    }
                 }
-            } else {
-                // "t", "ty", "typ", "type" の場合は全候補
-                return typeFilterSuggestions
+                .background(Color.black.opacity(0.8))
+                .cornerRadius(6)
             }
+            Spacer()
         }
-
-        // "i", "is", "is:" などで始まる場合にis:候補を表示
-        return computeIsFilterSuggestions(lowercaseQuery)
+        .padding(.horizontal, 8)  // 検索バーの.padding(8)に合わせる
+        .padding(.top, 2)
     }
 
-    /// is:フィルター候補を計算
-    private func computeIsFilterSuggestions(_ lowercaseQuery: String) -> [String] {
-        let isPrefix = "is:"
-        if isPrefix.hasPrefix(lowercaseQuery) || lowercaseQuery.hasPrefix("is:") {
-            if lowercaseQuery.hasPrefix("is:") {
-                let afterIs = String(lowercaseQuery.dropFirst(3))  // "is:" の後
-                return isFilterSuggestions.filter {
-                    let suggestionAfterIs = String($0.dropFirst(3).dropLast())  // "is:" と末尾スペースを除去
-                    return suggestionAfterIs.hasPrefix(afterIs)
-                }
-            } else {
-                // "i", "is" の場合は全候補
-                return isFilterSuggestions
-            }
-        }
-        return []
-    }
-
-    /// インライン補完テキストを取得（最初の候補の残り部分）
+    /// インライン補完テキストを取得
     private func getInlineCompletion(for query: String) -> String? {
-        guard !query.isEmpty, !suggestions.isEmpty else { return nil }
-
-        let firstSuggestion = suggestions[selectedSuggestionIndex]
-        let lowercaseQuery = query.lowercased()
-
-        // 大文字小文字を無視して先頭一致を確認
-        if firstSuggestion.lowercased().hasPrefix(lowercaseQuery) {
-            // 元の候補から残りの部分を返す
-            return String(firstSuggestion.dropFirst(query.count))
-        }
-
-        return nil
+        guard !suggestions.isEmpty else { return nil }
+        return SearchSuggestionEngine.inlineCompletion(
+            for: query, suggestion: suggestions[selectedSuggestionIndex]
+        )
     }
 
     /// 補完を適用する
-    private func applySuggestion(_ suggestion: String) {
-        historyState.filterText = suggestion
+    private func applySuggestion(_ suggestion: SearchSuggestionItem) {
+        historyState.filterText = suggestion.fullText
         historyState.isShowingSuggestions = false
     }
 
