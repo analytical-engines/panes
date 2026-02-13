@@ -47,8 +47,8 @@ final class FileHistoryData {
     /// ワークスペースID（""=デフォルト、将来のworkspace機能で使用）
     var workspaceId: String = ""
 
-    init(fileKey: String, filePath: String, fileName: String) {
-        self.id = FileHistoryData.generateId(fileName: fileName, fileKey: fileKey)
+    init(fileKey: String, filePath: String, fileName: String, workspaceId: String = "") {
+        self.id = FileHistoryData.generateId(fileName: fileName, fileKey: fileKey, workspaceId: workspaceId)
         self.fileKey = fileKey
         self.pageSettingsRef = nil
         self.filePath = filePath
@@ -56,11 +56,12 @@ final class FileHistoryData {
         self.lastAccessDate = Date()
         self.accessCount = 1
         self.pageSettingsData = nil
+        self.workspaceId = workspaceId
     }
 
     /// ページ設定の参照先を指定して初期化
-    init(fileKey: String, pageSettingsRef: String?, filePath: String, fileName: String) {
-        self.id = FileHistoryData.generateId(fileName: fileName, fileKey: fileKey)
+    init(fileKey: String, pageSettingsRef: String?, filePath: String, fileName: String, workspaceId: String = "") {
+        self.id = FileHistoryData.generateId(fileName: fileName, fileKey: fileKey, workspaceId: workspaceId)
         self.fileKey = fileKey
         self.pageSettingsRef = pageSettingsRef
         self.filePath = filePath
@@ -68,11 +69,15 @@ final class FileHistoryData {
         self.lastAccessDate = Date()
         self.accessCount = 1
         self.pageSettingsData = nil
+        self.workspaceId = workspaceId
     }
 
-    /// エントリIDを生成（ファイル名+fileKeyのハッシュ）
-    static func generateId(fileName: String, fileKey: String) -> String {
-        let combined = "\(fileName)-\(fileKey)"
+    /// エントリIDを生成（ファイル名+fileKey+workspaceIdのハッシュ）
+    /// デフォルトワークスペース("")では既存IDと互換性を保つ
+    static func generateId(fileName: String, fileKey: String, workspaceId: String = "") -> String {
+        let combined = workspaceId.isEmpty
+            ? "\(fileName)-\(fileKey)"
+            : "\(fileName)-\(fileKey)-\(workspaceId)"
         let data = combined.data(using: .utf8) ?? Data()
         var hash: UInt64 = 5381
         for byte in data {

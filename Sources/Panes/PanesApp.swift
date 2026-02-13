@@ -70,9 +70,21 @@ struct ImageViewerApp: App {
                     // AppDelegateに参照を渡す
                     appDelegate.sessionManager = sessionManager
                     appDelegate.appSettings = appSettings
+                    appDelegate.historyManager = historyManager
+                    appDelegate.imageCatalogManager = imageCatalogManager
+                    appDelegate.sessionGroupManager = sessionGroupManager
+                    appDelegate.openWindowAction = openWindow
+
+                    // ワークスペースIDを各マネージャーに反映
+                    let wid = appSettings.currentWorkspaceId
+                    historyManager.workspaceId = wid
+                    historyManager.loadHistory()
+                    imageCatalogManager.workspaceId = wid
+                    imageCatalogManager.loadCatalog()
 
                     // SessionGroupManagerにModelContextを設定（SwiftData共有）
                     sessionGroupManager.setModelContext(historyManager.modelContext)
+                    sessionGroupManager.workspaceId = wid
                     sessionGroupManager.maxSessionGroupCount = appSettings.maxSessionGroupCount
                 }
         }
@@ -127,7 +139,7 @@ struct ImageViewerApp: App {
                     }) {
                         Label(L("menu_export_history"), systemImage: "square.and.arrow.up")
                     }
-                    .disabled(!historyManager.canExportHistory)
+                    .disabled(!historyManager.canExportHistory && sessionGroupManager.sessionGroups.isEmpty && imageCatalogManager.catalog.isEmpty)
 
                     Button(action: {
                         importHistory(merge: true)
@@ -304,6 +316,15 @@ struct ImageViewerApp: App {
                 // Note: .disabled()はAppDelegateのmenuNeedsUpdateで動的に制御
 
                 Divider()
+
+                // ワークスペース（項目はAppDelegateのmenuNeedsUpdateで動的に構築）
+                Menu(L("menu_workspace")) {
+                    Button(L("workspace_default")) {}
+                    Divider()
+                    Button(L("workspace_create")) {}
+                    Button(L("workspace_rename")) {}
+                    Button(L("workspace_delete")) {}
+                }
 
                 // ステータスバー表示切替（フルスクリーンの上）
                 Button(action: {
@@ -582,6 +603,7 @@ struct ImageViewerApp: App {
         formatter.dateFormat = "yyyy/MM/dd HH:mm"
         return formatter.string(from: Date())
     }
+
 }
 
 // アプリケーションデリゲート
@@ -589,6 +611,13 @@ struct ImageViewerApp: App {
 class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var sessionManager: SessionManager?
     var appSettings: AppSettings?
+    var historyManager: FileHistoryManager?
+    var imageCatalogManager: ImageCatalogManager?
+    var sessionGroupManager: SessionGroupManager?
+    var openWindowAction: OpenWindowAction?
+
+    /// ワークスペース切り替え中フラグ（最後のウィンドウを閉じてもアプリ終了しない）
+    private var isSwitchingWorkspace = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // アプリ起動時にフォーカスを取得
@@ -680,6 +709,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         if menu.title == interpolationTitle {
             updateInterpolationSubmenu(menu, hasOpenFile: hasOpenFile, viewModel: viewModel)
+            return
+        }
+
+        let workspaceTitle = L("menu_workspace")
+        if menu.title == workspaceTitle {
+            updateWorkspaceSubmenu(menu)
             return
         }
 
@@ -778,6 +813,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     submenu.delegate = self
                     submenu.autoenablesItems = false
                     updateDisplaySizeSubmenu(submenu, hasOpenFile: hasOpenFile, viewModel: viewModel)
+                }
+            }
+            // ワークスペースメニュー
+            else if title == L("menu_workspace") {
+                if let submenu = item.submenu {
+                    submenu.delegate = self
+                    submenu.autoenablesItems = false
+                    updateWorkspaceSubmenu(submenu)
                 }
             }
             // 補間メニュー
@@ -924,7 +967,197 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    /// ワークスペースサブメニューの項目を動的に構築
+    private func updateWorkspaceSubmenu(_ menu: NSMenu) {
+        menu.removeAllItems()
+
+        let currentWorkspaceId = appSettings?.currentWorkspaceId ?? ""
+        let workspaces = historyManager?.fetchWorkspaces() ?? []
+
+        // デフォルトワークスペース
+        let defaultItem = NSMenuItem(
+            title: L("workspace_default"),
+            action: #selector(workspaceMenuItemClicked(_:)),
+            keyEquivalent: ""
+        )
+        defaultItem.target = self
+        defaultItem.representedObject = "" as NSString
+        defaultItem.state = currentWorkspaceId == "" ? .on : .off
+        menu.addItem(defaultItem)
+
+        // ユーザー作成ワークスペース
+        for workspace in workspaces {
+            let item = NSMenuItem(
+                title: workspace.name,
+                action: #selector(workspaceMenuItemClicked(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = workspace.id as NSString
+            item.state = currentWorkspaceId == workspace.id ? .on : .off
+            menu.addItem(item)
+        }
+
+        menu.addItem(NSMenuItem.separator())
+
+        // 作成
+        let createItem = NSMenuItem(
+            title: L("workspace_create"),
+            action: #selector(workspaceCreateClicked),
+            keyEquivalent: ""
+        )
+        createItem.target = self
+        menu.addItem(createItem)
+
+        // 名前を変更
+        let renameItem = NSMenuItem(
+            title: L("workspace_rename"),
+            action: #selector(workspaceRenameClicked),
+            keyEquivalent: ""
+        )
+        renameItem.target = self
+        renameItem.isEnabled = currentWorkspaceId != ""
+        menu.addItem(renameItem)
+
+        // 削除
+        let deleteItem = NSMenuItem(
+            title: L("workspace_delete"),
+            action: #selector(workspaceDeleteClicked),
+            keyEquivalent: ""
+        )
+        deleteItem.target = self
+        deleteItem.isEnabled = currentWorkspaceId != ""
+        menu.addItem(deleteItem)
+    }
+
+    @objc private func workspaceMenuItemClicked(_ sender: NSMenuItem) {
+        guard let workspaceId = sender.representedObject as? String else { return }
+        switchWorkspaceFromDelegate(to: workspaceId)
+    }
+
+    @objc private func workspaceCreateClicked() {
+        let alert = NSAlert()
+        alert.messageText = L("workspace_create_title")
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: L("save"))
+        alert.addButton(withTitle: L("cancel"))
+
+        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        textField.placeholderString = L("workspace_create_placeholder")
+        alert.accessoryView = textField
+        alert.window.initialFirstResponder = textField
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            let name = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { return }
+            if let workspace = historyManager?.createWorkspace(name: name) {
+                switchWorkspaceFromDelegate(to: workspace.id)
+            }
+        }
+    }
+
+    @objc private func workspaceRenameClicked() {
+        guard let currentId = appSettings?.currentWorkspaceId, currentId != "" else {
+            let alert = NSAlert()
+            alert.messageText = L("workspace_cannot_rename_default")
+            alert.alertStyle = .informational
+            alert.runModal()
+            return
+        }
+
+        let workspaces = historyManager?.fetchWorkspaces() ?? []
+        let currentName = workspaces.first(where: { $0.id == currentId })?.name ?? ""
+
+        let alert = NSAlert()
+        alert.messageText = L("workspace_rename_title")
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: L("save"))
+        alert.addButton(withTitle: L("cancel"))
+
+        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        textField.stringValue = currentName
+        textField.placeholderString = L("workspace_rename_placeholder")
+        alert.accessoryView = textField
+        alert.window.initialFirstResponder = textField
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            let newName = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !newName.isEmpty else { return }
+            historyManager?.renameWorkspace(id: currentId, newName: newName)
+        }
+    }
+
+    @objc private func workspaceDeleteClicked() {
+        guard let currentId = appSettings?.currentWorkspaceId, currentId != "" else {
+            let alert = NSAlert()
+            alert.messageText = L("workspace_cannot_delete_default")
+            alert.alertStyle = .informational
+            alert.runModal()
+            return
+        }
+
+        let workspaces = historyManager?.fetchWorkspaces() ?? []
+        let currentName = workspaces.first(where: { $0.id == currentId })?.name ?? ""
+
+        let alert = NSAlert()
+        alert.messageText = L("workspace_delete_confirm_title")
+        alert.informativeText = String(format: L("workspace_delete_confirm_message"), currentName)
+        alert.alertStyle = .critical
+        alert.addButton(withTitle: L("workspace_delete"))
+        alert.addButton(withTitle: L("cancel"))
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            historyManager?.deleteWorkspace(id: currentId)
+            switchWorkspaceFromDelegate(to: "")
+        }
+    }
+
+    /// ワークスペースを切り替える（AppDelegateから呼ばれる）
+    private func switchWorkspaceFromDelegate(to targetWorkspaceId: String) {
+        guard let appSettings = appSettings,
+              let historyManager = historyManager,
+              let sessionGroupManager = sessionGroupManager,
+              let imageCatalogManager = imageCatalogManager else { return }
+
+        guard targetWorkspaceId != appSettings.currentWorkspaceId else { return }
+
+        // ワークスペース切り替え中フラグを立てる（最後のウィンドウ閉じでアプリ終了しないように）
+        isSwitchingWorkspace = true
+
+        // 1. 全メインウィンドウを閉じる
+        for window in NSApp.windows {
+            if window is NSPanel { continue }
+            if let identifier = window.identifier?.rawValue,
+               identifier.contains("acknowledgements") || identifier.contains("settings") {
+                continue
+            }
+            if window.contentView == nil { continue }
+            window.close()
+        }
+
+        // 2. currentWorkspaceIdを更新
+        appSettings.currentWorkspaceId = targetWorkspaceId
+
+        // 3. 各マネージャーの workspaceId を更新してリロード
+        historyManager.workspaceId = targetWorkspaceId
+        historyManager.loadHistory()
+        sessionGroupManager.workspaceId = targetWorkspaceId
+        sessionGroupManager.loadSessionGroups()
+        imageCatalogManager.workspaceId = targetWorkspaceId
+        imageCatalogManager.loadCatalog()
+
+        // 4. 空のウィンドウを1つ開く（少し遅延させてウィンドウの閉じを完了させる）
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.openWindowAction?(id: "main")
+            self?.isSwitchingWorkspace = false
+        }
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        // ワークスペース切り替え中は終了しない
+        if isSwitchingWorkspace {
+            return false
+        }
         // 復元中は終了しない
         if sessionManager?.isProcessing == true {
             return false

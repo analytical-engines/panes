@@ -101,6 +101,9 @@ class ImageCatalogManager {
         appSupportDirectory.appendingPathComponent("default.store")
     }
 
+    /// 現在のワークスペースID（""はデフォルト）
+    var workspaceId: String = ""
+
     /// カタログの全エントリ（最終アクセス日時順）
     /// @ObservationIgnored: 配列の変更で全ウィンドウが再評価されるのを防ぐ
     /// 初期画面はcatalogVersionを監視して再描画する
@@ -307,18 +310,22 @@ class ImageCatalogManager {
     }
 
     /// カタログを読み込む
-    private func loadCatalog() {
+    func loadCatalog() {
         guard let context = modelContext else { return }
 
         do {
+            let wid = workspaceId
+
             // 個別画像を読み込み
             let standaloneDescriptor = FetchDescriptor<StandaloneImageData>(
+                predicate: #Predicate<StandaloneImageData> { $0.workspaceId == wid },
                 sortBy: [SortDescriptor(\.lastAccessDate, order: .reverse)]
             )
             let standaloneData = try context.fetch(standaloneDescriptor)
 
             // 書庫内画像を読み込み
             let archiveDescriptor = FetchDescriptor<ArchiveContentImageData>(
+                predicate: #Predicate<ArchiveContentImageData> { $0.workspaceId == wid },
                 sortBy: [SortDescriptor(\.lastAccessDate, order: .reverse)]
             )
             let archiveData = try context.fetch(archiveDescriptor)
@@ -380,8 +387,9 @@ class ImageCatalogManager {
 
         do {
             let searchKey = fileKey
+            let wid = workspaceId
             var descriptor = FetchDescriptor<StandaloneImageData>(
-                predicate: #Predicate<StandaloneImageData> { $0.fileKey == searchKey }
+                predicate: #Predicate<StandaloneImageData> { $0.fileKey == searchKey && $0.workspaceId == wid }
             )
             descriptor.fetchLimit = 1
             let existing = try context.fetch(descriptor)
@@ -414,7 +422,7 @@ class ImageCatalogManager {
                 imgFormat = imageData.imageFormat
             } else {
                 // 新規エントリを作成
-                let newData = StandaloneImageData(fileKey: fileKey, filePath: filePath, fileName: fileName)
+                let newData = StandaloneImageData(fileKey: fileKey, filePath: filePath, fileName: fileName, workspaceId: workspaceId)
                 newData.imageWidth = width
                 newData.imageHeight = height
                 newData.fileSize = fileSize
@@ -462,8 +470,9 @@ class ImageCatalogManager {
 
         do {
             let searchKey = fileKey
+            let wid = workspaceId
             var descriptor = FetchDescriptor<ArchiveContentImageData>(
-                predicate: #Predicate<ArchiveContentImageData> { $0.fileKey == searchKey }
+                predicate: #Predicate<ArchiveContentImageData> { $0.fileKey == searchKey && $0.workspaceId == wid }
             )
             descriptor.fetchLimit = 1
             let existing = try context.fetch(descriptor)
@@ -501,7 +510,8 @@ class ImageCatalogManager {
                     fileKey: fileKey,
                     parentPath: parentPath,
                     relativePath: relativePath,
-                    fileName: fileName
+                    fileName: fileName,
+                    workspaceId: workspaceId
                 )
                 newData.imageWidth = width
                 newData.imageHeight = height
@@ -672,20 +682,26 @@ class ImageCatalogManager {
         }
     }
 
-    /// 全てのカタログをクリア
+    /// 全てのカタログをクリア（現在のワークスペースのみ）
     func clearAllCatalog() {
         guard isInitialized, let context = modelContext else { return }
 
         do {
+            let wid = workspaceId
+
             // 個別画像を全削除
-            let standaloneDescriptor = FetchDescriptor<StandaloneImageData>()
+            let standaloneDescriptor = FetchDescriptor<StandaloneImageData>(
+                predicate: #Predicate<StandaloneImageData> { $0.workspaceId == wid }
+            )
             let allStandalone = try context.fetch(standaloneDescriptor)
             for item in allStandalone {
                 context.delete(item)
             }
 
             // 書庫内画像を全削除
-            let archiveDescriptor = FetchDescriptor<ArchiveContentImageData>()
+            let archiveDescriptor = FetchDescriptor<ArchiveContentImageData>(
+                predicate: #Predicate<ArchiveContentImageData> { $0.workspaceId == wid }
+            )
             let allArchive = try context.fetch(archiveDescriptor)
             for item in allArchive {
                 context.delete(item)
@@ -699,12 +715,15 @@ class ImageCatalogManager {
         }
     }
 
-    /// 個別画像カタログのみクリア
+    /// 個別画像カタログのみクリア（現在のワークスペースのみ）
     func clearStandaloneCatalog() {
         guard isInitialized, let context = modelContext else { return }
 
         do {
-            let descriptor = FetchDescriptor<StandaloneImageData>()
+            let wid = workspaceId
+            let descriptor = FetchDescriptor<StandaloneImageData>(
+                predicate: #Predicate<StandaloneImageData> { $0.workspaceId == wid }
+            )
             let all = try context.fetch(descriptor)
             for item in all {
                 context.delete(item)
@@ -718,12 +737,15 @@ class ImageCatalogManager {
         }
     }
 
-    /// 書庫内画像カタログのみクリア
+    /// 書庫内画像カタログのみクリア（現在のワークスペースのみ）
     func clearArchiveContentCatalog() {
         guard isInitialized, let context = modelContext else { return }
 
         do {
-            let descriptor = FetchDescriptor<ArchiveContentImageData>()
+            let wid = workspaceId
+            let descriptor = FetchDescriptor<ArchiveContentImageData>(
+                predicate: #Predicate<ArchiveContentImageData> { $0.workspaceId == wid }
+            )
             let all = try context.fetch(descriptor)
             for item in all {
                 context.delete(item)
@@ -758,8 +780,11 @@ class ImageCatalogManager {
 
         do {
             if !merge {
-                // Replace mode: delete all existing standalone images
-                let descriptor = FetchDescriptor<StandaloneImageData>()
+                // Replace mode: delete existing standalone images in current workspace
+                let wid = workspaceId
+                let descriptor = FetchDescriptor<StandaloneImageData>(
+                    predicate: #Predicate<StandaloneImageData> { $0.workspaceId == wid }
+                )
                 let all = try context.fetch(descriptor)
                 for item in all {
                     context.delete(item)
@@ -769,8 +794,9 @@ class ImageCatalogManager {
 
             for entry in standaloneImages {
                 let searchKey = entry.fileKey
+                let wid = workspaceId
                 var descriptor = FetchDescriptor<StandaloneImageData>(
-                    predicate: #Predicate<StandaloneImageData> { $0.fileKey == searchKey }
+                    predicate: #Predicate<StandaloneImageData> { $0.fileKey == searchKey && $0.workspaceId == wid }
                 )
                 descriptor.fetchLimit = 1
                 let existing = try context.fetch(descriptor)
@@ -780,7 +806,8 @@ class ImageCatalogManager {
                     let newData = StandaloneImageData(
                         fileKey: entry.fileKey,
                         filePath: entry.filePath,
-                        fileName: entry.fileName
+                        fileName: entry.fileName,
+                        workspaceId: workspaceId
                     )
                     newData.lastAccessDate = entry.lastAccessDate
                     newData.accessCount = entry.accessCount
@@ -810,7 +837,7 @@ class ImageCatalogManager {
             try enforceStandaloneLimit(context: context)
 
             try context.save()
-            notifyCatalogUpdate()
+            loadCatalog()
 
             DebugLogger.log("📥 Imported \(importedCount) standalone images", level: .normal)
             return importedCount

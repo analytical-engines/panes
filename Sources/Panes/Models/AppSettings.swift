@@ -50,6 +50,7 @@ class AppSettings {
         static let defaultHistorySearchType = "defaultHistorySearchType"
         static let initialScreenBackgroundImagePath = "initialScreenBackgroundImagePath"
         static let checkForUpdatesOnLaunch = "checkForUpdatesOnLaunch"
+        static let currentWorkspaceId = "currentWorkspaceId"
     }
 
     // MARK: - 表示設定
@@ -186,6 +187,11 @@ class AppSettings {
     /// 起動時にアップデートを確認するか
     var checkForUpdatesOnLaunch: Bool {
         didSet { defaults.set(checkForUpdatesOnLaunch, forKey: Keys.checkForUpdatesOnLaunch) }
+    }
+
+    /// 現在のワークスペースID（""はデフォルト）
+    var currentWorkspaceId: String {
+        didSet { defaults.set(currentWorkspaceId, forKey: Keys.currentWorkspaceId) }
     }
 
     /// 新規ウィンドウ用のサイズを取得
@@ -362,6 +368,9 @@ class AppSettings {
         } else {
             checkForUpdatesOnLaunch = true  // デフォルト: 有効
         }
+
+        // 現在のワークスペースID
+        currentWorkspaceId = defaults.string(forKey: Keys.currentWorkspaceId) ?? ""
     }
 
     // MARK: - 保存メソッド

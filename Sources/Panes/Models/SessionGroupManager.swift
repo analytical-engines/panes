@@ -11,6 +11,9 @@ class SessionGroupManager {
     /// ModelContextへの参照（FileHistoryManagerから共有）
     private var modelContext: ModelContext?
 
+    /// 現在のワークスペースID（""はデフォルト）
+    var workspaceId: String = ""
+
     /// 保存されたセッショングループ一覧
     private(set) var sessionGroups: [SessionGroup] = []
 
@@ -83,12 +86,14 @@ class SessionGroupManager {
         }
 
         do {
+            let wid = workspaceId
             let descriptor = FetchDescriptor<SessionGroupData>(
+                predicate: #Predicate<SessionGroupData> { $0.workspaceId == wid },
                 sortBy: [SortDescriptor(\.lastAccessedAt, order: .reverse)]
             )
             let groupsData = try context.fetch(descriptor)
             sessionGroups = groupsData.map { $0.toSessionGroup() }
-            DebugLogger.log("📂 Session groups loaded: \(sessionGroups.count)", level: .normal)
+            DebugLogger.log("📂 Session groups loaded: \(sessionGroups.count) (workspace: '\(wid)')", level: .normal)
         } catch {
             DebugLogger.log("❌ Failed to load session groups: \(error)", level: .minimal)
             sessionGroups = []
@@ -112,6 +117,7 @@ class SessionGroupManager {
         }
 
         let groupData = SessionGroupData(from: group)
+        groupData.workspaceId = workspaceId
         context.insert(groupData)
 
         do {
@@ -221,7 +227,7 @@ class SessionGroupManager {
         }
     }
 
-    /// 全てのセッショングループをクリア
+    /// 全てのセッショングループをクリア（現在のワークスペースのみ）
     func clearAllSessionGroups() {
         guard let context = modelContext else {
             sessionGroups.removeAll()
@@ -230,7 +236,10 @@ class SessionGroupManager {
         }
 
         do {
-            let descriptor = FetchDescriptor<SessionGroupData>()
+            let wid = workspaceId
+            let descriptor = FetchDescriptor<SessionGroupData>(
+                predicate: #Predicate<SessionGroupData> { $0.workspaceId == wid }
+            )
             let all = try context.fetch(descriptor)
             for item in all {
                 context.delete(item)
@@ -292,8 +301,11 @@ class SessionGroupManager {
 
         do {
             if !merge {
-                // Replace mode: delete all existing sessions
-                let descriptor = FetchDescriptor<SessionGroupData>()
+                // Replace mode: delete existing sessions in current workspace
+                let wid = workspaceId
+                let descriptor = FetchDescriptor<SessionGroupData>(
+                    predicate: #Predicate<SessionGroupData> { $0.workspaceId == wid }
+                )
                 let all = try context.fetch(descriptor)
                 for item in all {
                     context.delete(item)
@@ -305,14 +317,14 @@ class SessionGroupManager {
                 // 同名セッションがあるかチェック
                 let uniqueName = generateUniqueName(baseName: session.name)
 
-                // 新しいセッションを作成（名前を変更、IDは新規）
+                // 新しいセッションを作成（現在のワークスペースIDを設定）
                 let newSession = SessionGroup(
                     id: UUID(),
                     name: uniqueName,
                     entries: session.entries,
                     createdAt: session.createdAt,
                     lastAccessedAt: session.lastAccessedAt,
-                    workspaceId: session.workspaceId
+                    workspaceId: workspaceId
                 )
 
                 let groupData = SessionGroupData(from: newSession)

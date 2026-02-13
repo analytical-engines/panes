@@ -410,6 +410,22 @@
 "update_up_to_date_title" = "You're Up to Date";
 "update_up_to_date_message" = "Panes %@ is the latest version.";
 
+// MARK: - Workspace
+
+"menu_workspace" = "Workspace";
+"workspace_default" = "Default";
+"workspace_create" = "Create Workspace...";
+"workspace_rename" = "Rename...";
+"workspace_delete" = "Delete";
+"workspace_create_title" = "Create Workspace";
+"workspace_create_placeholder" = "Workspace name";
+"workspace_rename_title" = "Rename Workspace";
+"workspace_rename_placeholder" = "New name";
+"workspace_delete_confirm_title" = "Delete Workspace";
+"workspace_delete_confirm_message" = "All history, sessions, and image data in \"%@\" will be permanently deleted. This action cannot be undone.";
+"workspace_cannot_delete_default" = "The default workspace cannot be deleted.";
+"workspace_cannot_rename_default" = "The default workspace cannot be renamed.";
+
 // MARK: - Acknowledgements
 
 "menu_acknowledgements" = "Acknowledgements";

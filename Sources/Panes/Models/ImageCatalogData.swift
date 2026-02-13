@@ -51,13 +51,19 @@ final class StandaloneImageData {
     /// ワークスペースID（""=デフォルト、将来のworkspace機能で使用）
     var workspaceId: String = ""
 
-    init(fileKey: String, filePath: String, fileName: String) {
-        self.id = fileKey
+    /// IDを生成（デフォルトワークスペースでは既存IDと互換性を保つ）
+    static func generateId(fileKey: String, workspaceId: String = "") -> String {
+        workspaceId.isEmpty ? fileKey : "\(fileKey)-\(workspaceId)"
+    }
+
+    init(fileKey: String, filePath: String, fileName: String, workspaceId: String = "") {
+        self.id = StandaloneImageData.generateId(fileKey: fileKey, workspaceId: workspaceId)
         self.fileKey = fileKey
         self.filePath = filePath
         self.fileName = fileName
         self.lastAccessDate = Date()
         self.accessCount = 1
+        self.workspaceId = workspaceId
     }
 
     /// ImageCatalogEntry に変換
@@ -144,14 +150,20 @@ final class ArchiveContentImageData {
     /// ワークスペースID（""=デフォルト、将来のworkspace機能で使用）
     var workspaceId: String = ""
 
-    init(fileKey: String, parentPath: String, relativePath: String, fileName: String) {
-        self.id = fileKey
+    /// IDを生成（デフォルトワークスペースでは既存IDと互換性を保つ）
+    static func generateId(fileKey: String, workspaceId: String = "") -> String {
+        workspaceId.isEmpty ? fileKey : "\(fileKey)-\(workspaceId)"
+    }
+
+    init(fileKey: String, parentPath: String, relativePath: String, fileName: String, workspaceId: String = "") {
+        self.id = ArchiveContentImageData.generateId(fileKey: fileKey, workspaceId: workspaceId)
         self.fileKey = fileKey
         self.parentPath = parentPath
         self.relativePath = relativePath
         self.fileName = fileName
         self.lastAccessDate = Date()
         self.accessCount = 1
+        self.workspaceId = workspaceId
     }
 
     /// ImageCatalogEntry に変換

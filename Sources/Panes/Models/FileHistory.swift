@@ -59,8 +59,8 @@ struct FileHistoryEntry: Codable, Identifiable {
         case viewMode, savedPage, readingDirection, sortMethod, sortReversed, isPasswordProtected
     }
 
-    init(fileKey: String, filePath: String, fileName: String) {
-        self.id = FileHistoryEntry.generateId(fileName: fileName, fileKey: fileKey)
+    init(fileKey: String, filePath: String, fileName: String, workspaceId: String = "") {
+        self.id = FileHistoryEntry.generateId(fileName: fileName, fileKey: fileKey, workspaceId: workspaceId)
         self.fileKey = fileKey
         self.pageSettingsRef = nil
         self.filePath = filePath
@@ -113,9 +113,11 @@ struct FileHistoryEntry: Codable, Identifiable {
         self.isPasswordProtected = try container.decodeIfPresent(Bool.self, forKey: .isPasswordProtected)
     }
 
-    /// エントリIDを生成（ファイル名+fileKeyのハッシュ）
-    static func generateId(fileName: String, fileKey: String) -> String {
-        let combined = "\(fileName)-\(fileKey)"
+    /// エントリIDを生成（ファイル名+fileKey+workspaceIdのハッシュ）
+    static func generateId(fileName: String, fileKey: String, workspaceId: String = "") -> String {
+        let combined = workspaceId.isEmpty
+            ? "\(fileName)-\(fileKey)"
+            : "\(fileName)-\(fileKey)-\(workspaceId)"
         let data = combined.data(using: .utf8) ?? Data()
         var hash: UInt64 = 5381
         for byte in data {
@@ -202,6 +204,9 @@ class FileHistoryManager {
     private var maxHistoryCount: Int {
         appSettings?.maxHistoryCount ?? 50
     }
+
+    /// 現在のワークスペースID（""はデフォルト）
+    var workspaceId: String = ""
 
     /// 履歴の全エントリ（最終アクセス日時順）
     /// @ObservationIgnored: 配列の変更で全ウィンドウが再評価されるのを防ぐ
@@ -511,7 +516,7 @@ class FileHistoryManager {
 
         // SwiftDataに移行
         for entry in legacyEntries {
-            let historyData = FileHistoryData(fileKey: entry.fileKey, filePath: entry.filePath, fileName: entry.fileName)
+            let historyData = FileHistoryData(fileKey: entry.fileKey, filePath: entry.filePath, fileName: entry.fileName, workspaceId: workspaceId)
             historyData.lastAccessDate = entry.lastAccessDate
             historyData.accessCount = entry.accessCount
 
@@ -702,7 +707,7 @@ class FileHistoryManager {
                 // fileKeyを旧形式から新形式に変換（必要な場合）
                 // 旧: "ファイル名-サイズ-ハッシュ", 新: "サイズ-ハッシュ"
                 let newFileKey = Self.extractContentKey(from: entry.fileKey)
-                let expectedId = FileHistoryData.generateId(fileName: entry.fileName, fileKey: newFileKey)
+                let expectedId = FileHistoryData.generateId(fileName: entry.fileName, fileKey: newFileKey, workspaceId: workspaceId)
 
                 // IDまたはfileKeyが期待値と異なる場合は移行が必要
                 if entry.id != expectedId || entry.fileKey != newFileKey {
@@ -762,7 +767,7 @@ class FileHistoryManager {
                 }
 
                 // 同じ新しいfileKeyを持つ既存エントリを探す（重複マージ用）
-                let newId = FileHistoryData.generateId(fileName: entry.fileName, fileKey: newFileKey)
+                let newId = FileHistoryData.generateId(fileName: entry.fileName, fileKey: newFileKey, workspaceId: workspaceId)
                 let existingEntry = allEntries.first { $0.id == newId && $0 !== entry }
 
                 if let existing = existingEntry {
@@ -830,19 +835,21 @@ class FileHistoryManager {
     }
 
     /// 履歴を読み込む
-    private func loadHistory() {
+    func loadHistory() {
         guard let context = modelContext else {
             DebugLogger.log("❌ loadHistory: ModelContext not available", level: .minimal)
             return
         }
 
         do {
+            let wid = workspaceId
             let descriptor = FetchDescriptor<FileHistoryData>(
+                predicate: #Predicate<FileHistoryData> { $0.workspaceId == wid },
                 sortBy: [SortDescriptor(\.lastAccessDate, order: .reverse)]
             )
             let historyData = try context.fetch(descriptor)
             history = historyData.map { $0.toEntry() }
-            DebugLogger.log("📦 Loaded \(history.count) history entries from SwiftData", level: .normal)
+            DebugLogger.log("📦 Loaded \(history.count) history entries from SwiftData (workspace: '\(wid)')", level: .normal)
         } catch {
             DebugLogger.log("❌ Failed to load history: \(error)", level: .minimal)
         }
@@ -919,7 +926,7 @@ class FileHistoryManager {
 
         do {
             // エントリIDを生成して完全一致を検索
-            let entryId = FileHistoryEntry.generateId(fileName: fileName, fileKey: fileKey)
+            let entryId = FileHistoryEntry.generateId(fileName: fileName, fileKey: fileKey, workspaceId: workspaceId)
             let searchId = entryId
             var idDescriptor = FetchDescriptor<FileHistoryData>(
                 predicate: #Predicate<FileHistoryData> { $0.id == searchId }
@@ -997,7 +1004,7 @@ class FileHistoryManager {
             recordAccessAsNewEntry(fileKey: fileKey, filePath: filePath, fileName: fileName, isPasswordProtected: isPasswordProtected)
             if let settings = existingSettings {
                 // 新しいエントリに設定を保存
-                let newEntryId = FileHistoryEntry.generateId(fileName: fileName, fileKey: fileKey)
+                let newEntryId = FileHistoryEntry.generateId(fileName: fileName, fileKey: fileKey, workspaceId: workspaceId)
                 savePageDisplaySettingsById(settings, for: newEntryId)
             }
 
@@ -1021,7 +1028,7 @@ class FileHistoryManager {
         guard let context = modelContext else { return }
 
         do {
-            let entryId = FileHistoryEntry.generateId(fileName: fileName, fileKey: fileKey)
+            let entryId = FileHistoryEntry.generateId(fileName: fileName, fileKey: fileKey, workspaceId: workspaceId)
 
             // 既存エントリを検索
             let searchId = entryId
@@ -1051,7 +1058,7 @@ class FileHistoryManager {
                 passwordProtected = existing.isPasswordProtected
             } else {
                 // 新規エントリを作成
-                let newData = FileHistoryData(fileKey: fileKey, pageSettingsRef: pageSettingsRef, filePath: filePath, fileName: fileName)
+                let newData = FileHistoryData(fileKey: fileKey, pageSettingsRef: pageSettingsRef, filePath: filePath, fileName: fileName, workspaceId: workspaceId)
                 if isPasswordProtected {
                     newData.isPasswordProtected = true
                 }
@@ -1082,10 +1089,14 @@ class FileHistoryManager {
 
     /// 履歴の上限をチェックし、超過分を削除
     private func enforceHistoryLimit(context: ModelContext) throws {
-        let countDescriptor = FetchDescriptor<FileHistoryData>()
+        let wid = workspaceId
+        let countDescriptor = FetchDescriptor<FileHistoryData>(
+            predicate: #Predicate<FileHistoryData> { $0.workspaceId == wid }
+        )
         let totalCount = try context.fetchCount(countDescriptor)
         if totalCount > maxHistoryCount {
             let oldestDescriptor = FetchDescriptor<FileHistoryData>(
+                predicate: #Predicate<FileHistoryData> { $0.workspaceId == wid },
                 sortBy: [SortDescriptor(\.lastAccessDate, order: .forward)]
             )
             let oldest = try context.fetch(oldestDescriptor)
@@ -1112,7 +1123,7 @@ class FileHistoryManager {
         guard let context = modelContext else { return }
 
         do {
-            let newData = FileHistoryData(fileKey: fileKey, filePath: filePath, fileName: fileName)
+            let newData = FileHistoryData(fileKey: fileKey, filePath: filePath, fileName: fileName, workspaceId: workspaceId)
             if isPasswordProtected {
                 newData.isPasswordProtected = true
             }
@@ -1137,7 +1148,7 @@ class FileHistoryManager {
             try context.save()
 
             // メモリ上の配列を直接更新（リロード不要）
-            let entryId = FileHistoryEntry.generateId(fileName: fileName, fileKey: fileKey)
+            let entryId = FileHistoryEntry.generateId(fileName: fileName, fileKey: fileKey, workspaceId: workspaceId)
             let now = Date()
             updateHistoryArrayDirectly(
                 id: entryId,
@@ -1160,7 +1171,7 @@ class FileHistoryManager {
         guard let context = modelContext else { return }
 
         do {
-            let entryId = FileHistoryEntry.generateId(fileName: fileName, fileKey: fileKey)
+            let entryId = FileHistoryEntry.generateId(fileName: fileName, fileKey: fileKey, workspaceId: workspaceId)
             let searchId = entryId
             var descriptor = FetchDescriptor<FileHistoryData>(
                 predicate: #Predicate<FileHistoryData> { $0.id == searchId }
@@ -1188,7 +1199,7 @@ class FileHistoryManager {
             } else {
                 // 新規エントリを作成
                 DebugLogger.log("📊 recordAccess: creating new entry for \(fileName), id=\(entryId)", level: .normal)
-                let newData = FileHistoryData(fileKey: fileKey, filePath: filePath, fileName: fileName)
+                let newData = FileHistoryData(fileKey: fileKey, filePath: filePath, fileName: fileName, workspaceId: workspaceId)
                 if isPasswordProtected {
                     newData.isPasswordProtected = true
                 }
@@ -1262,7 +1273,7 @@ class FileHistoryManager {
             return nil
         }
         do {
-            let entryId = FileHistoryEntry.generateId(fileName: fileName, fileKey: fileKey)
+            let entryId = FileHistoryEntry.generateId(fileName: fileName, fileKey: fileKey, workspaceId: workspaceId)
             let searchId = entryId
             var descriptor = FetchDescriptor<FileHistoryData>(
                 predicate: #Predicate<FileHistoryData> { $0.id == searchId }
@@ -1326,14 +1337,17 @@ class FileHistoryManager {
         }
     }
 
-    /// 全ての履歴をクリア
+    /// 全ての履歴をクリア（現在のワークスペースのみ）
     func clearAllHistory() {
         guard isInitialized, let context = modelContext else {
             DebugLogger.log("⚠️ clearAllHistory skipped: SwiftData not initialized", level: .normal)
             return
         }
         do {
-            let descriptor = FetchDescriptor<FileHistoryData>()
+            let wid = workspaceId
+            let descriptor = FetchDescriptor<FileHistoryData>(
+                predicate: #Predicate<FileHistoryData> { $0.workspaceId == wid }
+            )
             let all = try context.fetch(descriptor)
             for item in all {
                 // 関連するパスワードも削除
@@ -1348,14 +1362,17 @@ class FileHistoryManager {
         }
     }
 
-    /// 全てのアクセスカウントを1にリセット
+    /// 全てのアクセスカウントを1にリセット（現在のワークスペースのみ）
     func resetAllAccessCounts() {
         guard isInitialized, let context = modelContext else {
             DebugLogger.log("⚠️ resetAllAccessCounts skipped: SwiftData not initialized", level: .normal)
             return
         }
         do {
-            let descriptor = FetchDescriptor<FileHistoryData>()
+            let wid = workspaceId
+            let descriptor = FetchDescriptor<FileHistoryData>(
+                predicate: #Predicate<FileHistoryData> { $0.workspaceId == wid }
+            )
             let all = try context.fetch(descriptor)
             for item in all {
                 item.accessCount = 1
@@ -1475,7 +1492,7 @@ class FileHistoryManager {
     /// ファイル名とfileKeyを指定してページ表示設定を読み込む
     /// エントリIDを計算し、pageSettingsRefがあれば辿って設定を取得
     func loadPageDisplaySettings(forFileName fileName: String, fileKey: String) -> PageDisplaySettings? {
-        let entryId = FileHistoryEntry.generateId(fileName: fileName, fileKey: fileKey)
+        let entryId = FileHistoryEntry.generateId(fileName: fileName, fileKey: fileKey, workspaceId: workspaceId)
         return loadPageDisplaySettingsById(entryId)
     }
 
@@ -1567,7 +1584,7 @@ class FileHistoryManager {
     /// ファイル名とfileKeyを指定してページ表示設定を保存
     /// エントリIDを計算し、pageSettingsRefがあれば参照先に保存
     func savePageDisplaySettings(_ settings: PageDisplaySettings, forFileName fileName: String, fileKey: String) {
-        let entryId = FileHistoryEntry.generateId(fileName: fileName, fileKey: fileKey)
+        let entryId = FileHistoryEntry.generateId(fileName: fileName, fileKey: fileKey, workspaceId: workspaceId)
         DebugLogger.log("💾 savePageDisplaySettings: fileName=\(fileName), entryId=\(entryId), singlePages=\(settings.userForcedSinglePageIndices.count)", level: .normal)
         savePageDisplaySettingsById(settings, for: entryId)
     }
@@ -1783,10 +1800,11 @@ class FileHistoryManager {
             // 1. 書庫ファイルのImport
             if merge {
                 for item in importData.archives {
-                    let entryId = FileHistoryEntry.generateId(fileName: item.entry.fileName, fileKey: item.entry.fileKey)
+                    let entryId = FileHistoryEntry.generateId(fileName: item.entry.fileName, fileKey: item.entry.fileKey, workspaceId: workspaceId)
                     let searchId = entryId
+                    let wid = workspaceId
                     var descriptor = FetchDescriptor<FileHistoryData>(
-                        predicate: #Predicate<FileHistoryData> { $0.id == searchId }
+                        predicate: #Predicate<FileHistoryData> { $0.id == searchId && $0.workspaceId == wid }
                     )
                     descriptor.fetchLimit = 1
                     let existing = try context.fetch(descriptor)
@@ -1795,7 +1813,8 @@ class FileHistoryManager {
                         let newData = FileHistoryData(
                             fileKey: item.entry.fileKey,
                             filePath: item.entry.filePath,
-                            fileName: item.entry.fileName
+                            fileName: item.entry.fileName,
+                            workspaceId: workspaceId
                         )
                         newData.lastAccessDate = item.entry.lastAccessDate
                         newData.accessCount = item.entry.accessCount
@@ -1818,8 +1837,11 @@ class FileHistoryManager {
                     }
                 }
             } else {
-                // Replace mode: delete all existing archives
-                let allDescriptor = FetchDescriptor<FileHistoryData>()
+                // Replace mode: delete existing archives in current workspace
+                let wid = workspaceId
+                let allDescriptor = FetchDescriptor<FileHistoryData>(
+                    predicate: #Predicate<FileHistoryData> { $0.workspaceId == wid }
+                )
                 let all = try context.fetch(allDescriptor)
                 for item in all {
                     context.delete(item)
@@ -1829,7 +1851,8 @@ class FileHistoryManager {
                     let newData = FileHistoryData(
                         fileKey: item.entry.fileKey,
                         filePath: item.entry.filePath,
-                        fileName: item.entry.fileName
+                        fileName: item.entry.fileName,
+                        workspaceId: workspaceId
                     )
                     newData.lastAccessDate = item.entry.lastAccessDate
                     newData.accessCount = item.entry.accessCount
@@ -1874,6 +1897,117 @@ class FileHistoryManager {
                 standaloneImageCount: 0,
                 sessionCount: 0
             )
+        }
+    }
+
+    // MARK: - Workspace Management
+
+    /// 全ワークスペースを取得（デフォルト含む）
+    func fetchWorkspaces() -> [WorkspaceData] {
+        guard let context = modelContext else { return [] }
+        do {
+            let descriptor = FetchDescriptor<WorkspaceData>(
+                sortBy: [SortDescriptor(\.createdAt, order: .forward)]
+            )
+            return try context.fetch(descriptor)
+        } catch {
+            DebugLogger.log("❌ Failed to fetch workspaces: \(error)", level: .minimal)
+            return []
+        }
+    }
+
+    /// ワークスペースを作成
+    @discardableResult
+    func createWorkspace(name: String) -> WorkspaceData? {
+        guard let context = modelContext else { return nil }
+        do {
+            let workspace = WorkspaceData(id: UUID().uuidString, name: name)
+            context.insert(workspace)
+            try context.save()
+            DebugLogger.log("📦 Created workspace: \(name) (id: \(workspace.id))", level: .normal)
+            return workspace
+        } catch {
+            DebugLogger.log("❌ Failed to create workspace: \(error)", level: .minimal)
+            return nil
+        }
+    }
+
+    /// ワークスペース名を変更
+    func renameWorkspace(id: String, newName: String) {
+        guard let context = modelContext else { return }
+        do {
+            let searchId = id
+            var descriptor = FetchDescriptor<WorkspaceData>(
+                predicate: #Predicate<WorkspaceData> { $0.id == searchId }
+            )
+            descriptor.fetchLimit = 1
+            let results = try context.fetch(descriptor)
+            if let workspace = results.first {
+                workspace.name = newName
+                try context.save()
+                DebugLogger.log("📦 Renamed workspace: \(newName)", level: .normal)
+            }
+        } catch {
+            DebugLogger.log("❌ Failed to rename workspace: \(error)", level: .minimal)
+        }
+    }
+
+    /// ワークスペースを削除（関連データも削除）
+    func deleteWorkspace(id: String) {
+        guard id != "", let context = modelContext else { return }
+        do {
+            let wid = id
+
+            // 関連する FileHistoryData を削除
+            let historyDescriptor = FetchDescriptor<FileHistoryData>(
+                predicate: #Predicate<FileHistoryData> { $0.workspaceId == wid }
+            )
+            let historyItems = try context.fetch(historyDescriptor)
+            for item in historyItems {
+                try? PasswordStorage.shared.deletePassword(forArchive: item.filePath)
+                context.delete(item)
+            }
+
+            // 関連する SessionGroupData を削除
+            let sessionDescriptor = FetchDescriptor<SessionGroupData>(
+                predicate: #Predicate<SessionGroupData> { $0.workspaceId == wid }
+            )
+            let sessionItems = try context.fetch(sessionDescriptor)
+            for item in sessionItems {
+                context.delete(item)
+            }
+
+            // 関連する StandaloneImageData を削除
+            let standaloneDescriptor = FetchDescriptor<StandaloneImageData>(
+                predicate: #Predicate<StandaloneImageData> { $0.workspaceId == wid }
+            )
+            let standaloneItems = try context.fetch(standaloneDescriptor)
+            for item in standaloneItems {
+                context.delete(item)
+            }
+
+            // 関連する ArchiveContentImageData を削除
+            let archiveDescriptor = FetchDescriptor<ArchiveContentImageData>(
+                predicate: #Predicate<ArchiveContentImageData> { $0.workspaceId == wid }
+            )
+            let archiveItems = try context.fetch(archiveDescriptor)
+            for item in archiveItems {
+                context.delete(item)
+            }
+
+            // WorkspaceData を削除
+            let workspaceDescriptor = FetchDescriptor<WorkspaceData>(
+                predicate: #Predicate<WorkspaceData> { $0.id == wid }
+            )
+            let workspaces = try context.fetch(workspaceDescriptor)
+            for item in workspaces {
+                context.delete(item)
+            }
+
+            try context.save()
+            DebugLogger.log("📦 Deleted workspace: \(id) with all related data", level: .normal)
+        } catch {
+            DebugLogger.log("❌ Failed to delete workspace: \(error)", level: .minimal)
         }
     }
 }

@@ -410,6 +410,22 @@
 "update_up_to_date_title" = "最新バージョンです";
 "update_up_to_date_message" = "Panes %@ は最新バージョンです。";
 
+// MARK: - Workspace
+
+"menu_workspace" = "ワークスペース";
+"workspace_default" = "デフォルト";
+"workspace_create" = "ワークスペースを作成...";
+"workspace_rename" = "名前を変更...";
+"workspace_delete" = "削除";
+"workspace_create_title" = "ワークスペースの作成";
+"workspace_create_placeholder" = "ワークスペース名";
+"workspace_rename_title" = "ワークスペース名の変更";
+"workspace_rename_placeholder" = "新しい名前";
+"workspace_delete_confirm_title" = "ワークスペースの削除";
+"workspace_delete_confirm_message" = "「%@」の履歴、セッション、画像データがすべて完全に削除されます。この操作は取り消せません。";
+"workspace_cannot_delete_default" = "デフォルトワークスペースは削除できません。";
+"workspace_cannot_rename_default" = "デフォルトワークスペースの名前は変更できません。";
+
 // MARK: - Acknowledgements
 
 "menu_acknowledgements" = "謝辞";
