@@ -119,8 +119,8 @@ final class FileHistoryData {
 
     /// 旧形式のIDを新形式に移行
     /// SwiftDataは@Attribute(.unique)でもプロパティの更新は許可される
-    func migrateIdToNewFormat(fileName: String, fileKey: String) {
-        let newId = FileHistoryData.generateId(fileName: fileName, fileKey: fileKey)
+    func migrateIdToNewFormat(fileName: String, fileKey: String, workspaceId: String = "") {
+        let newId = FileHistoryData.generateId(fileName: fileName, fileKey: fileKey, workspaceId: workspaceId)
         if id != newId {
             id = newId
             self.fileKey = fileKey  // fileKeyも同時に更新

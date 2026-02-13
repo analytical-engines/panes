@@ -707,11 +707,11 @@ class FileHistoryManager {
                 // fileKeyを旧形式から新形式に変換（必要な場合）
                 // 旧: "ファイル名-サイズ-ハッシュ", 新: "サイズ-ハッシュ"
                 let newFileKey = Self.extractContentKey(from: entry.fileKey)
-                let expectedId = FileHistoryData.generateId(fileName: entry.fileName, fileKey: newFileKey, workspaceId: workspaceId)
+                let expectedId = FileHistoryData.generateId(fileName: entry.fileName, fileKey: newFileKey, workspaceId: entry.workspaceId)
 
                 // IDまたはfileKeyが期待値と異なる場合は移行が必要
                 if entry.id != expectedId || entry.fileKey != newFileKey {
-                    entry.migrateIdToNewFormat(fileName: entry.fileName, fileKey: newFileKey)
+                    entry.migrateIdToNewFormat(fileName: entry.fileName, fileKey: newFileKey, workspaceId: entry.workspaceId)
                     migratedCount += 1
                 }
             }
@@ -767,7 +767,7 @@ class FileHistoryManager {
                 }
 
                 // 同じ新しいfileKeyを持つ既存エントリを探す（重複マージ用）
-                let newId = FileHistoryData.generateId(fileName: entry.fileName, fileKey: newFileKey, workspaceId: workspaceId)
+                let newId = FileHistoryData.generateId(fileName: entry.fileName, fileKey: newFileKey, workspaceId: entry.workspaceId)
                 let existingEntry = allEntries.first { $0.id == newId && $0 !== entry }
 
                 if let existing = existingEntry {
@@ -1825,6 +1825,7 @@ class FileHistoryManager {
                         newData.readingDirection = item.entry.readingDirection
                         newData.sortMethod = item.entry.sortMethod
                         newData.sortReversed = item.entry.sortReversed
+                        newData.isPasswordProtected = item.entry.isPasswordProtected
                         if let settings = item.pageSettings {
                             newData.setPageSettings(settings)
                         }
@@ -1833,6 +1834,9 @@ class FileHistoryManager {
                     } else if let existingData = existing.first {
                         if let importMemo = item.entry.memo, !importMemo.isEmpty {
                             existingData.memo = importMemo
+                        }
+                        if item.entry.isPasswordProtected == true {
+                            existingData.isPasswordProtected = true
                         }
                     }
                 }
@@ -1863,6 +1867,7 @@ class FileHistoryManager {
                     newData.readingDirection = item.entry.readingDirection
                     newData.sortMethod = item.entry.sortMethod
                     newData.sortReversed = item.entry.sortReversed
+                    newData.isPasswordProtected = item.entry.isPasswordProtected
                     if let settings = item.pageSettings {
                         newData.setPageSettings(settings)
                     }
