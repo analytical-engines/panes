@@ -399,6 +399,17 @@
 "shortcut_arrow_keys_note" = "Arrow keys follow reading direction and are not customizable.";
 "shortcut_reset_defaults" = "Reset to Defaults";
 
+// MARK: - Update Checker
+
+"menu_check_for_updates" = "Check for Updates...";
+"check_for_updates_on_launch" = "Check for updates on launch";
+"update_available_title" = "Update Available";
+"update_available_message" = "Panes %@ is now available. You are currently using %@.";
+"update_download" = "Download";
+"update_later" = "Later";
+"update_up_to_date_title" = "You're Up to Date";
+"update_up_to_date_message" = "Panes %@ is the latest version.";
+
 // MARK: - Acknowledgements
 
 "menu_acknowledgements" = "Acknowledgements";

@@ -24,6 +24,7 @@
 		547C4B91ABCD00B57476429E /* ImageInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E86A0FDB87F33AB39E48DC5 /* ImageInfoView.swift */; };
 		61765FE77F2CD4713ED2E8D9 /* SupportViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AB6547DB72CE3BE153138E5 /* SupportViews.swift */; };
 		644AEC77BDC96FCAB48A8E16 /* PasswordStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87A88CECA7DDF54397E415EA /* PasswordStorage.swift */; };
+		UPDATECHK00001 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = UPDATECHK00002 /* UpdateChecker.swift */; };
 		65017E835C08135405D42AF6 /* SessionGroupData.swift in Sources */ = {isa = PBXBuildFile; fileRef = D810CDC7F68A0173CA4B74BD /* SessionGroupData.swift */; };
 		6621E1D3C9D8941CF48DC712 /* PageDisplaySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F57A2B44F8B019A58BC7F270 /* PageDisplaySettings.swift */; };
 		692DE6A8D01B6E59809BDD73 /* SessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CE884AB6254A48884226BAF /* SessionManager.swift */; };
@@ -90,6 +91,7 @@
 		864D39A15F95B6BA902EF459 /* WindowCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowCoordinator.swift; sourceTree = "<group>"; };
 		86D714A2D3495DB31C1EAFC0 /* RarImageSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RarImageSource.swift; sourceTree = "<group>"; };
 		87A88CECA7DDF54397E415EA /* PasswordStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasswordStorage.swift; sourceTree = "<group>"; };
+		UPDATECHK00002 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
 		A23641122F260C89009AB18F /* ModalState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModalState.swift; sourceTree = "<group>"; };
 		A23641142F27C8F0009AB18F /* HistoryUIState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryUIState.swift; sourceTree = "<group>"; };
 		A2B38B252F05631300C307FE /* ZoomableScrollView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomableScrollView.swift; sourceTree = "<group>"; };
@@ -237,6 +239,7 @@
 				053F3EC5356ED382D9D52529 /* ImageSource.swift */,
 				87A88CECA7DDF54397E415EA /* PasswordStorage.swift */,
 				86D714A2D3495DB31C1EAFC0 /* RarImageSource.swift */,
+				UPDATECHK00002 /* UpdateChecker.swift */,
 				32226AEC2ABD5BE8D2C0AF1C /* RarReader.swift */,
 				5A0825D56310A5DDE5C3E03F /* SevenZipImageSource.swift */,
 				BB8D054B88ADD193A51C3EC4 /* SevenZipReader.swift */,
@@ -422,6 +425,7 @@
 				22525D20F6A09C48FEEB1AFF /* PasswordDialog.swift in Sources */,
 				644AEC77BDC96FCAB48A8E16 /* PasswordStorage.swift in Sources */,
 				8D93B23EADC0F637CDE92DDF /* RarImageSource.swift in Sources */,
+				UPDATECHK00001 /* UpdateChecker.swift in Sources */,
 				9C1071A8C39D4C14A38B14DF /* RarReader.swift in Sources */,
 				EDF1EF148D0D9731561F9BB1 /* SessionGroup.swift in Sources */,
 				50654A752541CEA1D9F8EC15 /* SessionGroupManager.swift in Sources */,

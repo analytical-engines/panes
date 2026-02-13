@@ -49,6 +49,7 @@ class AppSettings {
         static let imageCatalogFilter = "imageCatalogFilter"
         static let defaultHistorySearchType = "defaultHistorySearchType"
         static let initialScreenBackgroundImagePath = "initialScreenBackgroundImagePath"
+        static let checkForUpdatesOnLaunch = "checkForUpdatesOnLaunch"
     }
 
     // MARK: - 表示設定
@@ -180,6 +181,11 @@ class AppSettings {
     /// 初期画面の背景画像パス（空文字列の場合は背景なし）
     var initialScreenBackgroundImagePath: String {
         didSet { defaults.set(initialScreenBackgroundImagePath, forKey: Keys.initialScreenBackgroundImagePath) }
+    }
+
+    /// 起動時にアップデートを確認するか
+    var checkForUpdatesOnLaunch: Bool {
+        didSet { defaults.set(checkForUpdatesOnLaunch, forKey: Keys.checkForUpdatesOnLaunch) }
     }
 
     /// 新規ウィンドウ用のサイズを取得
@@ -349,6 +355,13 @@ class AppSettings {
 
         // 初期画面の背景画像パス
         initialScreenBackgroundImagePath = defaults.string(forKey: Keys.initialScreenBackgroundImagePath) ?? ""
+
+        // 起動時のアップデート確認
+        if defaults.object(forKey: Keys.checkForUpdatesOnLaunch) != nil {
+            checkForUpdatesOnLaunch = defaults.bool(forKey: Keys.checkForUpdatesOnLaunch)
+        } else {
+            checkForUpdatesOnLaunch = true  // デフォルト: 有効
+        }
     }
 
     // MARK: - 保存メソッド

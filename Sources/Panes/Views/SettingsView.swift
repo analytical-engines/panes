@@ -99,6 +99,8 @@ struct GeneralSettingsTab: View {
                 Text(L("concurrent_loading_description"))
                     .font(.caption)
                     .foregroundColor(.secondary)
+
+                Toggle(L("check_for_updates_on_launch"), isOn: $settings.checkForUpdatesOnLaunch)
             }
 
             Section(L("section_initial_screen")) {

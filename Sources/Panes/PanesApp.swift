@@ -79,6 +79,13 @@ struct ImageViewerApp: App {
         .windowStyle(.hiddenTitleBar)
         .defaultSize(getDefaultWindowSize())
         .commands {
+            // アプリメニューに「アップデートを確認」を追加
+            CommandGroup(after: .appInfo) {
+                Button(L("menu_check_for_updates")) {
+                    UpdateChecker.shared.checkForUpdates()
+                }
+            }
+
             // ファイルメニューにClose/履歴Export/Importを追加
             CommandGroup(after: .newItem) {
                 // Note: .disabled()はAppDelegateのmenuNeedsUpdateで動的に制御
@@ -587,11 +594,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // アプリ起動時にフォーカスを取得
         NSApp.activate(ignoringOtherApps: true)
 
-        // 同時読み込み制限を設定（参照が設定されるのを待つ）
+        // 同時読み込み制限を設定 + アップデート確認（参照が設定されるのを待つ）
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             if let sessionManager = self?.sessionManager,
                let appSettings = self?.appSettings {
                 sessionManager.concurrentLoadingLimit = appSettings.concurrentLoadingLimit
+                UpdateChecker.shared.checkForUpdatesIfNeeded(settings: appSettings)
             }
         }
 

@@ -399,6 +399,17 @@
 "shortcut_arrow_keys_note" = "矢印キーは読み方向に連動するため、カスタマイズ対象外です。";
 "shortcut_reset_defaults" = "デフォルトに戻す";
 
+// MARK: - Update Checker
+
+"menu_check_for_updates" = "アップデートを確認...";
+"check_for_updates_on_launch" = "起動時にアップデートを確認";
+"update_available_title" = "アップデートがあります";
+"update_available_message" = "Panes %@ が利用可能です。現在のバージョンは %@ です。";
+"update_download" = "ダウンロード";
+"update_later" = "後で";
+"update_up_to_date_title" = "最新バージョンです";
+"update_up_to_date_message" = "Panes %@ は最新バージョンです。";
+
 // MARK: - Acknowledgements
 
 "menu_acknowledgements" = "謝辞";
