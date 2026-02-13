@@ -520,6 +520,26 @@ class BookViewModel {
     /// View側がこれを検知してオーバーレイ→スライドアウトする
     var transitionSnapshot: NSImage? = nil
 
+    /// スワイプ/ドラッグによるナビゲーションかどうかのフラグ
+    /// ContentView側でスワイプ/ドラッグ時にtrueをセットしてからnextPage()/previousPage()を呼ぶ
+    var nextNavigationIsSwipe = false
+
+    /// トランジションモードに応じてスナップショットを保存
+    private func requestTransition() {
+        let isSwipe = nextNavigationIsSwipe
+        nextNavigationIsSwipe = false
+
+        let mode = appSettings?.pageTransitionMode ?? .always
+        switch mode {
+        case .always:
+            saveTransitionSnapshot()
+        case .swipeOnly:
+            if isSwipe { saveTransitionSnapshot() }
+        case .never:
+            break
+        }
+    }
+
     /// 遷移前のスナップショットを保存する
     private func saveTransitionSnapshot() {
         if viewMode == .single {
@@ -1296,7 +1316,7 @@ class BookViewModel {
         ) else { return }
 
         // スナップショット保存→表示更新
-        saveTransitionSnapshot()
+        requestTransition()
         updateCurrentPage(for: nextDisplay)
         loadImages(for: nextDisplay)
         saveViewState()
@@ -1316,7 +1336,7 @@ class BookViewModel {
         ) else { return }
 
         // スナップショット保存→表示更新
-        saveTransitionSnapshot()
+        requestTransition()
         updateCurrentPage(for: prevDisplay)
         loadImages(for: prevDisplay)
         saveViewState()
@@ -1340,7 +1360,7 @@ class BookViewModel {
             }
         }
 
-        saveTransitionSnapshot()
+        requestTransition()
         currentPage = firstVisiblePage
         loadCurrentPage()
         saveViewState()
@@ -1408,7 +1428,7 @@ class BookViewModel {
 
         // 表示を更新
         if display != currentDisplay {
-            saveTransitionSnapshot()
+            requestTransition()
             updateCurrentPage(for: display)
             loadImages(for: display)
             saveViewState()
@@ -1466,7 +1486,7 @@ class BookViewModel {
         }
 
         if newPage >= 0 && newPage < source.imageCount {
-            saveTransitionSnapshot()
+            requestTransition()
             currentPage = newPage
             loadCurrentPage()
             saveViewState()
@@ -1480,7 +1500,7 @@ class BookViewModel {
 
         // 単ページモードの場合は常に最後の画像を表示
         if viewMode == .single {
-            saveTransitionSnapshot()
+            requestTransition()
             currentPage = source.imageCount - 1
             loadCurrentPage()
             saveViewState()
@@ -1489,7 +1509,7 @@ class BookViewModel {
 
         // 見開きモードの場合：calculateDisplayForLastPageを使用
         let display = calculateDisplayForLastPage()
-        saveTransitionSnapshot()
+        requestTransition()
         currentDisplay = display
         currentPage = display.minIndex
         loadImages(for: display)
@@ -1516,7 +1536,7 @@ class BookViewModel {
 
         // 表示を更新
         if display != currentDisplay {
-            saveTransitionSnapshot()
+            requestTransition()
             updateCurrentPage(for: display)
             loadImages(for: display)
             saveViewState()
@@ -1543,7 +1563,7 @@ class BookViewModel {
 
         // 表示を更新
         if display != currentDisplay {
-            saveTransitionSnapshot()
+            requestTransition()
             updateCurrentPage(for: display)
             loadImages(for: display)
             saveViewState()

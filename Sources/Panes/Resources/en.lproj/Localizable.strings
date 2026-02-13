@@ -84,6 +84,10 @@
 "show_status_bar" = "Show Status Bar";
 "page_jump_count" = "Page Jump Count";
 "page_jump_count_unit" = "times";
+"page_transition_mode" = "Page Turn Effect";
+"page_transition_always" = "Always";
+"page_transition_swipe_only" = "Swipe Only";
+"page_transition_never" = "Never";
 "scroll_wheel_sensitivity" = "Scroll Wheel Sensitivity";
 "scroll_wheel_sensitivity_help" = "Sensitivity for page turning with mouse wheel (higher = more sensitive)";
 "scroll_wheel_inverted" = "Invert Scroll Direction";

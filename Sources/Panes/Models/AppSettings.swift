@@ -13,6 +13,13 @@ enum ImageCatalogFilter: String, CaseIterable {
     case archiveOnly = "archive"        // 書庫/フォルダ内画像のみ
 }
 
+/// ページめくりトランジションモード
+enum PageTransitionMode: String, CaseIterable {
+    case always = "always"          // 常にトランジション
+    case swipeOnly = "swipeOnly"    // スワイプ時のみ
+    case never = "never"            // トランジションなし
+}
+
 /// 履歴表示モード
 enum HistoryDisplayMode: String, CaseIterable {
     case alwaysShow = "alwaysShow"      // 常に表示
@@ -51,6 +58,7 @@ class AppSettings {
         static let initialScreenBackgroundImagePath = "initialScreenBackgroundImagePath"
         static let checkForUpdatesOnLaunch = "checkForUpdatesOnLaunch"
         static let currentWorkspaceId = "currentWorkspaceId"
+        static let pageTransitionMode = "pageTransitionMode"
     }
 
     // MARK: - 表示設定
@@ -82,6 +90,11 @@ class AppSettings {
     /// ページジャンプ回数
     var pageJumpCount: Int {
         didSet { defaults.set(pageJumpCount, forKey: Keys.pageJumpCount) }
+    }
+
+    /// ページめくりトランジションモード
+    var pageTransitionMode: PageTransitionMode {
+        didSet { defaults.set(pageTransitionMode.rawValue, forKey: Keys.pageTransitionMode) }
     }
 
     // MARK: - 履歴設定
@@ -246,6 +259,14 @@ class AppSettings {
             pageJumpCount = defaults.integer(forKey: Keys.pageJumpCount)
         } else {
             pageJumpCount = 5  // デフォルト: 5回
+        }
+
+        // ページめくりトランジションモードの読み込み
+        if let modeString = defaults.string(forKey: Keys.pageTransitionMode),
+           let mode = PageTransitionMode(rawValue: modeString) {
+            pageTransitionMode = mode
+        } else {
+            pageTransitionMode = .always  // デフォルト: 常にトランジション
         }
 
         // 書庫ファイル履歴最大件数の読み込み

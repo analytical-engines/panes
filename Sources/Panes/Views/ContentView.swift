@@ -161,6 +161,7 @@ struct ContentView: View {
                             // 水平方向が十分で、かつ縦より水平が優勢な場合のみ
                             if abs(horizontalDrag) > 50 && abs(horizontalDrag) > abs(value.translation.height) {
                                 dragSwipeTriggered = true
+                                viewModel.nextNavigationIsSwipe = true
                                 if horizontalDrag > 0 {
                                     // 右にドラッグ → RTL:次ページ, LTR:前ページ
                                     if viewModel.readingDirection == .rightToLeft {
@@ -1624,6 +1625,7 @@ struct ContentView: View {
 
                 if abs(ContentView.trackpadAccumulatedDeltaX) > ContentView.trackpadSwipeThreshold {
                     ContentView.trackpadSwipeState = .triggered
+                    viewModel?.nextNavigationIsSwipe = true
                     let isRTL = viewModel?.readingDirection == .rightToLeft
                     if ContentView.trackpadAccumulatedDeltaX > 0 {
                         if isRTL { viewModel?.nextPage() } else { viewModel?.previousPage() }

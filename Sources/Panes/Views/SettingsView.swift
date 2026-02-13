@@ -65,6 +65,12 @@ struct GeneralSettingsTab: View {
                         .foregroundColor(.secondary)
                 }
 
+                Picker(L("page_transition_mode"), selection: $settings.pageTransitionMode) {
+                    Text(L("page_transition_always")).tag(PageTransitionMode.always)
+                    Text(L("page_transition_swipe_only")).tag(PageTransitionMode.swipeOnly)
+                    Text(L("page_transition_never")).tag(PageTransitionMode.never)
+                }
+
             }
 
             Section(L("section_image_detection")) {

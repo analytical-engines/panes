@@ -84,6 +84,10 @@
 "show_status_bar" = "ステータスバーを表示";
 "page_jump_count" = "ページジャンプ回数";
 "page_jump_count_unit" = "回";
+"page_transition_mode" = "ページめくりエフェクト";
+"page_transition_always" = "常に有効";
+"page_transition_swipe_only" = "スワイプ時のみ";
+"page_transition_never" = "無効";
 "scroll_wheel_sensitivity" = "ホイールスクロール感度";
 "scroll_wheel_sensitivity_help" = "マウスホイールでページをめくる際の感度（大きいほど敏感）";
 "scroll_wheel_inverted" = "スクロール方向を反転";
