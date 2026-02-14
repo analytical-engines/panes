@@ -2099,18 +2099,16 @@ struct ContentView: View {
             return nil
         }
 
-        // M: メモ編集（初期画面、履歴アイテム選択時のみ）
+        // M: メモ編集（履歴アイテム選択時）
         if event.keyCode == 46 && !event.modifierFlags.contains(.command)
             && !event.modifierFlags.contains(.control)
             && !event.modifierFlags.contains(.option) {
-            if !(viewModel?.hasOpenFile ?? false) {
-                if historyState.selectedItems.count > 1 {
-                    openBatchMetadataEdit()
-                    return nil
-                } else if historyState.selectedItems.count == 1, let selected = historyState.selectedItems.first {
-                    handleMemoEdit(selected: selected)
-                    return nil
-                }
+            if historyState.selectedItems.count > 1 {
+                openBatchMetadataEdit()
+                return nil
+            } else if historyState.selectedItems.count == 1, let selected = historyState.selectedItems.first {
+                handleMemoEdit(selected: selected)
+                return nil
             }
         }
 
