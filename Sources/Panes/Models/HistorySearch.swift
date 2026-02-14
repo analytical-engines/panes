@@ -43,15 +43,22 @@ struct ParsedSearchQuery {
     let metadataConditions: [MetadataCondition]
     /// タグ条件（#tagname）
     let tagConditions: [String]
+    /// 否定タグ条件（!#tagname — このタグを持たない）
+    let negatedTagConditions: [String]
+    /// 否定メタデータキー条件（!@key — このキーを持たない）
+    let negatedMetadataKeys: [String]
 
     /// キーワード・メタデータ条件・タグ条件のいずれかがあるか
     var hasKeyword: Bool {
         !keywords.isEmpty || !metadataConditions.isEmpty || !tagConditions.isEmpty
+            || !negatedTagConditions.isEmpty || !negatedMetadataKeys.isEmpty
     }
 
     /// フィルターが適用されているか
     var hasFilter: Bool {
-        !keywords.isEmpty || !metadataConditions.isEmpty || !tagConditions.isEmpty || isPasswordProtected != nil
+        !keywords.isEmpty || !metadataConditions.isEmpty || !tagConditions.isEmpty
+            || !negatedTagConditions.isEmpty || !negatedMetadataKeys.isEmpty
+            || isPasswordProtected != nil
     }
 
     /// 書庫を検索対象に含むか
@@ -158,7 +165,7 @@ enum HistorySearchParser {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
 
         guard !trimmed.isEmpty else {
-            return ParsedSearchQuery(targetType: defaultType, keywords: [], originalQuery: query, isPasswordProtected: nil, metadataConditions: [], tagConditions: [])
+            return ParsedSearchQuery(targetType: defaultType, keywords: [], originalQuery: query, isPasswordProtected: nil, metadataConditions: [], tagConditions: [], negatedTagConditions: [], negatedMetadataKeys: [])
         }
 
         // 引用符を考慮してトークン化
@@ -170,10 +177,28 @@ enum HistorySearchParser {
         var isPasswordProtected: Bool? = nil
         var metadataConditions: [MetadataCondition] = []
         var tagConditions: [String] = []
+        var negatedTagConditions: [String] = []
+        var negatedMetadataKeys: [String] = []
 
         for token in tokens {
             // 引用符で囲まれたトークンはメタキーワードとして解釈しない
             if token.isQuoted {
+                keywordTokens.append(token.value)
+            } else if token.value.hasPrefix("!#") {
+                // !#tag: 否定タグ条件
+                let tag = String(token.value.dropFirst(2)).lowercased()
+                if !tag.isEmpty, tag.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" }) {
+                    negatedTagConditions.append(tag)
+                    continue
+                }
+                keywordTokens.append(token.value)
+            } else if token.value.hasPrefix("!@") {
+                // !@key: 否定メタデータキー条件
+                let key = String(token.value.dropFirst(2)).lowercased()
+                if !key.isEmpty, key.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" }) {
+                    negatedMetadataKeys.append(key)
+                    continue
+                }
                 keywordTokens.append(token.value)
             } else if token.value.lowercased().hasPrefix(typePrefix) {
                 let typeValue = String(token.value.dropFirst(typePrefix.count)).lowercased()
@@ -206,7 +231,9 @@ enum HistorySearchParser {
             originalQuery: query,
             isPasswordProtected: isPasswordProtected,
             metadataConditions: metadataConditions,
-            tagConditions: tagConditions
+            tagConditions: tagConditions,
+            negatedTagConditions: negatedTagConditions,
+            negatedMetadataKeys: negatedMetadataKeys
         )
     }
 
@@ -451,7 +478,8 @@ enum UnifiedSearchFilter {
     static func matches(_ group: SessionGroup, query: ParsedSearchQuery) -> Bool {
         guard query.includesSessions else { return false }
 
-        // セッションにはメモがないため、メタデータ/タグ条件があれば除外
+        // セッションにはメモがないため、メタデータ/タグ条件（肯定）があれば除外
+        // 否定条件（!@key, !#tag）はメモがない＝条件を満たすのでスルー
         if !query.metadataConditions.isEmpty || !query.tagConditions.isEmpty {
             return false
         }
@@ -471,7 +499,8 @@ enum UnifiedSearchFilter {
     /// メモのメタデータがクエリ条件にマッチするかチェック
     private static func matchesMetadata(memo: String?, query: ParsedSearchQuery) -> Bool {
         // メタデータ/タグ条件がなければ常にマッチ
-        guard !query.metadataConditions.isEmpty || !query.tagConditions.isEmpty else {
+        guard !query.metadataConditions.isEmpty || !query.tagConditions.isEmpty
+                || !query.negatedTagConditions.isEmpty || !query.negatedMetadataKeys.isEmpty else {
             return true
         }
 
@@ -482,10 +511,20 @@ enum UnifiedSearchFilter {
             guard metadata.tags.contains(tag) else { return false }
         }
 
+        // 否定タグ条件: これらのタグが存在しないこと
+        for tag in query.negatedTagConditions {
+            guard !metadata.tags.contains(tag) else { return false }
+        }
+
         // メタデータ条件: すべての条件を満たす必要がある（AND）
         for condition in query.metadataConditions {
             guard let actual = metadata.attributes[condition.key] else { return false }
             guard evaluateCondition(actual: actual, op: condition.op, expected: condition.value) else { return false }
+        }
+
+        // 否定メタデータキー条件: これらのキーが存在しないこと
+        for key in query.negatedMetadataKeys {
+            guard metadata.attributes[key] == nil else { return false }
         }
 
         return true

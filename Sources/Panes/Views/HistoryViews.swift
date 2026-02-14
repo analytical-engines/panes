@@ -287,6 +287,8 @@ struct HistoryListView: View {
                                     let providers: [any SearchSuggestionProvider] = [
                                         TypeFilterSuggestionProvider(),
                                         IsFilterSuggestionProvider(),
+                                        NegatedTagSuggestionProvider(availableTags: metadataIndex.tags),
+                                        NegatedMetadataKeySuggestionProvider(availableKeys: metadataIndex.keys),
                                         TagSuggestionProvider(availableTags: metadataIndex.tags),
                                     ]
                                     + metadataIndex.values.map { key, values in

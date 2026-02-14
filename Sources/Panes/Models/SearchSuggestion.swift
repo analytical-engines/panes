@@ -77,6 +77,40 @@ struct TagSuggestionProvider: SearchSuggestionProvider {
     }
 }
 
+// MARK: - NegatedTagSuggestionProvider
+
+/// `!#tag` サジェストプロバイダー（否定タグ検索）
+struct NegatedTagSuggestionProvider: SearchSuggestionProvider {
+    let triggerPrefix = "!#"
+    let availableTags: Set<String>
+
+    func suggestions(for token: String) -> [String] {
+        guard token.hasPrefix("!#") else { return [] }
+        let partial = String(token.dropFirst(2)).lowercased()
+        return availableTags
+            .filter { partial.isEmpty || $0.hasPrefix(partial) }
+            .sorted()
+            .map { "!#\($0) " }
+    }
+}
+
+// MARK: - NegatedMetadataKeySuggestionProvider
+
+/// `!@key` サジェストプロバイダー（否定メタデータキー検索）
+struct NegatedMetadataKeySuggestionProvider: SearchSuggestionProvider {
+    let triggerPrefix = "!@"
+    let availableKeys: Set<String>
+
+    func suggestions(for token: String) -> [String] {
+        guard token.hasPrefix("!@") else { return [] }
+        let partial = String(token.dropFirst(2)).lowercased()
+        return availableKeys
+            .filter { partial.isEmpty || $0.hasPrefix(partial) }
+            .sorted()
+            .map { "!@\($0) " }
+    }
+}
+
 // MARK: - MetadataKeySuggestionProvider
 
 /// `@key` サジェストプロバイダー（動的：メモから収集したキーを候補にする）
