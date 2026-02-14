@@ -1547,18 +1547,33 @@ struct ContentView: View {
 
             case .historyList:
                 // ↑↓PageUp/Down/Returnで履歴操作
+                let isShift = event.modifierFlags.contains(.shift)
+                let isCmd = event.modifierFlags.contains(.command)
                 switch event.keyCode {
                 case 126: // ↑
-                    self.handleHistoryUpArrow()
+                    if isCmd {
+                        self.handleHistoryCursorMove(offset: -1)
+                    } else {
+                        self.handleHistoryUpArrow(extend: isShift)
+                    }
                     return nil
                 case 125: // ↓
-                    self.handleHistoryDownArrow()
+                    if isCmd {
+                        self.handleHistoryCursorMove(offset: 1)
+                    } else {
+                        self.handleHistoryDownArrow(extend: isShift)
+                    }
+                    return nil
+                case 49 where event.modifierFlags.contains(.control): // Ctrl+Space: カーソル位置のトグル
+                    if let current = self.historyState.selectedItem {
+                        self.historyState.toggleSelectionKeepingCursor(current)
+                    }
                     return nil
                 case 116: // PageUp
-                    self.historyState.selectItem(byOffset: -self.pageScrollCount)
+                    self.historyState.selectItem(byOffset: -self.pageScrollCount, extend: isShift)
                     return nil
                 case 121: // PageDown
-                    self.historyState.selectItem(byOffset: self.pageScrollCount)
+                    self.historyState.selectItem(byOffset: self.pageScrollCount, extend: isShift)
                     return nil
                 case 36: // Return
                     self.handleHistoryReturn(isShift: event.modifierFlags.contains(.shift))
@@ -1786,7 +1801,7 @@ struct ContentView: View {
         isMainViewFocused = true
         if selectFirstHistoryItem, historyState.selectedItem == nil,
            let first = historyState.visibleItems.first {
-            historyState.selectedItem = first
+            historyState.select(first)
         }
     }
 
@@ -1842,13 +1857,28 @@ struct ContentView: View {
 
     // MARK: - 履歴リストUI操作ハンドラ（NSEventモニタから呼び出し）
 
-    private func handleHistoryUpArrow() {
+    /// Ctrl+矢印: カーソルだけ移動（選択は変えない）
+    private func handleHistoryCursorMove(offset: Int) {
+        if let current = historyState.selectedItem,
+           let currentIndex = historyState.visibleItems.firstIndex(where: { $0.id == current.id }) {
+            let newIndex = max(0, min(historyState.visibleItems.count - 1, currentIndex + offset))
+            historyState.selectedItem = historyState.visibleItems[newIndex]
+        } else if let first = historyState.visibleItems.first {
+            historyState.selectedItem = first
+        }
+    }
+
+    private func handleHistoryUpArrow(extend: Bool = false) {
         if let current = historyState.selectedItem,
            let currentIndex = historyState.visibleItems.firstIndex(where: { $0.id == current.id }) {
             if currentIndex > 0 {
                 let item = historyState.visibleItems[currentIndex - 1]
-                historyState.select(item)
-            } else {
+                if extend {
+                    historyState.extendSelection(to: item)
+                } else {
+                    historyState.select(item)
+                }
+            } else if !extend {
                 // 先頭にいる場合は検索フィールドにフォーカス
                 historyState.clearSelection()
                 isHistorySearchFocused = true
@@ -1858,12 +1888,16 @@ struct ContentView: View {
         }
     }
 
-    private func handleHistoryDownArrow() {
+    private func handleHistoryDownArrow(extend: Bool = false) {
         if let current = historyState.selectedItem,
            let currentIndex = historyState.visibleItems.firstIndex(where: { $0.id == current.id }) {
             if currentIndex < historyState.visibleItems.count - 1 {
                 let item = historyState.visibleItems[currentIndex + 1]
-                historyState.select(item)
+                if extend {
+                    historyState.extendSelection(to: item)
+                } else {
+                    historyState.select(item)
+                }
             }
         } else if let first = historyState.visibleItems.first {
             historyState.select(first)

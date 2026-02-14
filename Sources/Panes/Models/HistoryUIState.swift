@@ -84,6 +84,15 @@ final class HistoryUIState {
         selectionAnchor = item
     }
 
+    /// キーボード用トグル（カーソル位置を維持）
+    func toggleSelectionKeepingCursor(_ item: SelectableHistoryItem) {
+        if selectedItems.contains(item) {
+            selectedItems.remove(item)
+        } else {
+            selectedItems.insert(item)
+        }
+    }
+
     /// Shift+クリック（範囲選択）
     func extendSelection(to item: SelectableHistoryItem) {
         guard let anchor = selectionAnchor ?? selectedItem,
@@ -119,14 +128,18 @@ final class HistoryUIState {
     }
 
     /// 履歴リストの選択を指定オフセット分移動する
-    func selectItem(byOffset offset: Int) {
+    func selectItem(byOffset offset: Int, extend: Bool = false) {
         if let current = selectedItem,
            let currentIndex = visibleItems.firstIndex(where: { $0.id == current.id }) {
             let newIndex = max(0, min(visibleItems.count - 1, currentIndex + offset))
             let item = visibleItems[newIndex]
-            selectedItem = item
-            selectedItems = [item]
-            selectionAnchor = item
+            if extend {
+                extendSelection(to: item)
+            } else {
+                selectedItem = item
+                selectedItems = [item]
+                selectionAnchor = item
+            }
         } else {
             if let first = visibleItems.first {
                 selectedItem = first
