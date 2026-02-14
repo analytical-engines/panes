@@ -361,6 +361,8 @@
 "search_filter_all" = "All";
 "search_filter_menu_title" = "Filter";
 "search_filter_locked" = "Password Protected";
+"search_filter_tag" = "Tag (#tagname)";
+"search_filter_metadata" = "Metadata (@key=value)";
 
 // MARK: - Session Groups
 

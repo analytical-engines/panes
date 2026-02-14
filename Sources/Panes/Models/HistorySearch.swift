@@ -9,6 +9,26 @@ enum SearchTargetType: String, CaseIterable {
     case session = "session"            // セッションのみ
 }
 
+/// メタデータ比較演算子
+enum MetadataOperator: String {
+    case equal = "="
+    case notEqual = "!="
+    case lessThan = "<"
+    case greaterThan = ">"
+    case lessOrEqual = "<="
+    case greaterOrEqual = ">="
+}
+
+/// メタデータ検索条件
+struct MetadataCondition {
+    /// キー（小文字正規化）
+    let key: String
+    /// 比較演算子
+    let op: MetadataOperator
+    /// 比較値
+    let value: String
+}
+
 /// パース済みの検索クエリ
 struct ParsedSearchQuery {
     /// 検索対象の種別
@@ -19,15 +39,19 @@ struct ParsedSearchQuery {
     let originalQuery: String
     /// パスワード保護ファイルのみを検索するか
     let isPasswordProtected: Bool?
+    /// メタデータ条件（@key=value 等）
+    let metadataConditions: [MetadataCondition]
+    /// タグ条件（#tagname）
+    let tagConditions: [String]
 
-    /// キーワードが空かどうか
+    /// キーワード・メタデータ条件・タグ条件のいずれかがあるか
     var hasKeyword: Bool {
-        !keywords.isEmpty
+        !keywords.isEmpty || !metadataConditions.isEmpty || !tagConditions.isEmpty
     }
 
-    /// フィルターが適用されているか（キーワードまたはis:locked）
+    /// フィルターが適用されているか
     var hasFilter: Bool {
-        !keywords.isEmpty || isPasswordProtected != nil
+        !keywords.isEmpty || !metadataConditions.isEmpty || !tagConditions.isEmpty || isPasswordProtected != nil
     }
 
     /// 書庫を検索対象に含むか
@@ -117,11 +141,24 @@ enum HistorySearchParser {
     /// 例: `"My Comic"` → 「My Comic」を検索
     /// 例: `'type:archive'` → 「type:archive」という文字列を検索
     /// 例: `is:locked` → パスワード保護されたファイルのみ検索
+    /// メタデータ演算子（長い順にマッチ）
+    private static let metadataOperators: [(String, MetadataOperator)] = [
+        ("<=", .lessOrEqual),
+        (">=", .greaterOrEqual),
+        ("!=", .notEqual),
+        ("<", .lessThan),
+        (">", .greaterThan),
+        ("=", .equal),
+    ]
+
+    /// #tag パターン
+    private static let tagPattern = try! NSRegularExpression(pattern: #"^#([a-zA-Z0-9_]+)$"#)
+
     static func parse(_ query: String, defaultType: SearchTargetType = .archive) -> ParsedSearchQuery {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
 
         guard !trimmed.isEmpty else {
-            return ParsedSearchQuery(targetType: defaultType, keywords: [], originalQuery: query, isPasswordProtected: nil)
+            return ParsedSearchQuery(targetType: defaultType, keywords: [], originalQuery: query, isPasswordProtected: nil, metadataConditions: [], tagConditions: [])
         }
 
         // 引用符を考慮してトークン化
@@ -131,6 +168,8 @@ enum HistorySearchParser {
         var targetType: SearchTargetType = defaultType
         var keywordTokens: [String] = []
         var isPasswordProtected: Bool? = nil
+        var metadataConditions: [MetadataCondition] = []
+        var tagConditions: [String] = []
 
         for token in tokens {
             // 引用符で囲まれたトークンはメタキーワードとして解釈しない
@@ -152,6 +191,10 @@ enum HistorySearchParser {
                 }
                 // 無効なis:はキーワードとして扱う
                 keywordTokens.append(token.value)
+            } else if let tag = parseTagToken(token.value) {
+                tagConditions.append(tag)
+            } else if let condition = parseMetadataToken(token.value) {
+                metadataConditions.append(condition)
             } else if !token.value.isEmpty {
                 keywordTokens.append(token.value)
             }
@@ -161,8 +204,38 @@ enum HistorySearchParser {
             targetType: targetType,
             keywords: keywordTokens,
             originalQuery: query,
-            isPasswordProtected: isPasswordProtected
+            isPasswordProtected: isPasswordProtected,
+            metadataConditions: metadataConditions,
+            tagConditions: tagConditions
         )
+    }
+
+    /// #tagname トークンをパース
+    private static func parseTagToken(_ token: String) -> String? {
+        let range = NSRange(token.startIndex..., in: token)
+        guard tagPattern.firstMatch(in: token, range: range) != nil else { return nil }
+        return String(token.dropFirst()).lowercased()
+    }
+
+    /// @key<op>value トークンをパース
+    private static func parseMetadataToken(_ token: String) -> MetadataCondition? {
+        guard token.hasPrefix("@") else { return nil }
+        let rest = String(token.dropFirst())
+        guard !rest.isEmpty else { return nil }
+
+        for (opStr, op) in metadataOperators {
+            if let opRange = rest.range(of: opStr) {
+                let key = String(rest[rest.startIndex..<opRange.lowerBound])
+                let value = String(rest[opRange.upperBound...])
+                // key は [a-zA-Z0-9_]+ のみ
+                guard !key.isEmpty, !value.isEmpty,
+                      key.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" }) else {
+                    return nil
+                }
+                return MetadataCondition(key: key.lowercased(), op: op, value: value)
+            }
+        }
+        return nil
     }
 
     /// トークンを表す構造体
@@ -277,9 +350,11 @@ enum UnifiedSearchFilter {
             }
         }
 
-        guard query.hasKeyword else { return true }
+        // メタデータ/タグフィルター
+        guard matchesMetadata(memo: entry.memo, query: query) else { return false }
 
-        // 全てのキーワードがいずれかのフィールドにマッチする必要がある（AND検索）
+        // テキストキーワードフィルター
+        guard !query.keywords.isEmpty else { return true }
         let searchableTexts = [entry.fileName, entry.memo]
         return matchesAllKeywords(query.keywords, in: searchableTexts)
     }
@@ -300,7 +375,11 @@ enum UnifiedSearchFilter {
             guard query.includesArchiveContent else { return false }
         }
 
-        guard query.hasKeyword else { return true }
+        // メタデータ/タグフィルター
+        guard matchesMetadata(memo: entry.memo, query: query) else { return false }
+
+        // テキストキーワードフィルター
+        guard !query.keywords.isEmpty else { return true }
 
         // 検索対象のテキストを収集
         var searchableTexts: [String?] = [entry.fileName, entry.memo]
@@ -371,7 +450,13 @@ enum UnifiedSearchFilter {
     /// セッショングループがクエリにマッチするかチェック
     static func matches(_ group: SessionGroup, query: ParsedSearchQuery) -> Bool {
         guard query.includesSessions else { return false }
-        guard query.hasKeyword else { return true }
+
+        // セッションにはメモがないため、メタデータ/タグ条件があれば除外
+        if !query.metadataConditions.isEmpty || !query.tagConditions.isEmpty {
+            return false
+        }
+
+        guard !query.keywords.isEmpty else { return true }
 
         // 検索対象のテキストを収集（セッション名 + 全エントリのファイル名）
         var searchableTexts: [String?] = [group.name]
@@ -381,6 +466,59 @@ enum UnifiedSearchFilter {
 
         // 全てのキーワードがいずれかのフィールドにマッチする必要がある（AND検索）
         return matchesAllKeywords(query.keywords, in: searchableTexts)
+    }
+
+    /// メモのメタデータがクエリ条件にマッチするかチェック
+    private static func matchesMetadata(memo: String?, query: ParsedSearchQuery) -> Bool {
+        // メタデータ/タグ条件がなければ常にマッチ
+        guard !query.metadataConditions.isEmpty || !query.tagConditions.isEmpty else {
+            return true
+        }
+
+        let metadata = MemoMetadataParser.parse(memo)
+
+        // タグ条件: すべてのタグが存在する必要がある（AND）
+        for tag in query.tagConditions {
+            guard metadata.tags.contains(tag) else { return false }
+        }
+
+        // メタデータ条件: すべての条件を満たす必要がある（AND）
+        for condition in query.metadataConditions {
+            guard let actual = metadata.attributes[condition.key] else { return false }
+            guard evaluateCondition(actual: actual, op: condition.op, expected: condition.value) else { return false }
+        }
+
+        return true
+    }
+
+    /// メタデータ条件を評価
+    private static func evaluateCondition(actual: String, op: MetadataOperator, expected: String) -> Bool {
+        switch op {
+        case .equal:
+            return actual.localizedCaseInsensitiveCompare(expected) == .orderedSame
+        case .notEqual:
+            return actual.localizedCaseInsensitiveCompare(expected) != .orderedSame
+        case .lessThan, .greaterThan, .lessOrEqual, .greaterOrEqual:
+            // 数値比較を試みる
+            if let actualNum = Double(actual), let expectedNum = Double(expected) {
+                switch op {
+                case .lessThan: return actualNum < expectedNum
+                case .greaterThan: return actualNum > expectedNum
+                case .lessOrEqual: return actualNum <= expectedNum
+                case .greaterOrEqual: return actualNum >= expectedNum
+                default: return false
+                }
+            }
+            // 文字列比較にフォールバック
+            let result = actual.localizedCaseInsensitiveCompare(expected)
+            switch op {
+            case .lessThan: return result == .orderedAscending
+            case .greaterThan: return result == .orderedDescending
+            case .lessOrEqual: return result != .orderedDescending
+            case .greaterOrEqual: return result != .orderedAscending
+            default: return false
+            }
+        }
     }
 
     /// 統合検索を実行

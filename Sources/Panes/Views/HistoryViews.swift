@@ -233,6 +233,11 @@ struct HistoryListView: View {
             let imageCatalog = imageCatalogManager.catalog
             let sessionGroups = sessionGroupManager.sessionGroups
 
+            // メモからタグ・キーのインデックスを収集（サジェスト用）
+            let metadataIndex = MemoMetadataParser.collectIndex(
+                from: recentHistory.map(\.memo) + imageCatalog.map(\.memo)
+            )
+
             // 検索クエリをパース（デフォルトタイプはAppSettingsから取得）
             let parsedQuery = HistorySearchParser.parse(historyState.filterText, defaultType: appSettings.defaultHistorySearchType)
             // 統合検索を実行
@@ -278,8 +283,20 @@ struct HistoryListView: View {
                                     // フォーカス離脱はFocusSyncModifier経由でContentViewに通知される
                                 }
                                 .onChange(of: historyState.filterText) { _, newValue in
-                                    // 候補を更新
-                                    suggestions = SearchSuggestionEngine.computeSuggestions(for: newValue)
+                                    // 動的プロバイダーを含めて候補を更新
+                                    let providers: [any SearchSuggestionProvider] = [
+                                        TypeFilterSuggestionProvider(),
+                                        IsFilterSuggestionProvider(),
+                                        TagSuggestionProvider(availableTags: metadataIndex.tags),
+                                    ]
+                                    + metadataIndex.values.map { key, values in
+                                        MetadataValueSuggestionProvider(key: key, availableValues: values)
+                                            as any SearchSuggestionProvider
+                                    }
+                                    + [
+                                        MetadataKeySuggestionProvider(availableKeys: metadataIndex.keys),
+                                    ]
+                                    suggestions = SearchSuggestionEngine.computeSuggestions(for: newValue, providers: providers)
                                     historyState.isShowingSuggestions = !suggestions.isEmpty && isSearchFocused.wrappedValue
                                     selectedSuggestionIndex = 0
                                 }
@@ -360,6 +377,13 @@ struct HistoryListView: View {
                                 Divider()
                                 Button(action: { insertSearchFilter("is:locked ") }) {
                                     Label(L("search_filter_locked"), systemImage: "lock.fill")
+                                }
+                                Divider()
+                                Button(action: { insertSearchFilter("#") }) {
+                                    Label(L("search_filter_tag"), systemImage: "tag")
+                                }
+                                Button(action: { insertSearchFilter("@") }) {
+                                    Label(L("search_filter_metadata"), systemImage: "at")
                                 }
                             } label: {
                                 Image(systemName: "line.3.horizontal.decrease.circle")

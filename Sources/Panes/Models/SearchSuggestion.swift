@@ -60,6 +60,62 @@ struct IsFilterSuggestionProvider: SearchSuggestionProvider {
     }
 }
 
+// MARK: - TagSuggestionProvider
+
+/// `#tag` サジェストプロバイダー（動的：メモから収集したタグを候補にする）
+struct TagSuggestionProvider: SearchSuggestionProvider {
+    let triggerPrefix = "#"
+    let availableTags: Set<String>
+
+    func suggestions(for token: String) -> [String] {
+        guard token.hasPrefix("#") else { return [] }
+        let partial = String(token.dropFirst()).lowercased()
+        return availableTags
+            .filter { partial.isEmpty || $0.hasPrefix(partial) }
+            .sorted()
+            .prefix(8)
+            .map { "#\($0) " }
+    }
+}
+
+// MARK: - MetadataKeySuggestionProvider
+
+/// `@key` サジェストプロバイダー（動的：メモから収集したキーを候補にする）
+struct MetadataKeySuggestionProvider: SearchSuggestionProvider {
+    let triggerPrefix = "@"
+    let availableKeys: Set<String>
+
+    func suggestions(for token: String) -> [String] {
+        guard token.hasPrefix("@") else { return [] }
+        let partial = String(token.dropFirst()).lowercased()
+        return availableKeys
+            .filter { partial.isEmpty || $0.hasPrefix(partial) }
+            .sorted()
+            .prefix(8)
+            .map { "@\($0)=" }
+    }
+}
+
+// MARK: - MetadataValueSuggestionProvider
+
+/// `@key=value` サジェストプロバイダー（動的：メモから収集した値を候補にする）
+struct MetadataValueSuggestionProvider: SearchSuggestionProvider {
+    let key: String
+    var triggerPrefix: String { "@\(key)=" }
+    let availableValues: Set<String>
+
+    func suggestions(for token: String) -> [String] {
+        let prefix = "@\(key)="
+        guard token.lowercased().hasPrefix(prefix) else { return [] }
+        let partial = String(token.dropFirst(prefix.count)).lowercased()
+        return availableValues
+            .filter { partial.isEmpty || $0.lowercased().hasPrefix(partial) }
+            .sorted()
+            .prefix(8)
+            .map { "@\(key)=\($0) " }
+    }
+}
+
 // MARK: - SearchSuggestionItem
 
 /// サジェスト候補（表示テキストと適用テキストを分離）

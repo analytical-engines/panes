@@ -361,6 +361,8 @@
 "search_filter_all" = "すべて";
 "search_filter_menu_title" = "絞り込み";
 "search_filter_locked" = "パスワード保護";
+"search_filter_tag" = "タグ (#タグ名)";
+"search_filter_metadata" = "メタデータ (@キー=値)";
 
 // MARK: - Session Groups
 
