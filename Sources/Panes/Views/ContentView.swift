@@ -972,8 +972,12 @@ struct ContentView: View {
             }
         }
         .onChange(of: modalState.showMemoEdit) { _, newValue in
-            // メモ編集モーダルが閉じられたらメインビューにフォーカスを戻す
-            if !newValue {
+            if newValue {
+                // メモ編集モーダルが開かれたら検索フィールドのフォーカスを外す
+                // （検索フィールドの@FocusStateがMemoEditPopoverのフォーカス取得を妨げるため）
+                isHistorySearchFocused = false
+            } else {
+                // メモ編集モーダルが閉じられたらメインビューにフォーカスを戻す
                 DispatchQueue.main.async {
                     self.focusMainView()
                 }
