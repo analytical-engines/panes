@@ -105,10 +105,18 @@ struct ContentView: View {
                 onOpenHistoryFile: openHistoryFile,
                 onOpenInNewWindow: openInNewWindow,
                 onEditMemo: { fileKey, currentMemo in
-                    modalState.openMemoEditForHistory(fileKey: fileKey, memo: currentMemo)
+                    if historyState.selectedItems.count > 1 {
+                        openBatchMetadataEdit()
+                    } else {
+                        modalState.openMemoEditForHistory(fileKey: fileKey, memo: currentMemo)
+                    }
                 },
                 onEditImageMemo: { id, currentMemo in
-                    modalState.openMemoEditForCatalog(catalogId: id, memo: currentMemo)
+                    if historyState.selectedItems.count > 1 {
+                        openBatchMetadataEdit()
+                    } else {
+                        modalState.openMemoEditForCatalog(catalogId: id, memo: currentMemo)
+                    }
                 },
                 onOpenImageCatalogFile: openImageCatalogFile,
                 onRestoreSession: { session in
@@ -306,10 +314,18 @@ struct ContentView: View {
                     onOpenHistoryFile: openHistoryFile,
                     onOpenInNewWindow: openInNewWindow,
                     onEditMemo: { fileKey, currentMemo in
-                        modalState.openMemoEditForHistory(fileKey: fileKey, memo: currentMemo)
+                        if historyState.selectedItems.count > 1 {
+                            openBatchMetadataEdit()
+                        } else {
+                            modalState.openMemoEditForHistory(fileKey: fileKey, memo: currentMemo)
+                        }
                     },
                     onEditImageMemo: { id, currentMemo in
-                        modalState.openMemoEditForCatalog(catalogId: id, memo: currentMemo)
+                        if historyState.selectedItems.count > 1 {
+                            openBatchMetadataEdit()
+                        } else {
+                            modalState.openMemoEditForCatalog(catalogId: id, memo: currentMemo)
+                        }
                     },
                     onOpenImageFile: openImageCatalogFile,
                     onRestoreSession: { session in
@@ -983,6 +999,15 @@ struct ContentView: View {
                 }
             }
         }
+        .onChange(of: modalState.showBatchMetadataEdit) { _, newValue in
+            if newValue {
+                isHistorySearchFocused = false
+            } else {
+                DispatchQueue.main.async {
+                    self.focusMainView()
+                }
+            }
+        }
         .modifier(FocusSyncModifier(
             isHistorySearchFocused: $isHistorySearchFocused,
             historyState: historyState,
@@ -1052,6 +1077,27 @@ struct ContentView: View {
                 },
                 onCancel: {
                     modalState.closeMemoEdit()
+                }
+            )
+        }
+
+        // 一括メタデータ編集モーダル
+        if modalState.showBatchMetadataEdit {
+            Color.black.opacity(0.3)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    modalState.closeBatchMetadataEdit()
+                }
+
+            BatchMetadataEditPopover(
+                itemCount: modalState.batchMetadataTargets.count,
+                metadataText: $modalState.batchMetadataText,
+                onSave: {
+                    saveBatchMetadata()
+                    modalState.closeBatchMetadataEdit()
+                },
+                onCancel: {
+                    modalState.closeBatchMetadataEdit()
                 }
             )
         }
@@ -1770,8 +1816,8 @@ struct ContentView: View {
 
     /// 現在のインタラクションモードを既存の状態から計算
     private var interactionMode: InteractionMode {
-        // モーダル（4種全て: メモ編集、画像情報、パスワード、ファイル同一性）
-        if modalState.showMemoEdit || modalState.showImageInfo
+        // モーダル（5種全て: メモ編集、一括メタデータ編集、画像情報、パスワード、ファイル同一性）
+        if modalState.showMemoEdit || modalState.showBatchMetadataEdit || modalState.showImageInfo
             || viewModel.showPasswordDialog || viewModel.showFileIdentityDialog {
             return .modal
         }
@@ -1800,14 +1846,15 @@ struct ContentView: View {
         if let current = historyState.selectedItem,
            let currentIndex = historyState.visibleItems.firstIndex(where: { $0.id == current.id }) {
             if currentIndex > 0 {
-                historyState.selectedItem = historyState.visibleItems[currentIndex - 1]
+                let item = historyState.visibleItems[currentIndex - 1]
+                historyState.select(item)
             } else {
                 // 先頭にいる場合は検索フィールドにフォーカス
-                historyState.selectedItem = nil
+                historyState.clearSelection()
                 isHistorySearchFocused = true
             }
-        } else {
-            historyState.selectedItem = historyState.visibleItems.last
+        } else if let last = historyState.visibleItems.last {
+            historyState.select(last)
         }
     }
 
@@ -1815,15 +1862,28 @@ struct ContentView: View {
         if let current = historyState.selectedItem,
            let currentIndex = historyState.visibleItems.firstIndex(where: { $0.id == current.id }) {
             if currentIndex < historyState.visibleItems.count - 1 {
-                historyState.selectedItem = historyState.visibleItems[currentIndex + 1]
+                let item = historyState.visibleItems[currentIndex + 1]
+                historyState.select(item)
             }
-        } else {
-            historyState.selectedItem = historyState.visibleItems.first
+        } else if let first = historyState.visibleItems.first {
+            historyState.select(first)
         }
     }
 
     private func handleHistoryReturn(isShift: Bool) {
-        guard let selected = historyState.selectedItem else { return }
+        let items = historyState.selectedItems
+        guard !items.isEmpty else { return }
+
+        // 複数選択時は全て新しいウィンドウで開く
+        if items.count > 1 {
+            for item in items {
+                openItemInNewWindow(item)
+            }
+            return
+        }
+
+        // 単一選択
+        guard let selected = items.first else { return }
 
         switch selected {
         case .archive(_, let filePath):
@@ -1835,6 +1895,23 @@ struct ContentView: View {
         case .archivedImage(_, let parentPath, let relativePath):
             if isShift { openInNewWindow(path: parentPath) }
             else { openImageCatalogFile(path: parentPath, relativePath: relativePath.isEmpty ? nil : relativePath) }
+        case .session(let sessionId):
+            if let session = sessionGroupManager.sessionGroups.first(where: { $0.id == sessionId }) {
+                sessionGroupManager.updateLastAccessed(id: session.id)
+                sessionManager.restoreSessionGroup(session)
+            }
+        }
+    }
+
+    /// アイテムを新しいウィンドウで開く
+    private func openItemInNewWindow(_ item: SelectableHistoryItem) {
+        switch item {
+        case .archive(_, let filePath):
+            openInNewWindow(path: filePath)
+        case .standaloneImage(_, let filePath):
+            openInNewWindow(path: filePath)
+        case .archivedImage(_, let parentPath, _):
+            openInNewWindow(path: parentPath)
         case .session(let sessionId):
             if let session = sessionGroupManager.sessionGroups.first(where: { $0.id == sessionId }) {
                 sessionGroupManager.updateLastAccessed(id: session.id)
@@ -1855,6 +1932,85 @@ struct ContentView: View {
             }
         case .session:
             break
+        }
+    }
+
+    /// 複数選択時の一括メタデータ編集を開く
+    private func openBatchMetadataEdit() {
+        let items = historyState.selectedItems
+        guard items.count > 1 else { return }
+
+        // 各アイテムのメモとターゲット情報を収集
+        var memos: [String?] = []
+        var targets: [(historyId: String?, catalogId: String?)] = []
+
+        for item in items {
+            switch item {
+            case .archive(let id, _):
+                let memo = historyManager.history.first(where: { $0.id == id })?.memo
+                memos.append(memo)
+                targets.append((historyId: id, catalogId: nil))
+            case .standaloneImage(let id, _), .archivedImage(let id, _, _):
+                let memo = imageCatalogManager.catalog.first(where: { $0.id == id })?.memo
+                memos.append(memo)
+                targets.append((historyId: nil, catalogId: id))
+            case .session:
+                break
+            }
+        }
+
+        guard !targets.isEmpty else { return }
+
+        // 各メモのタグ・属性を抽出して共通部分（積集合）を計算
+        let parsedList = memos.map { MemoMetadataParser.parse($0) }
+        var commonTags = parsedList.first?.tags ?? []
+        var commonAttrs = parsedList.first?.attributes ?? [:]
+
+        for parsed in parsedList.dropFirst() {
+            commonTags = commonTags.intersection(parsed.tags)
+            commonAttrs = commonAttrs.filter { parsed.attributes[$0.key] == $0.value }
+        }
+
+        // 共通部分をテキスト形式に変換
+        var parts: [String] = []
+        for tag in commonTags.sorted() {
+            parts.append("#\(tag)")
+        }
+        for (key, value) in commonAttrs.sorted(by: { $0.key < $1.key }) {
+            parts.append("@\(key):\(value)")
+        }
+        let commonText = parts.joined(separator: " ")
+
+        modalState.openBatchMetadataEdit(commonMetadataText: commonText, targets: targets)
+    }
+
+    /// 一括メタデータ編集の差分を各アイテムに適用
+    private func saveBatchMetadata() {
+        let original = MemoMetadataParser.parse(
+            modalState.batchMetadataOriginal.isEmpty ? nil : modalState.batchMetadataOriginal)
+        let edited = MemoMetadataParser.parse(
+            modalState.batchMetadataText.isEmpty ? nil : modalState.batchMetadataText)
+
+        let tagsToAdd = edited.tags.subtracting(original.tags)
+        let tagsToRemove = original.tags.subtracting(edited.tags)
+        let attrsToAdd = edited.attributes.filter { original.attributes[$0.key] != $0.value }
+        let attrsToRemove = Set(original.attributes.keys).subtracting(edited.attributes.keys)
+
+        for target in modalState.batchMetadataTargets {
+            if let historyId = target.historyId {
+                let currentMemo = historyManager.history.first(where: { $0.id == historyId })?.memo
+                let newMemo = MemoMetadataParser.applyMetadataChanges(
+                    to: currentMemo, tagsToAdd: tagsToAdd, tagsToRemove: tagsToRemove,
+                    attrsToAdd: attrsToAdd, attrsToRemove: attrsToRemove)
+                historyManager.updateMemo(for: historyId, memo: newMemo)
+            }
+            if let catalogId = target.catalogId {
+                let currentMemo = imageCatalogManager.catalog.first(where: { $0.id == catalogId })?.memo
+                let newMemo = MemoMetadataParser.applyMetadataChanges(
+                    to: currentMemo, tagsToAdd: tagsToAdd, tagsToRemove: tagsToRemove,
+                    attrsToAdd: attrsToAdd, attrsToRemove: attrsToRemove)
+                imageCatalogManager.updateMemo(for: catalogId, memo: newMemo)
+            }
         }
     }
 
@@ -1884,7 +2040,7 @@ struct ContentView: View {
         }
     }
 
-    /// Escape（履歴閉じ）、M（メモ編集）、Return（履歴オープン）の共通処理
+    /// Escape（履歴閉じ）、M（メモ編集）、Return（履歴オープン）、Delete（一括削除）、⌘A（全選択）の共通処理
     /// historyList/viewing/initialで共有
     private func handleCommonKeys(_ event: NSEvent, viewModel: BookViewModel?) -> NSEvent? {
         // Escape: 履歴を閉じる
@@ -1895,12 +2051,29 @@ struct ContentView: View {
             return nil
         }
 
+        // ⌘A: 全選択（履歴表示中のみ）
+        if event.keyCode == 0 && event.modifierFlags.contains(.command)
+            && historyState.showHistory && !isHistorySearchFocused {
+            historyState.selectAll()
+            return nil
+        }
+
+        // Delete/Backspace: 選択アイテムを一括削除（履歴表示中のみ）
+        if event.keyCode == 51 && historyState.showHistory && !isHistorySearchFocused
+            && !historyState.selectedItems.isEmpty {
+            deleteSelectedItems()
+            return nil
+        }
+
         // M: メモ編集（初期画面、履歴アイテム選択時のみ）
         if event.keyCode == 46 && !event.modifierFlags.contains(.command)
             && !event.modifierFlags.contains(.control)
             && !event.modifierFlags.contains(.option) {
             if !(viewModel?.hasOpenFile ?? false) {
-                if let selected = historyState.selectedItem {
+                if historyState.selectedItems.count > 1 {
+                    openBatchMetadataEdit()
+                    return nil
+                } else if historyState.selectedItems.count == 1, let selected = historyState.selectedItems.first {
                     handleMemoEdit(selected: selected)
                     return nil
                 }
@@ -1909,13 +2082,38 @@ struct ContentView: View {
 
         // Return: 履歴アイテムを開く（履歴表示中のみ）
         if event.keyCode == 36 && historyState.showHistory && !isHistorySearchFocused {
-            if historyState.selectedItem != nil {
+            if !historyState.selectedItems.isEmpty {
                 handleHistoryReturn(isShift: event.modifierFlags.contains(.shift))
                 return nil
             }
         }
 
         return event
+    }
+
+    /// 選択中のアイテムを一括削除
+    private func deleteSelectedItems() {
+        let items = historyState.selectedItems
+        guard !items.isEmpty else { return }
+
+        let archiveIds = items.compactMap { item -> String? in
+            if case .archive(let id, _) = item { return id }
+            return nil
+        }
+        let imageIds = items.compactMap { item -> String? in
+            if case .standaloneImage(let id, _) = item { return id }
+            if case .archivedImage(let id, _, _) = item { return id }
+            return nil
+        }
+        let sessionIds = items.compactMap { item -> UUID? in
+            if case .session(let id) = item { return id }
+            return nil
+        }
+
+        if !archiveIds.isEmpty { historyManager.removeEntries(withIds: archiveIds) }
+        if !imageIds.isEmpty { imageCatalogManager.removeEntries(withIds: imageIds) }
+        for id in sessionIds { sessionGroupManager.deleteSessionGroup(id: id) }
+        historyState.clearSelection()
     }
 
     private func openFilePicker() {

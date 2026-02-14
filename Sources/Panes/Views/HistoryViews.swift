@@ -706,10 +706,17 @@ struct HistoryListView: View {
                 )
                 .padding(.horizontal, 4)
                 .padding(.vertical, 2)
-                .background(historyState.selectedItem?.id == entry.id ? Color.accentColor.opacity(0.3) : Color.clear)
+                .background(historyState.isSelected(.archive(id: entry.id, filePath: entry.filePath)) ? Color.accentColor.opacity(0.3) : Color.clear)
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    historyState.selectedItem = .archive(id: entry.id, filePath: entry.filePath)
+                    let item = SelectableHistoryItem.archive(id: entry.id, filePath: entry.filePath)
+                    if NSEvent.modifierFlags.contains(.command) {
+                        historyState.toggleSelection(item)
+                    } else if NSEvent.modifierFlags.contains(.shift) {
+                        historyState.extendSelection(to: item)
+                    } else {
+                        historyState.select(item)
+                    }
                 }
                 .cornerRadius(4)
                 .id(entry.id)
@@ -823,10 +830,17 @@ struct HistoryListView: View {
                 )
                 .padding(.horizontal, 4)
                 .padding(.vertical, 2)
-                .background(historyState.selectedItem?.id == entry.id ? Color.accentColor.opacity(0.3) : Color.clear)
+                .background(historyState.isSelected(.standaloneImage(id: entry.id, filePath: entry.filePath)) ? Color.accentColor.opacity(0.3) : Color.clear)
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    historyState.selectedItem = .standaloneImage(id: entry.id, filePath: entry.filePath)
+                    let item = SelectableHistoryItem.standaloneImage(id: entry.id, filePath: entry.filePath)
+                    if NSEvent.modifierFlags.contains(.command) {
+                        historyState.toggleSelection(item)
+                    } else if NSEvent.modifierFlags.contains(.shift) {
+                        historyState.extendSelection(to: item)
+                    } else {
+                        historyState.select(item)
+                    }
                 }
                 .cornerRadius(4)
                 .id(entry.id)
@@ -884,10 +898,17 @@ struct HistoryListView: View {
                 )
                 .padding(.horizontal, 4)
                 .padding(.vertical, 2)
-                .background(historyState.selectedItem?.id == entry.id ? Color.accentColor.opacity(0.3) : Color.clear)
+                .background(historyState.isSelected(.archivedImage(id: entry.id, parentPath: entry.filePath, relativePath: entry.relativePath ?? "")) ? Color.accentColor.opacity(0.3) : Color.clear)
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    historyState.selectedItem = .archivedImage(id: entry.id, parentPath: entry.filePath, relativePath: entry.relativePath ?? "")
+                    let item = SelectableHistoryItem.archivedImage(id: entry.id, parentPath: entry.filePath, relativePath: entry.relativePath ?? "")
+                    if NSEvent.modifierFlags.contains(.command) {
+                        historyState.toggleSelection(item)
+                    } else if NSEvent.modifierFlags.contains(.shift) {
+                        historyState.extendSelection(to: item)
+                    } else {
+                        historyState.select(item)
+                    }
                 }
                 .cornerRadius(4)
                 .id(entry.id)
@@ -945,10 +966,17 @@ struct HistoryListView: View {
                 )
                 .padding(.horizontal, 4)
                 .padding(.vertical, 2)
-                .background(historyState.selectedItem?.sessionId == session.id ? Color.accentColor.opacity(0.3) : Color.clear)
+                .background(historyState.isSelected(.session(id: session.id)) ? Color.accentColor.opacity(0.3) : Color.clear)
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    historyState.selectedItem = .session(id: session.id)
+                    let item = SelectableHistoryItem.session(id: session.id)
+                    if NSEvent.modifierFlags.contains(.command) {
+                        historyState.toggleSelection(item)
+                    } else if NSEvent.modifierFlags.contains(.shift) {
+                        historyState.extendSelection(to: item)
+                    } else {
+                        historyState.select(item)
+                    }
                 }
                 .cornerRadius(4)
                 .id(session.id.uuidString)

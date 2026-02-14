@@ -93,6 +93,74 @@ enum MemoMetadataParser {
         return MetadataIndex(tags: tags, keys: keys, values: values)
     }
 
+    // MARK: - Batch metadata operations
+
+    /// メモテキストにタグ/メタデータトークンを追加・削除する
+    static func applyMetadataChanges(
+        to memo: String?,
+        tagsToAdd: Set<String>,
+        tagsToRemove: Set<String>,
+        attrsToAdd: [String: String],
+        attrsToRemove: Set<String>
+    ) -> String? {
+        let text = memo ?? ""
+        var result = text
+
+        // 削除: タグトークンを除去
+        for tag in tagsToRemove {
+            let pattern = #"(?:^|(?<=\s))#"# + NSRegularExpression.escapedPattern(for: tag) + #"(?=\s|$)"#
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                result = regex.stringByReplacingMatches(
+                    in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "")
+            }
+        }
+
+        // 削除: 属性トークンを除去
+        for key in attrsToRemove {
+            let pattern = #"(?:^|(?<=\s))@"# + NSRegularExpression.escapedPattern(for: key) + #":\S+"#
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                result = regex.stringByReplacingMatches(
+                    in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "")
+            }
+        }
+
+        // 属性値の変更: 既存キーの値を更新
+        for (key, value) in attrsToAdd {
+            let pattern = #"(?:^|(?<=\s))@"# + NSRegularExpression.escapedPattern(for: key) + #":\S+"#
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+               regex.firstMatch(in: result, range: NSRange(result.startIndex..., in: result)) != nil {
+                result = regex.stringByReplacingMatches(
+                    in: result, range: NSRange(result.startIndex..., in: result),
+                    withTemplate: "@\(key):\(value)")
+            }
+        }
+
+        // 連続する空白を整理
+        result = result
+            .replacingOccurrences(of: "  +", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+
+        // 追加: 新規タグを末尾に追記
+        for tag in tagsToAdd.sorted() {
+            // 既に存在しないタグのみ追加
+            let parsed = parse(result.isEmpty ? nil : result)
+            if !parsed.tags.contains(tag.lowercased()) {
+                result = result.isEmpty ? "#\(tag)" : "\(result) #\(tag)"
+            }
+        }
+
+        // 追加: 新規属性を末尾に追記（既存キーの値変更は上で処理済み）
+        for (key, value) in attrsToAdd.sorted(by: { $0.key < $1.key }) {
+            let parsed = parse(result.isEmpty ? nil : result)
+            if parsed.attributes[key.lowercased()] == nil {
+                result = result.isEmpty ? "@\(key):\(value)" : "\(result) @\(key):\(value)"
+            }
+        }
+
+        result = result.trimmingCharacters(in: .whitespaces)
+        return result.isEmpty ? nil : result
+    }
+
     /// 指定範囲を除去して空白を整理
     private static func removeRanges(from text: String, ranges: [Range<String.Index>]) -> String {
         guard !ranges.isEmpty else { return text }

@@ -70,6 +70,53 @@ struct MemoEditPopover: View {
     }
 }
 
+/// 一括メタデータ編集用のポップオーバー
+struct BatchMetadataEditPopover: View {
+    let itemCount: Int
+    @Binding var metadataText: String
+    let onSave: () -> Void
+    let onCancel: () -> Void
+
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text(L("batch_metadata_edit_title"))
+                .font(.headline)
+            Text(String(format: L("batch_metadata_edit_count"), itemCount))
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            TextField(L("batch_metadata_placeholder"), text: $metadataText)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 300)
+                .focused($isFocused)
+                .onSubmit {
+                    onSave()
+                }
+
+            HStack {
+                Button(L("cancel")) {
+                    onCancel()
+                }
+                .keyboardShortcut(.escape, modifiers: [])
+
+                Button(L("save")) {
+                    onSave()
+                }
+                .keyboardShortcut(.return, modifiers: [])
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding()
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                isFocused = true
+            }
+        }
+    }
+}
+
 // MARK: - Window Number Getter
 
 /// ウィンドウ番号を取得し、タイトルバーの設定を行うヘルパー

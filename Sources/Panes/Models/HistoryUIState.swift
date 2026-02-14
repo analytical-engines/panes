@@ -28,8 +28,14 @@ final class HistoryUIState {
 
     // MARK: - 選択状態
 
-    /// キーボードナビゲーション選択
+    /// キーボードナビゲーション選択（アンカー兼用）
     var selectedItem: SelectableHistoryItem?
+
+    /// 複数選択中のアイテム
+    var selectedItems: Set<SelectableHistoryItem> = []
+
+    /// Shift+クリック用の起点
+    var selectionAnchor: SelectableHistoryItem?
 
     /// 表示中アイテム一覧（キーボードナビゲーション用）
     var visibleItems: [SelectableHistoryItem] = []
@@ -59,9 +65,52 @@ final class HistoryUIState {
 
     // MARK: - 便利メソッド
 
+    /// 通常クリック（単一選択、既存選択をクリア）
+    func select(_ item: SelectableHistoryItem) {
+        selectedItems = [item]
+        selectedItem = item
+        selectionAnchor = item
+    }
+
+    /// Cmd+クリック（トグル）
+    func toggleSelection(_ item: SelectableHistoryItem) {
+        if selectedItems.contains(item) {
+            selectedItems.remove(item)
+            selectedItem = selectedItems.first
+        } else {
+            selectedItems.insert(item)
+            selectedItem = item
+        }
+        selectionAnchor = item
+    }
+
+    /// Shift+クリック（範囲選択）
+    func extendSelection(to item: SelectableHistoryItem) {
+        guard let anchor = selectionAnchor ?? selectedItem,
+              let anchorIdx = visibleItems.firstIndex(where: { $0.id == anchor.id }),
+              let targetIdx = visibleItems.firstIndex(where: { $0.id == item.id })
+        else { select(item); return }
+        let range = min(anchorIdx, targetIdx)...max(anchorIdx, targetIdx)
+        selectedItems = Set(visibleItems[range])
+        selectedItem = item
+        // selectionAnchor は維持（連続Shift+クリック対応）
+    }
+
+    /// 全選択
+    func selectAll() {
+        selectedItems = Set(visibleItems)
+    }
+
+    /// 選択判定
+    func isSelected(_ item: SelectableHistoryItem) -> Bool {
+        selectedItems.contains(item)
+    }
+
     /// 選択をクリア
     func clearSelection() {
         selectedItem = nil
+        selectedItems.removeAll()
+        selectionAnchor = nil
     }
 
     /// スクロールトリガーをインクリメント
@@ -74,9 +123,16 @@ final class HistoryUIState {
         if let current = selectedItem,
            let currentIndex = visibleItems.firstIndex(where: { $0.id == current.id }) {
             let newIndex = max(0, min(visibleItems.count - 1, currentIndex + offset))
-            selectedItem = visibleItems[newIndex]
+            let item = visibleItems[newIndex]
+            selectedItem = item
+            selectedItems = [item]
+            selectionAnchor = item
         } else {
-            selectedItem = visibleItems.first
+            if let first = visibleItems.first {
+                selectedItem = first
+                selectedItems = [first]
+                selectionAnchor = first
+            }
         }
     }
 
@@ -84,6 +140,8 @@ final class HistoryUIState {
     func closeHistory() {
         showHistory = false
         selectedItem = nil
+        selectedItems.removeAll()
+        selectionAnchor = nil
         isSearchFocused = false
         isShowingSuggestions = false
     }

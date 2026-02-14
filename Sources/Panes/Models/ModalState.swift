@@ -54,4 +54,23 @@ class ModalState {
     var finalMemoText: String? {
         editingMemoText.isEmpty ? nil : editingMemoText
     }
+
+    // MARK: - 一括メタデータ編集モーダル
+
+    var showBatchMetadataEdit = false
+    var batchMetadataText = ""
+    var batchMetadataOriginal = ""
+    var batchMetadataTargets: [(historyId: String?, catalogId: String?)] = []
+
+    func openBatchMetadataEdit(commonMetadataText: String, targets: [(historyId: String?, catalogId: String?)]) {
+        batchMetadataOriginal = commonMetadataText
+        batchMetadataText = commonMetadataText
+        batchMetadataTargets = targets
+        showBatchMetadataEdit = true
+    }
+
+    func closeBatchMetadataEdit() {
+        showBatchMetadataEdit = false
+        batchMetadataTargets = []
+    }
 }

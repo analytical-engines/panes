@@ -195,6 +195,9 @@
 
 "memo_edit_title" = "メモを編集";
 "memo_placeholder" = "メモを入力...";
+"batch_metadata_edit_title" = "メタデータ一括編集";
+"batch_metadata_edit_count" = "%d件のアイテム";
+"batch_metadata_placeholder" = "#tag @key:value";
 "cancel" = "キャンセル";
 "save" = "保存";
 

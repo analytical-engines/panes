@@ -195,6 +195,9 @@
 
 "memo_edit_title" = "Edit Memo";
 "memo_placeholder" = "Enter memo...";
+"batch_metadata_edit_title" = "Batch Edit Metadata";
+"batch_metadata_edit_count" = "%d items";
+"batch_metadata_placeholder" = "#tag @key:value";
 "cancel" = "Cancel";
 "save" = "Save";
 

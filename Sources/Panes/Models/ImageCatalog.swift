@@ -682,6 +682,34 @@ class ImageCatalogManager {
         }
     }
 
+    /// 指定した複数IDのエントリを一括削除
+    func removeEntries(withIds ids: [String]) {
+        guard isInitialized, let context = modelContext, !ids.isEmpty else { return }
+        do {
+            let idSet = Set(ids)
+
+            // 個別画像から検索・削除
+            let standaloneDescriptor = FetchDescriptor<StandaloneImageData>()
+            let allStandalone = try context.fetch(standaloneDescriptor)
+            for item in allStandalone where idSet.contains(item.id) {
+                context.delete(item)
+            }
+
+            // 書庫内画像から検索・削除
+            let archiveDescriptor = FetchDescriptor<ArchiveContentImageData>()
+            let allArchive = try context.fetch(archiveDescriptor)
+            for item in allArchive where idSet.contains(item.id) {
+                context.delete(item)
+            }
+
+            try context.save()
+            loadCatalog()
+            notifyCatalogUpdate()
+        } catch {
+            DebugLogger.log("❌ Failed to remove image catalog entries by ids: \(error)", level: .minimal)
+        }
+    }
+
     /// 全てのカタログをクリア（現在のワークスペースのみ）
     func clearAllCatalog() {
         guard isInitialized, let context = modelContext else { return }

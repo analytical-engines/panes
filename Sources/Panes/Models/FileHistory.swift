@@ -1318,6 +1318,25 @@ class FileHistoryManager {
         }
     }
 
+    /// 指定した複数IDのエントリを一括削除
+    func removeEntries(withIds ids: [String]) {
+        guard isInitialized, let context = modelContext, !ids.isEmpty else { return }
+        do {
+            let idSet = Set(ids)
+            let descriptor = FetchDescriptor<FileHistoryData>()
+            let allEntries = try context.fetch(descriptor)
+            for item in allEntries where idSet.contains(item.id) {
+                try? PasswordStorage.shared.deletePassword(forArchive: item.filePath)
+                context.delete(item)
+            }
+            try context.save()
+            loadHistory()
+            notifyHistoryUpdate()
+        } catch {
+            DebugLogger.log("❌ Failed to remove entries by ids: \(error)", level: .minimal)
+        }
+    }
+
     /// 指定したfileKeyのエントリを削除
     func removeEntry(withFileKey fileKey: String) {
         guard isInitialized, let context = modelContext else {
