@@ -301,7 +301,30 @@ struct HistoryListView: View {
                                     selectedSuggestionIndex = 0
                                 }
                                 .onChange(of: isSearchFocused.wrappedValue) { _, focused in
-                                    if !focused && !isHoveringOverSuggestions {
+                                    if focused {
+                                        // フォーカス復帰時にサジェストを再計算
+                                        if !historyState.filterText.isEmpty {
+                                            let text = historyState.filterText
+                                            let metadataIndex = MemoMetadataParser.collectIndex(
+                                                from: recentHistory.map(\.memo) + imageCatalog.map(\.memo)
+                                            )
+                                            let providers: [any SearchSuggestionProvider] = [
+                                                TypeFilterSuggestionProvider(),
+                                                IsFilterSuggestionProvider(),
+                                                TagSuggestionProvider(availableTags: metadataIndex.tags),
+                                            ]
+                                            + metadataIndex.values.map { key, values in
+                                                MetadataValueSuggestionProvider(key: key, availableValues: values)
+                                                    as any SearchSuggestionProvider
+                                            }
+                                            + [
+                                                MetadataKeySuggestionProvider(availableKeys: metadataIndex.keys),
+                                            ]
+                                            suggestions = SearchSuggestionEngine.computeSuggestions(for: text, providers: providers)
+                                            historyState.isShowingSuggestions = !suggestions.isEmpty
+                                            selectedSuggestionIndex = 0
+                                        }
+                                    } else if !isHoveringOverSuggestions {
                                         historyState.isShowingSuggestions = false
                                     }
                                 }
