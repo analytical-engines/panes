@@ -296,8 +296,13 @@ struct HistoryListView: View {
                                         MetadataKeySuggestionProvider(availableKeys: metadataIndex.keys),
                                     ]
                                     suggestions = SearchSuggestionEngine.computeSuggestions(for: newValue, providers: providers)
-                                    historyState.isShowingSuggestions = !suggestions.isEmpty && isSearchFocused.wrappedValue
+                                    historyState.isShowingSuggestions = !suggestions.isEmpty
                                     selectedSuggestionIndex = 0
+                                }
+                                .onChange(of: isSearchFocused.wrappedValue) { _, focused in
+                                    if !focused {
+                                        historyState.isShowingSuggestions = false
+                                    }
                                 }
                                 .onKeyPress(.tab) {
                                     // Tabで補完を適用
@@ -573,12 +578,19 @@ struct HistoryListView: View {
         let typePattern = /^type:\w+\s*/
         let cleanedText = historyState.filterText.replacing(typePattern, with: "")
 
-        if filter.isEmpty {
-            // 「すべて」が選択された場合はtype:を削除するだけ
-            historyState.filterText = cleanedText
-        } else {
-            // 新しいフィルターを先頭に追加
-            historyState.filterText = filter + cleanedText
+        // 先にフォーカスを確立してからテキストを更新する
+        // （onChangeでisSearchFocused=trueを参照できるようにするため）
+        isSearchFocused.wrappedValue = true
+        DispatchQueue.main.async {
+            if filter.isEmpty {
+                historyState.filterText = cleanedText
+            } else if !cleanedText.isEmpty && !filter.contains(":") {
+                // タグ(#)やメタデータ(@)は既存テキストの後ろに追記
+                let separator = cleanedText.hasSuffix(" ") ? "" : " "
+                historyState.filterText = cleanedText + separator + filter
+            } else {
+                historyState.filterText = filter + cleanedText
+            }
         }
     }
 
@@ -695,6 +707,10 @@ struct HistoryListView: View {
                 .padding(.horizontal, 4)
                 .padding(.vertical, 2)
                 .background(historyState.selectedItem?.id == entry.id ? Color.accentColor.opacity(0.3) : Color.clear)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    historyState.selectedItem = .archive(id: entry.id, filePath: entry.filePath)
+                }
                 .cornerRadius(4)
                 .id(entry.id)
             }
@@ -808,6 +824,10 @@ struct HistoryListView: View {
                 .padding(.horizontal, 4)
                 .padding(.vertical, 2)
                 .background(historyState.selectedItem?.id == entry.id ? Color.accentColor.opacity(0.3) : Color.clear)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    historyState.selectedItem = .standaloneImage(id: entry.id, filePath: entry.filePath)
+                }
                 .cornerRadius(4)
                 .id(entry.id)
             }
@@ -865,6 +885,10 @@ struct HistoryListView: View {
                 .padding(.horizontal, 4)
                 .padding(.vertical, 2)
                 .background(historyState.selectedItem?.id == entry.id ? Color.accentColor.opacity(0.3) : Color.clear)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    historyState.selectedItem = .archivedImage(id: entry.id, parentPath: entry.filePath, relativePath: entry.relativePath ?? "")
+                }
                 .cornerRadius(4)
                 .id(entry.id)
             }
@@ -922,6 +946,10 @@ struct HistoryListView: View {
                 .padding(.horizontal, 4)
                 .padding(.vertical, 2)
                 .background(historyState.selectedItem?.sessionId == session.id ? Color.accentColor.opacity(0.3) : Color.clear)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    historyState.selectedItem = .session(id: session.id)
+                }
                 .cornerRadius(4)
                 .id(session.id.uuidString)
             }
