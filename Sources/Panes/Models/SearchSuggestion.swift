@@ -73,7 +73,6 @@ struct TagSuggestionProvider: SearchSuggestionProvider {
         return availableTags
             .filter { partial.isEmpty || $0.hasPrefix(partial) }
             .sorted()
-            .prefix(8)
             .map { "#\($0) " }
     }
 }
@@ -91,7 +90,6 @@ struct MetadataKeySuggestionProvider: SearchSuggestionProvider {
         return availableKeys
             .filter { partial.isEmpty || $0.hasPrefix(partial) }
             .sorted()
-            .prefix(8)
             .map { "@\($0)=" }
     }
 }
@@ -111,7 +109,6 @@ struct MetadataValueSuggestionProvider: SearchSuggestionProvider {
         return availableValues
             .filter { partial.isEmpty || $0.lowercased().hasPrefix(partial) }
             .sorted()
-            .prefix(8)
             .map { "@\(key)=\($0) " }
     }
 }

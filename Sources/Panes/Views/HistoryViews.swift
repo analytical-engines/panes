@@ -139,6 +139,7 @@ struct HistoryListView: View {
     @State private var selectedSuggestionIndex: Int = 0
     @State private var suggestions: [SearchSuggestionItem] = []
     @State private var searchBarHeight: CGFloat = 0
+    @State private var isHoveringOverSuggestions: Bool = false
 
     let onOpenHistoryFile: (String) -> Void
     let onOpenInNewWindow: (String) -> Void  // filePath
@@ -300,7 +301,7 @@ struct HistoryListView: View {
                                     selectedSuggestionIndex = 0
                                 }
                                 .onChange(of: isSearchFocused.wrappedValue) { _, focused in
-                                    if !focused {
+                                    if !focused && !isHoveringOverSuggestions {
                                         historyState.isShowingSuggestions = false
                                     }
                                 }
@@ -607,31 +608,49 @@ struct HistoryListView: View {
                 Text(alignmentPrefix)
                     .foregroundColor(.clear)
                     .allowsHitTesting(false)
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(suggestions.enumerated()), id: \.offset) { index, suggestion in
-                        HStack(spacing: 8) {
-                            Text(suggestion.displayText)
-                                .foregroundColor(.white)
-                            if index == selectedSuggestionIndex {
-                                Text("Tab")
-                                    .font(.caption2)
-                                    .foregroundColor(.gray)
-                                    .padding(.horizontal, 4)
-                                    .padding(.vertical, 2)
-                                    .background(Color.white.opacity(0.1))
-                                    .cornerRadius(3)
+                ScrollViewReader { suggestionProxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(Array(suggestions.enumerated()), id: \.offset) { index, suggestion in
+                                HStack(spacing: 8) {
+                                    Text(suggestion.displayText)
+                                        .foregroundColor(.white)
+                                    if index == selectedSuggestionIndex {
+                                        Text("Tab")
+                                            .font(.caption2)
+                                            .foregroundColor(.gray)
+                                            .padding(.horizontal, 4)
+                                            .padding(.vertical, 2)
+                                            .background(Color.white.opacity(0.1))
+                                            .cornerRadius(3)
+                                    }
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 6)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(index == selectedSuggestionIndex ? Color.accentColor.opacity(0.3) : Color.clear)
+                                .contentShape(Rectangle())
+                                .id(index)
+                                .onTapGesture {
+                                    applySuggestion(suggestion)
+                                }
                             }
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 6)
-                        .background(index == selectedSuggestionIndex ? Color.accentColor.opacity(0.3) : Color.clear)
-                        .onTapGesture {
-                            applySuggestion(suggestion)
-                        }
+                    }
+                    .onChange(of: selectedSuggestionIndex) { _, newIndex in
+                        suggestionProxy.scrollTo(newIndex, anchor: .center)
                     }
                 }
+                .frame(height: min(CGFloat(suggestions.count) * 30, 200))
                 .background(Color.black.opacity(0.8))
                 .cornerRadius(6)
+                .onHover { hovering in
+                    isHoveringOverSuggestions = hovering
+                    // ホバー解除時、検索フィールドにフォーカスがなければ候補を閉じる
+                    if !hovering && !isSearchFocused.wrappedValue {
+                        historyState.isShowingSuggestions = false
+                    }
+                }
             }
             Spacer()
         }
