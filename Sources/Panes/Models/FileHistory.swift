@@ -173,7 +173,8 @@ class FileHistoryManager {
     /// v4: ImageCatalogDataにcatalogTypeRaw, relativePathフィールドを追加
     /// v5: 全モデルにworkspaceIdフィールドを追加、WorkspaceDataテーブル追加（将来のworkspace機能用）
     /// v6: SessionGroupDataテーブル追加（UserDefaultsから移行）
-    private static let currentSchemaVersion = 6
+    /// v7: FileHistoryDataにisPasswordProtectedフィールドを追加
+    private static let currentSchemaVersion = 7
 
     /// アプリ専用ディレクトリ
     private static var appSupportDirectory: URL {
@@ -444,6 +445,12 @@ class FileHistoryManager {
         // v5 -> v6: SessionGroupDataテーブル追加（UserDefaultsから移行）
         if oldVersion < 6 {
             DebugLogger.log("📦 Migration v5→v6: SessionGroupData table added", level: .normal)
+        }
+
+        // v6 -> v7: FileHistoryDataにisPasswordProtectedフィールド追加
+        // SwiftDataの軽量マイグレーションでデフォルト値(nil)が自動適用される
+        if oldVersion < 7 {
+            DebugLogger.log("📦 Migration v6→v7: isPasswordProtected field added to FileHistoryData", level: .normal)
         }
     }
 
