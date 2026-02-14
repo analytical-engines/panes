@@ -710,7 +710,7 @@ struct HistoryListView: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: 4)
                         .stroke(Color.accentColor, lineWidth: 2)
-                        .opacity(historyState.selectedItem == .archive(id: entry.id, filePath: entry.filePath) ? 1 : 0)
+                        .opacity(historyState.isCursorOnly(.archive(id: entry.id, filePath: entry.filePath)) ? 1 : 0)
                 )
                 .contentShape(Rectangle())
                 .onTapGesture {
@@ -839,7 +839,7 @@ struct HistoryListView: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: 4)
                         .stroke(Color.accentColor, lineWidth: 2)
-                        .opacity(historyState.selectedItem == .standaloneImage(id: entry.id, filePath: entry.filePath) ? 1 : 0)
+                        .opacity(historyState.isCursorOnly(.standaloneImage(id: entry.id, filePath: entry.filePath)) ? 1 : 0)
                 )
                 .contentShape(Rectangle())
                 .onTapGesture {
@@ -912,7 +912,7 @@ struct HistoryListView: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: 4)
                         .stroke(Color.accentColor, lineWidth: 2)
-                        .opacity(historyState.selectedItem == .archivedImage(id: entry.id, parentPath: entry.filePath, relativePath: entry.relativePath ?? "") ? 1 : 0)
+                        .opacity(historyState.isCursorOnly(.archivedImage(id: entry.id, parentPath: entry.filePath, relativePath: entry.relativePath ?? "")) ? 1 : 0)
                 )
                 .contentShape(Rectangle())
                 .onTapGesture {
@@ -985,7 +985,7 @@ struct HistoryListView: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: 4)
                         .stroke(Color.accentColor, lineWidth: 2)
-                        .opacity(historyState.selectedItem == .session(id: session.id) ? 1 : 0)
+                        .opacity(historyState.isCursorOnly(.session(id: session.id)) ? 1 : 0)
                 )
                 .contentShape(Rectangle())
                 .onTapGesture {

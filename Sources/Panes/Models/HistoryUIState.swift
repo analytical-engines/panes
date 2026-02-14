@@ -115,6 +115,11 @@ final class HistoryUIState {
         selectedItems.contains(item)
     }
 
+    /// カーソルのみ（選択されていないがカーソルが指している）判定
+    func isCursorOnly(_ item: SelectableHistoryItem) -> Bool {
+        selectedItem == item && !selectedItems.contains(item)
+    }
+
     /// 選択をクリア
     func clearSelection() {
         selectedItem = nil
