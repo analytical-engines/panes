@@ -1061,6 +1061,7 @@ struct ContentView: View {
 
             MemoEditPopover(
                 memo: $modalState.editingMemoText,
+                providers: memoSuggestionProviders(),
                 onSave: {
                     let newMemo = modalState.finalMemoText
                     if let fileKey = modalState.editingMemoFileKey {
@@ -1092,6 +1093,7 @@ struct ContentView: View {
             BatchMetadataEditPopover(
                 itemCount: modalState.batchMetadataTargets.count,
                 metadataText: $modalState.batchMetadataText,
+                providers: memoSuggestionProviders(),
                 onSave: {
                     saveBatchMetadata()
                     modalState.closeBatchMetadataEdit()
@@ -2019,6 +2021,23 @@ struct ContentView: View {
     }
 
     /// 一括メタデータ編集の差分を各アイテムに適用
+    /// メモ編集用のサジェストプロバイダーを構築（コロン区切り）
+    private func memoSuggestionProviders() -> [any SearchSuggestionProvider] {
+        let metadataIndex = MemoMetadataParser.collectIndex(
+            from: historyManager.history.map(\.memo) + imageCatalogManager.catalog.map(\.memo)
+        )
+        return [
+            TagSuggestionProvider(availableTags: metadataIndex.tags),
+        ]
+        + metadataIndex.values.map { key, values in
+            MemoMetadataValueSuggestionProvider(key: key, availableValues: values)
+                as any SearchSuggestionProvider
+        }
+        + [
+            MemoMetadataKeySuggestionProvider(availableKeys: metadataIndex.keys),
+        ]
+    }
+
     private func saveBatchMetadata() {
         let original = MemoMetadataParser.parse(
             modalState.batchMetadataOriginal.isEmpty ? nil : modalState.batchMetadataOriginal)

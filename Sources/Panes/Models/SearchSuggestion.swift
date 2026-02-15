@@ -147,6 +147,40 @@ struct MetadataValueSuggestionProvider: SearchSuggestionProvider {
     }
 }
 
+// MARK: - Memo-specific providers (colon separator)
+
+/// メモ用 `@key:` サジェストプロバイダー
+struct MemoMetadataKeySuggestionProvider: SearchSuggestionProvider {
+    let triggerPrefix = "@"
+    let availableKeys: Set<String>
+
+    func suggestions(for token: String) -> [String] {
+        guard token.hasPrefix("@") else { return [] }
+        let partial = String(token.dropFirst()).lowercased()
+        return availableKeys
+            .filter { partial.isEmpty || $0.hasPrefix(partial) }
+            .sorted()
+            .map { "@\($0):" }
+    }
+}
+
+/// メモ用 `@key:value` サジェストプロバイダー
+struct MemoMetadataValueSuggestionProvider: SearchSuggestionProvider {
+    let key: String
+    var triggerPrefix: String { "@\(key):" }
+    let availableValues: Set<String>
+
+    func suggestions(for token: String) -> [String] {
+        let prefix = "@\(key):"
+        guard token.lowercased().hasPrefix(prefix) else { return [] }
+        let partial = String(token.dropFirst(prefix.count)).lowercased()
+        return availableValues
+            .filter { partial.isEmpty || $0.lowercased().hasPrefix(partial) }
+            .sorted()
+            .map { "@\(key):\($0) " }
+    }
+}
+
 // MARK: - SearchSuggestionItem
 
 /// サジェスト候補（表示テキストと適用テキストを分離）

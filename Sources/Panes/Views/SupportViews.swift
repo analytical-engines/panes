@@ -26,26 +26,146 @@ struct LoadingView: View {
     }
 }
 
+/// サジェスト付きテキストフィールド（メモ/メタデータ編集用）
+struct SuggestingTextField: View {
+    let placeholder: String
+    @Binding var text: String
+    let width: CGFloat
+    let providers: [any SearchSuggestionProvider]
+    let onSubmit: () -> Void
+
+    @FocusState private var isFocused: Bool
+    @State private var suggestions: [SearchSuggestionItem] = []
+    @State private var selectedIndex: Int = 0
+    @State private var isShowingSuggestions: Bool = false
+    @State private var isHoveringOverSuggestions: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            TextField(placeholder, text: $text)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: width)
+                .focused($isFocused)
+                .onChange(of: text) { _, newValue in
+                    suggestions = SearchSuggestionEngine.computeSuggestions(for: newValue, providers: providers)
+                    isShowingSuggestions = !suggestions.isEmpty
+                    selectedIndex = 0
+                }
+                .onChange(of: isFocused) { _, focused in
+                    if !focused && !isHoveringOverSuggestions {
+                        isShowingSuggestions = false
+                    }
+                }
+                .onKeyPress(.tab) {
+                    if isShowingSuggestions && !suggestions.isEmpty {
+                        applySuggestion(suggestions[selectedIndex])
+                        return .handled
+                    }
+                    return .ignored
+                }
+                .onKeyPress(.upArrow) {
+                    if isShowingSuggestions && !suggestions.isEmpty {
+                        selectedIndex = max(0, selectedIndex - 1)
+                        return .handled
+                    }
+                    return .ignored
+                }
+                .onKeyPress(.downArrow) {
+                    if isShowingSuggestions && !suggestions.isEmpty {
+                        if selectedIndex < suggestions.count - 1 {
+                            selectedIndex += 1
+                        }
+                        return .handled
+                    }
+                    return .ignored
+                }
+                .onKeyPress(.escape) {
+                    if isShowingSuggestions {
+                        isShowingSuggestions = false
+                        return .handled
+                    }
+                    return .ignored
+                }
+                .onSubmit {
+                    if isShowingSuggestions && !suggestions.isEmpty {
+                        applySuggestion(suggestions[selectedIndex])
+                    } else {
+                        onSubmit()
+                    }
+                }
+
+            if isShowingSuggestions && !suggestions.isEmpty {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(Array(suggestions.enumerated()), id: \.offset) { index, suggestion in
+                                Text(suggestion.displayText)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 5)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(index == selectedIndex ? Color.accentColor.opacity(0.3) : Color.clear)
+                                    .contentShape(Rectangle())
+                                    .id(index)
+                                    .onTapGesture {
+                                        applySuggestion(suggestion)
+                                    }
+                            }
+                        }
+                    }
+                    .onChange(of: selectedIndex) { _, newIndex in
+                        proxy.scrollTo(newIndex, anchor: .center)
+                    }
+                }
+                .frame(width: width)
+                .frame(maxHeight: 150)
+                .background(Color.black.opacity(0.8))
+                .cornerRadius(6)
+                .onHover { hovering in
+                    isHoveringOverSuggestions = hovering
+                    if !hovering && !isFocused {
+                        isShowingSuggestions = false
+                    }
+                }
+            }
+        }
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                isFocused = true
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                isFocused = true
+            }
+        }
+    }
+
+    private func applySuggestion(_ suggestion: SearchSuggestionItem) {
+        text = suggestion.fullText
+        isShowingSuggestions = false
+    }
+}
+
 /// メモ編集用のポップオーバー
 struct MemoEditPopover: View {
     @Binding var memo: String
+    let providers: [any SearchSuggestionProvider]
     let onSave: () -> Void
     let onCancel: () -> Void
-
-    @FocusState private var isFocused: Bool
 
     var body: some View {
         VStack(spacing: 12) {
             Text(L("memo_edit_title"))
                 .font(.headline)
 
-            TextField(L("memo_placeholder"), text: $memo)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 250)
-                .focused($isFocused)
-                .onSubmit {
-                    onSave()
-                }
+            SuggestingTextField(
+                placeholder: L("memo_placeholder"),
+                text: $memo,
+                width: 300,
+                providers: providers,
+                onSubmit: onSave
+            )
 
             HStack {
                 Button(L("cancel")) {
@@ -56,17 +176,10 @@ struct MemoEditPopover: View {
                 Button(L("save")) {
                     onSave()
                 }
-                .keyboardShortcut(.return, modifiers: [])
                 .buttonStyle(.borderedProminent)
             }
         }
         .padding()
-        .onAppear {
-            // 少し遅延させてフォーカスを設定
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                isFocused = true
-            }
-        }
     }
 }
 
@@ -74,10 +187,9 @@ struct MemoEditPopover: View {
 struct BatchMetadataEditPopover: View {
     let itemCount: Int
     @Binding var metadataText: String
+    let providers: [any SearchSuggestionProvider]
     let onSave: () -> Void
     let onCancel: () -> Void
-
-    @FocusState private var isFocused: Bool
 
     var body: some View {
         VStack(spacing: 12) {
@@ -87,13 +199,13 @@ struct BatchMetadataEditPopover: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
 
-            TextField(L("batch_metadata_placeholder"), text: $metadataText)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 300)
-                .focused($isFocused)
-                .onSubmit {
-                    onSave()
-                }
+            SuggestingTextField(
+                placeholder: L("batch_metadata_placeholder"),
+                text: $metadataText,
+                width: 300,
+                providers: providers,
+                onSubmit: onSave
+            )
 
             HStack {
                 Button(L("cancel")) {
@@ -104,16 +216,10 @@ struct BatchMetadataEditPopover: View {
                 Button(L("save")) {
                     onSave()
                 }
-                .keyboardShortcut(.return, modifiers: [])
                 .buttonStyle(.borderedProminent)
             }
         }
         .padding()
-        .onAppear {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                isFocused = true
-            }
-        }
     }
 }
 
