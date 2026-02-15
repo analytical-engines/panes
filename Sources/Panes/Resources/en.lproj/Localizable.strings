@@ -200,6 +200,16 @@
 "batch_metadata_placeholder" = "#tag @key:value";
 "cancel" = "Cancel";
 "save" = "Save";
+"metadata_tab_tags" = "Tags";
+"metadata_tab_metadata" = "Metadata";
+"metadata_add_tag_placeholder" = "Add tag...";
+"metadata_attr_key_placeholder" = "Key";
+"metadata_attr_value_placeholder" = "Value";
+"metadata_plain_text_placeholder" = "Free text note...";
+"metadata_partial_tooltip" = "Some items only";
+"metadata_edit_title" = "Edit Memo";
+"metadata_batch_count" = "%d items";
+"menu_edit_memo_raw" = "Edit Memo (Text)";
 
 // MARK: - Error Messages
 

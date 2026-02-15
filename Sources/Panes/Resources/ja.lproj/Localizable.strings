@@ -200,6 +200,16 @@
 "batch_metadata_placeholder" = "#tag @key:value";
 "cancel" = "キャンセル";
 "save" = "保存";
+"metadata_tab_tags" = "タグ";
+"metadata_tab_metadata" = "メタデータ";
+"metadata_add_tag_placeholder" = "タグを追加...";
+"metadata_attr_key_placeholder" = "キー";
+"metadata_attr_value_placeholder" = "値";
+"metadata_plain_text_placeholder" = "メモを入力...";
+"metadata_partial_tooltip" = "一部のアイテムのみ";
+"metadata_edit_title" = "メモを編集";
+"metadata_batch_count" = "%d件のアイテム";
+"menu_edit_memo_raw" = "メモを編集（テキスト）";
 
 // MARK: - Error Messages
 

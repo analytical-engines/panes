@@ -17,9 +17,9 @@ enum MemoMetadataParser {
 
     // MARK: - Regex patterns
 
-    /// @key:value パターン（行頭または空白の後）
+    /// @key:value または @key:"value with spaces" パターン（行頭または空白の後）
     private static let attributeRegex = try! NSRegularExpression(
-        pattern: #"(?:^|(?<=\s))@([a-zA-Z0-9_]+):(\S+)"#
+        pattern: #"(?:^|(?<=\s))@([a-zA-Z0-9_]+):(?:"([^"]*)"|(\S+))"#
     )
 
     /// #tagname パターン（行頭または空白の後）
@@ -38,14 +38,22 @@ enum MemoMetadataParser {
         var tags: Set<String> = []
         var removalRanges: [Range<String.Index>] = []
 
-        // @key:value を抽出
+        // @key:value または @key:"quoted value" を抽出
         let attrMatches = attributeRegex.matches(in: memo, range: fullRange)
         for match in attrMatches {
             guard let keyRange = Range(match.range(at: 1), in: memo),
-                  let valueRange = Range(match.range(at: 2), in: memo),
                   let matchRange = Range(match.range, in: memo) else { continue }
+            // グループ2: 引用符付き値、グループ3: 引用符なし値
+            let value: String
+            if match.range(at: 2).location != NSNotFound,
+               let quotedRange = Range(match.range(at: 2), in: memo) {
+                value = String(memo[quotedRange])
+            } else if let unquotedRange = Range(match.range(at: 3), in: memo) {
+                value = String(memo[unquotedRange])
+            } else {
+                continue
+            }
             let key = String(memo[keyRange]).lowercased()
-            let value = String(memo[valueRange])
             attributes[key] = value
             removalRanges.append(matchRange)
         }
@@ -115,23 +123,26 @@ enum MemoMetadataParser {
             }
         }
 
-        // 削除: 属性トークンを除去
+        // 削除: 属性トークンを除去（引用符付き・なし両方に対応）
         for key in attrsToRemove {
-            let pattern = #"(?:^|(?<=\s))@"# + NSRegularExpression.escapedPattern(for: key) + #":\S+"#
+            let escapedKey = NSRegularExpression.escapedPattern(for: key)
+            let pattern = #"(?:^|(?<=\s))@"# + escapedKey + #":(?:"[^"]*"|\S+)"#
             if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
                 result = regex.stringByReplacingMatches(
                     in: result, range: NSRange(result.startIndex..., in: result), withTemplate: "")
             }
         }
 
-        // 属性値の変更: 既存キーの値を更新
+        // 属性値の変更: 既存キーの値を更新（引用符付き・なし両方に対応）
         for (key, value) in attrsToAdd {
-            let pattern = #"(?:^|(?<=\s))@"# + NSRegularExpression.escapedPattern(for: key) + #":\S+"#
+            let escapedKey = NSRegularExpression.escapedPattern(for: key)
+            let pattern = #"(?:^|(?<=\s))@"# + escapedKey + #":(?:"[^"]*"|\S+)"#
+            let replacement = value.contains(" ") ? "@\(key):\"\(value)\"" : "@\(key):\(value)"
             if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
                regex.firstMatch(in: result, range: NSRange(result.startIndex..., in: result)) != nil {
                 result = regex.stringByReplacingMatches(
                     in: result, range: NSRange(result.startIndex..., in: result),
-                    withTemplate: "@\(key):\(value)")
+                    withTemplate: NSRegularExpression.escapedTemplate(for: replacement))
             }
         }
 
@@ -153,11 +164,45 @@ enum MemoMetadataParser {
         for (key, value) in attrsToAdd.sorted(by: { $0.key < $1.key }) {
             let parsed = parse(result.isEmpty ? nil : result)
             if parsed.attributes[key.lowercased()] == nil {
-                result = result.isEmpty ? "@\(key):\(value)" : "\(result) @\(key):\(value)"
+                let token = value.contains(" ") ? "@\(key):\"\(value)\"" : "@\(key):\(value)"
+                result = result.isEmpty ? token : "\(result) \(token)"
             }
         }
 
         result = result.trimmingCharacters(in: .whitespaces)
+        return result.isEmpty ? nil : result
+    }
+
+    // MARK: - Reconstruction
+
+    /// プレーンテキスト・タグ・属性からメモ文字列を再構築する
+    static func reconstructMemo(
+        plainText: String, tags: Set<String>, attributes: [(key: String, value: String)]
+    ) -> String? {
+        var parts: [String] = []
+
+        let trimmed = plainText.trimmingCharacters(in: .whitespaces)
+        if !trimmed.isEmpty {
+            parts.append(trimmed)
+        }
+
+        for tag in tags.sorted() {
+            parts.append("#\(tag)")
+        }
+
+        for attr in attributes {
+            let key = attr.key.trimmingCharacters(in: .whitespaces)
+            let value = attr.value.trimmingCharacters(in: .whitespaces)
+            if !key.isEmpty && !value.isEmpty {
+                if value.contains(" ") {
+                    parts.append("@\(key):\"\(value)\"")
+                } else {
+                    parts.append("@\(key):\(value)")
+                }
+            }
+        }
+
+        let result = parts.joined(separator: " ")
         return result.isEmpty ? nil : result
     }
 

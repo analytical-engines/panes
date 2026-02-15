@@ -106,16 +106,16 @@ struct ContentView: View {
                 onOpenInNewWindow: openInNewWindow,
                 onEditMemo: { fileKey, currentMemo in
                     if historyState.selectedItems.count > 1 {
-                        openBatchMetadataEdit()
+                        openStructuredBatchMetadataEdit()
                     } else {
-                        modalState.openMemoEditForHistory(fileKey: fileKey, memo: currentMemo)
+                        modalState.openStructuredEditForSingle(fileKey: fileKey, catalogId: nil, memo: currentMemo)
                     }
                 },
                 onEditImageMemo: { id, currentMemo in
                     if historyState.selectedItems.count > 1 {
-                        openBatchMetadataEdit()
+                        openStructuredBatchMetadataEdit()
                     } else {
-                        modalState.openMemoEditForCatalog(catalogId: id, memo: currentMemo)
+                        modalState.openStructuredEditForSingle(fileKey: nil, catalogId: id, memo: currentMemo)
                     }
                 },
                 onOpenImageCatalogFile: openImageCatalogFile,
@@ -315,16 +315,16 @@ struct ContentView: View {
                     onOpenInNewWindow: openInNewWindow,
                     onEditMemo: { fileKey, currentMemo in
                         if historyState.selectedItems.count > 1 {
-                            openBatchMetadataEdit()
+                            openStructuredBatchMetadataEdit()
                         } else {
-                            modalState.openMemoEditForHistory(fileKey: fileKey, memo: currentMemo)
+                            modalState.openStructuredEditForSingle(fileKey: fileKey, catalogId: nil, memo: currentMemo)
                         }
                     },
                     onEditImageMemo: { id, currentMemo in
                         if historyState.selectedItems.count > 1 {
-                            openBatchMetadataEdit()
+                            openStructuredBatchMetadataEdit()
                         } else {
-                            modalState.openMemoEditForCatalog(catalogId: id, memo: currentMemo)
+                            modalState.openStructuredEditForSingle(fileKey: nil, catalogId: id, memo: currentMemo)
                         }
                     },
                     onOpenImageFile: openImageCatalogFile,
@@ -511,10 +511,10 @@ struct ContentView: View {
 
         Divider()
 
-        // 画像メモを編集（書庫のメモは履歴リストから編集）
+        // 画像メモを編集（構造化UI）
         Button(action: {
             if let catalogId = viewModel.getCurrentImageCatalogId() {
-                modalState.openMemoEditForCatalog(catalogId: catalogId, memo: viewModel.getCurrentImageMemo())
+                modalState.openStructuredEditForSingle(fileKey: nil, catalogId: catalogId, memo: viewModel.getCurrentImageMemo())
             }
         }) {
             Label(L("menu_edit_image_memo"), systemImage: "photo")
@@ -700,9 +700,9 @@ struct ContentView: View {
 
         Divider()
 
-        // 書庫のメモ編集（書庫ファイル属性）
+        // 書庫のメモ編集（構造化UI）
         Button(action: {
-            modalState.openMemoEditForCurrentFile(fileKey: viewModel.currentFileKey, memo: viewModel.getCurrentMemo())
+            modalState.openStructuredEditForSingle(fileKey: viewModel.currentFileKey, catalogId: nil, memo: viewModel.getCurrentMemo())
         }) {
             Label(L("menu_edit_archive_memo"), systemImage: "archivebox")
         }
@@ -988,25 +988,13 @@ struct ContentView: View {
             }
         }
         .onChange(of: modalState.showMemoEdit) { _, newValue in
-            if newValue {
-                // メモ編集モーダルが開かれたら検索フィールドのフォーカスを外す
-                // （検索フィールドの@FocusStateがMemoEditPopoverのフォーカス取得を妨げるため）
-                isHistorySearchFocused = false
-            } else {
-                // メモ編集モーダルが閉じられたらメインビューにフォーカスを戻す
-                DispatchQueue.main.async {
-                    self.focusMainView()
-                }
-            }
+            handleModalFocusChange(isShowing: newValue)
         }
         .onChange(of: modalState.showBatchMetadataEdit) { _, newValue in
-            if newValue {
-                isHistorySearchFocused = false
-            } else {
-                DispatchQueue.main.async {
-                    self.focusMainView()
-                }
-            }
+            handleModalFocusChange(isShowing: newValue)
+        }
+        .onChange(of: modalState.showStructuredMetadataEdit) { _, newValue in
+            handleModalFocusChange(isShowing: newValue)
         }
         .modifier(FocusSyncModifier(
             isHistorySearchFocused: $isHistorySearchFocused,
@@ -1036,6 +1024,37 @@ struct ContentView: View {
     }
 
     // MARK: - Modal Overlays
+
+    @ViewBuilder
+    private var structuredMetadataEditOverlay: some View {
+        Color.black.opacity(0.8)
+            .ignoresSafeArea()
+            .onTapGesture {
+                modalState.closeStructuredMetadataEdit()
+            }
+
+        StructuredMetadataEditor(
+            isBatch: modalState.isStructuredEditBatch,
+            itemCount: modalState.structuredEditTargets.count,
+            metadataIndex: currentMetadataIndex(),
+            tags: $modalState.structuredEditTags,
+            partialTags: $modalState.structuredEditPartialTags,
+            attributes: $modalState.structuredEditAttributes,
+            partialAttributes: $modalState.structuredEditPartialAttributes,
+            plainText: $modalState.structuredEditPlainText,
+            originalTags: modalState.structuredEditOriginalTags,
+            originalPartialTags: modalState.structuredEditOriginalPartialTags,
+            originalAttributes: modalState.structuredEditOriginalAttributes,
+            originalPartialAttributes: modalState.structuredEditOriginalPartialAttributes,
+            onSave: { result in
+                saveStructuredMetadata(result)
+                modalState.closeStructuredMetadataEdit()
+            },
+            onCancel: {
+                modalState.closeStructuredMetadataEdit()
+            }
+        )
+    }
 
     @ViewBuilder
     private var modalOverlays: some View {
@@ -1102,6 +1121,11 @@ struct ContentView: View {
                     modalState.closeBatchMetadataEdit()
                 }
             )
+        }
+
+        // 構造化メタデータ編集モーダル
+        if modalState.showStructuredMetadataEdit {
+            structuredMetadataEditOverlay
         }
 
         // ファイル同一性確認ダイアログ
@@ -1798,6 +1822,17 @@ struct ContentView: View {
 
     // MARK: - Focus Management
 
+    /// モーダル表示変更時のフォーカス管理
+    private func handleModalFocusChange(isShowing: Bool) {
+        if isShowing {
+            isHistorySearchFocused = false
+        } else {
+            DispatchQueue.main.async {
+                self.focusMainView()
+            }
+        }
+    }
+
     /// メインビューにフォーカスを移す
     private func focusMainView(selectFirstHistoryItem: Bool = false) {
         isMainViewFocused = true
@@ -1835,6 +1870,7 @@ struct ContentView: View {
     private var interactionMode: InteractionMode {
         // モーダル（5種全て: メモ編集、一括メタデータ編集、画像情報、パスワード、ファイル同一性）
         if modalState.showMemoEdit || modalState.showBatchMetadataEdit || modalState.showImageInfo
+            || modalState.showStructuredMetadataEdit
             || viewModel.showPasswordDialog || viewModel.showFileIdentityDialog {
             return .modal
         }
@@ -1971,7 +2007,136 @@ struct ContentView: View {
         }
     }
 
-    /// 複数選択時の一括メタデータ編集を開く
+    /// 単一選択時の構造化メモ編集を開く
+    private func handleStructuredMemoEdit(selected: SelectableHistoryItem) {
+        switch selected {
+        case .archive(let id, _):
+            if let entry = historyManager.history.first(where: { $0.id == id }) {
+                modalState.openStructuredEditForSingle(fileKey: entry.id, catalogId: nil, memo: entry.memo)
+            }
+        case .standaloneImage(let id, _), .archivedImage(let id, _, _):
+            if let entry = imageCatalogManager.catalog.first(where: { $0.id == id }) {
+                modalState.openStructuredEditForSingle(fileKey: nil, catalogId: id, memo: entry.memo)
+            }
+        case .session:
+            break
+        }
+    }
+
+    /// 複数選択時の構造化一括メタデータ編集を開く
+    private func openStructuredBatchMetadataEdit() {
+        let items = historyState.selectedItems
+        guard items.count > 1 else { return }
+
+        var memos: [String?] = []
+        var targets: [(historyId: String?, catalogId: String?)] = []
+
+        for item in items {
+            switch item {
+            case .archive(let id, _):
+                let memo = historyManager.history.first(where: { $0.id == id })?.memo
+                memos.append(memo)
+                targets.append((historyId: id, catalogId: nil))
+            case .standaloneImage(let id, _), .archivedImage(let id, _, _):
+                let memo = imageCatalogManager.catalog.first(where: { $0.id == id })?.memo
+                memos.append(memo)
+                targets.append((historyId: nil, catalogId: id))
+            case .session:
+                break
+            }
+        }
+
+        guard !targets.isEmpty else { return }
+
+        // 各メモのタグ・属性を抽出
+        let parsedList = memos.map { MemoMetadataParser.parse($0) }
+
+        // 共通タグ（全アイテムに存在）
+        var commonTags = parsedList.first?.tags ?? []
+        for parsed in parsedList.dropFirst() {
+            commonTags = commonTags.intersection(parsed.tags)
+        }
+
+        // 部分タグ（一部のアイテムにのみ存在）
+        var allTags = Set<String>()
+        for parsed in parsedList {
+            allTags.formUnion(parsed.tags)
+        }
+        let partialTags = allTags.subtracting(commonTags)
+
+        // 共通属性（全アイテムで同キー同値）
+        var commonAttrs = parsedList.first?.attributes ?? [:]
+        for parsed in parsedList.dropFirst() {
+            commonAttrs = commonAttrs.filter { parsed.attributes[$0.key] == $0.value }
+        }
+
+        // 部分属性（一部のアイテムにのみ存在、または値が異なる）
+        // 各キーについて最頻値を代表値として表示する
+        var allAttrKeys = Set<String>()
+        for parsed in parsedList {
+            allAttrKeys.formUnion(parsed.attributes.keys)
+        }
+        let partialAttrKeys = allAttrKeys.subtracting(commonAttrs.keys)
+        var partialAttrs: [(key: String, value: String)] = []
+        for key in partialAttrKeys.sorted() {
+            // 最頻値を代表値として選ぶ
+            var valueCounts: [String: Int] = [:]
+            for parsed in parsedList {
+                if let value = parsed.attributes[key] {
+                    valueCounts[value, default: 0] += 1
+                }
+            }
+            let representativeValue = valueCounts.max(by: { $0.value < $1.value })?.key ?? ""
+            partialAttrs.append((key: key, value: representativeValue))
+        }
+
+        modalState.openStructuredEditForBatch(
+            commonTags: commonTags,
+            partialTags: partialTags,
+            commonAttrs: commonAttrs,
+            partialAttrs: partialAttrs,
+            targets: targets
+        )
+    }
+
+    /// メタデータインデックスを取得（サジェスト用）
+    private func currentMetadataIndex() -> MemoMetadataParser.MetadataIndex {
+        MemoMetadataParser.collectIndex(
+            from: historyManager.history.map(\.memo) + imageCatalogManager.catalog.map(\.memo)
+        )
+    }
+
+    /// 構造化メタデータ編集の結果を保存
+    private func saveStructuredMetadata(_ result: MetadataEditResult) {
+        if modalState.isStructuredEditBatch {
+            // 一括: 差分を各アイテムに適用
+            for target in modalState.structuredEditTargets {
+                if let historyId = target.historyId {
+                    let currentMemo = historyManager.history.first(where: { $0.id == historyId })?.memo
+                    let newMemo = MemoMetadataParser.applyMetadataChanges(
+                        to: currentMemo, tagsToAdd: result.tagsToAdd, tagsToRemove: result.tagsToRemove,
+                        attrsToAdd: result.attrsToAdd, attrsToRemove: result.attrsToRemove)
+                    historyManager.updateMemo(for: historyId, memo: newMemo)
+                }
+                if let catalogId = target.catalogId {
+                    let currentMemo = imageCatalogManager.catalog.first(where: { $0.id == catalogId })?.memo
+                    let newMemo = MemoMetadataParser.applyMetadataChanges(
+                        to: currentMemo, tagsToAdd: result.tagsToAdd, tagsToRemove: result.tagsToRemove,
+                        attrsToAdd: result.attrsToAdd, attrsToRemove: result.attrsToRemove)
+                    imageCatalogManager.updateMemo(for: catalogId, memo: newMemo)
+                }
+            }
+        } else {
+            // 単一: 再構築されたメモを保存
+            if let fileKey = modalState.structuredEditFileKey {
+                historyManager.updateMemo(for: fileKey, memo: result.memo)
+            } else if let catalogId = modalState.structuredEditCatalogId {
+                imageCatalogManager.updateMemo(for: catalogId, memo: result.memo)
+            }
+        }
+    }
+
+    /// 複数選択時の一括メタデータ編集を開く（rawテキスト）
     private func openBatchMetadataEdit() {
         let items = historyState.selectedItems
         guard items.count > 1 else { return }
@@ -2119,14 +2284,23 @@ struct ContentView: View {
         }
 
         // M: メモ編集（履歴アイテム選択時）
+        // M（修飾キーなし）→ 構造化UI、Option+M → rawテキスト編集
         if event.keyCode == 46 && !event.modifierFlags.contains(.command)
-            && !event.modifierFlags.contains(.control)
-            && !event.modifierFlags.contains(.option) {
+            && !event.modifierFlags.contains(.control) {
+            let isOption = event.modifierFlags.contains(.option)
             if historyState.selectedItems.count > 1 {
-                openBatchMetadataEdit()
+                if isOption {
+                    openBatchMetadataEdit()
+                } else {
+                    openStructuredBatchMetadataEdit()
+                }
                 return nil
             } else if historyState.selectedItems.count == 1, let selected = historyState.selectedItems.first {
-                handleMemoEdit(selected: selected)
+                if isOption {
+                    handleMemoEdit(selected: selected)
+                } else {
+                    handleStructuredMemoEdit(selected: selected)
+                }
                 return nil
             }
         }
