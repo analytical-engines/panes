@@ -207,6 +207,7 @@
 "metadata_attr_value_placeholder" = "Value";
 "metadata_plain_text_placeholder" = "Free text note...";
 "metadata_partial_tooltip" = "Some items only";
+"metadata_apply_all_tooltip" = "Apply to all items";
 "metadata_edit_title" = "Edit Memo";
 "metadata_batch_count" = "%d items";
 "menu_edit_memo_raw" = "Edit Memo (Text)";

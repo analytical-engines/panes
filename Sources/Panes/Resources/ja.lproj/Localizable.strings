@@ -207,6 +207,7 @@
 "metadata_attr_value_placeholder" = "値";
 "metadata_plain_text_placeholder" = "メモを入力...";
 "metadata_partial_tooltip" = "一部のアイテムのみ";
+"metadata_apply_all_tooltip" = "全アイテムに適用";
 "metadata_edit_title" = "メモを編集";
 "metadata_batch_count" = "%d件のアイテム";
 "menu_edit_memo_raw" = "メモを編集（テキスト）";

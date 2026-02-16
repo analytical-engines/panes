@@ -140,10 +140,11 @@ struct MetadataValueSuggestionProvider: SearchSuggestionProvider {
         let prefix = "@\(key)="
         guard token.lowercased().hasPrefix(prefix) else { return [] }
         let partial = String(token.dropFirst(prefix.count)).lowercased()
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
         return availableValues
             .filter { partial.isEmpty || $0.lowercased().hasPrefix(partial) }
             .sorted()
-            .map { "@\(key)=\($0) " }
+            .map { $0.contains(" ") ? "@\(key)=\"\($0)\" " : "@\(key)=\($0) " }
     }
 }
 
@@ -174,10 +175,11 @@ struct MemoMetadataValueSuggestionProvider: SearchSuggestionProvider {
         let prefix = "@\(key):"
         guard token.lowercased().hasPrefix(prefix) else { return [] }
         let partial = String(token.dropFirst(prefix.count)).lowercased()
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
         return availableValues
             .filter { partial.isEmpty || $0.lowercased().hasPrefix(partial) }
             .sorted()
-            .map { "@\(key):\($0) " }
+            .map { $0.contains(" ") ? "@\(key):\"\($0)\" " : "@\(key):\($0) " }
     }
 }
 
@@ -238,10 +240,11 @@ enum SearchSuggestionEngine {
             if !results.isEmpty {
                 let triggerPrefix = provider.triggerPrefix
                 return results.map { tokenSuggestion in
-                    // "type:archive " → "archive"
+                    // "type:archive " → "archive", '@key="John Doe" ' → "John Doe"
                     let value = tokenSuggestion
                         .trimmingSuffix(" ")
                         .removingPrefix(triggerPrefix)
+                        .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
                     return SearchSuggestionItem(
                         displayText: value,
                         fullText: prefix + tokenSuggestion,

@@ -695,6 +695,27 @@ struct StructuredMetadataEditor: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
+            // 全件適用ボタン（部分一致のみ）
+            if isPartial && !isEditing {
+                Button(action: {
+                    // 部分一致から共通属性に昇格
+                    let attr = partialAttributes[index]
+                    partialAttributes.remove(at: index)
+                    if editingPartialAttrIndex == index { editingPartialAttrIndex = nil }
+                    // 既存キーがあれば上書き、なければ追加
+                    if let existingIndex = attributes.firstIndex(where: { $0.key == attr.key }) {
+                        attributes[existingIndex] = attr
+                    } else {
+                        attributes.append(attr)
+                    }
+                }) {
+                    Image(systemName: "checkmark.circle")
+                        .font(.caption)
+                }
+                .buttonStyle(.plain)
+                .help(L("metadata_apply_all_tooltip"))
+            }
+
             // 編集ボタン
             Button(action: {
                 if isEditing {

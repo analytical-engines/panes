@@ -180,7 +180,9 @@ enum HistorySearchParser {
         var negatedTagConditions: [String] = []
         var negatedMetadataKeys: [String] = []
 
-        for token in tokens {
+        var i = 0
+        while i < tokens.count {
+            let token = tokens[i]
             // 引用符で囲まれたトークンはメタキーワードとして解釈しない
             if token.isQuoted {
                 keywordTokens.append(token.value)
@@ -189,6 +191,7 @@ enum HistorySearchParser {
                 let tag = String(token.value.dropFirst(2)).lowercased()
                 if !tag.isEmpty, tag.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" }) {
                     negatedTagConditions.append(tag)
+                    i += 1
                     continue
                 }
                 keywordTokens.append(token.value)
@@ -197,6 +200,7 @@ enum HistorySearchParser {
                 let key = String(token.value.dropFirst(2)).lowercased()
                 if !key.isEmpty, key.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" }) {
                     negatedMetadataKeys.append(key)
+                    i += 1
                     continue
                 }
                 keywordTokens.append(token.value)
@@ -204,6 +208,7 @@ enum HistorySearchParser {
                 let typeValue = String(token.value.dropFirst(typePrefix.count)).lowercased()
                 if let type = supportedTypes[typeValue] {
                     targetType = type
+                    i += 1
                     continue
                 }
                 // 無効なtype:はキーワードとして扱う
@@ -212,6 +217,7 @@ enum HistorySearchParser {
                 let isValue = String(token.value.dropFirst(isPrefix.count)).lowercased()
                 if supportedIsFilters.contains(isValue) {
                     isPasswordProtected = true
+                    i += 1
                     continue
                 }
                 // 無効なis:はキーワードとして扱う
@@ -220,9 +226,13 @@ enum HistorySearchParser {
                 tagConditions.append(tag)
             } else if let condition = parseMetadataToken(token.value) {
                 metadataConditions.append(condition)
+            } else if let condition = parseMetadataTokenWithNextQuoted(token.value, tokens: tokens, index: &i) {
+                // @key= の後に引用符トークンが続く場合（@key="value with spaces"）
+                metadataConditions.append(condition)
             } else if !token.value.isEmpty {
                 keywordTokens.append(token.value)
             }
+            i += 1
         }
 
         return ParsedSearchQuery(
@@ -259,6 +269,30 @@ enum HistorySearchParser {
                       key.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" }) else {
                     return nil
                 }
+                return MetadataCondition(key: key.lowercased(), op: op, value: value)
+            }
+        }
+        return nil
+    }
+
+    /// @key<op> の後に引用符トークンが続く場合を処理（@key="value with spaces"）
+    private static func parseMetadataTokenWithNextQuoted(_ token: String, tokens: [Token], index: inout Int) -> MetadataCondition? {
+        guard token.hasPrefix("@") else { return nil }
+        let rest = String(token.dropFirst())
+        guard !rest.isEmpty else { return nil }
+
+        for (opStr, op) in metadataOperators {
+            if rest.hasSuffix(opStr) {
+                let key = String(rest.dropLast(opStr.count))
+                guard !key.isEmpty,
+                      key.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" }),
+                      index + 1 < tokens.count, tokens[index + 1].isQuoted else {
+                    return nil
+                }
+                // 次の引用符トークンを値として消費
+                index += 1
+                let value = tokens[index].value
+                guard !value.isEmpty else { return nil }
                 return MetadataCondition(key: key.lowercased(), op: op, value: value)
             }
         }
