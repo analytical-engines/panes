@@ -110,12 +110,12 @@ final class CoverImageLoader {
         }
 
         guard let raw else { return nil }
-        return resize(raw, maxHeight: 80)
+        return resize(raw, maxHeight: 240)
     }
 
     nonisolated private static func loadAndResize(filePath: String) async -> NSImage? {
         guard let raw = NSImage(contentsOfFile: filePath) else { return nil }
-        return resize(raw, maxHeight: 80)
+        return resize(raw, maxHeight: 240)
     }
 
     nonisolated private static func resize(_ image: NSImage, maxHeight: CGFloat) -> NSImage? {
