@@ -1106,50 +1106,60 @@ struct ImageCatalogEntryRow: View {
 
             // 展開詳細
             if isExpanded {
-                VStack(alignment: .leading, spacing: 4) {
-                    // パス
-                    if entry.catalogType == .archived, let relativePath = entry.relativePath {
-                        VStack(alignment: .leading, spacing: 1) {
+                HStack(alignment: .top, spacing: 8) {
+                    CoverThumbnailView(source: entry.catalogType == .individual
+                        ? .imageThumbnail(id: entry.id, filePath: entry.filePath)
+                        : .archivedImageThumbnail(
+                            id: entry.id,
+                            archivePath: entry.filePath,
+                            relativePath: entry.relativePath ?? ""
+                        )
+                    )
+                    VStack(alignment: .leading, spacing: 4) {
+                        // パス
+                        if entry.catalogType == .archived, let relativePath = entry.relativePath {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(entry.filePath)
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                                    .lineLimit(2)
+                                    .textSelection(.enabled)
+                                Text("  → " + relativePath)
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                                    .lineLimit(1)
+                                    .textSelection(.enabled)
+                            }
+                        } else {
                             Text(entry.filePath)
                                 .font(.caption2)
                                 .foregroundColor(.gray)
                                 .lineLimit(2)
                                 .textSelection(.enabled)
-                            Text("  → " + relativePath)
-                                .font(.caption2)
-                                .foregroundColor(.gray)
-                                .lineLimit(1)
-                                .textSelection(.enabled)
                         }
-                    } else {
-                        Text(entry.filePath)
+
+                        HStack(spacing: 12) {
+                            if let format = entry.imageFormat {
+                                Text(L("tooltip_archive_type") + ": " + format)
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                            }
+                            if let resolution = entry.resolutionString {
+                                Text(L("tooltip_resolution") + ": " + resolution)
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                            }
+                            if let size = entry.fileSizeString {
+                                Text(L("tooltip_file_size") + ": " + size)
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                            }
+                        }
+
+                        Text(L("tooltip_last_access") + ": " + formattedDate(entry.lastAccessDate))
                             .font(.caption2)
                             .foregroundColor(.gray)
-                            .lineLimit(2)
-                            .textSelection(.enabled)
                     }
-
-                    HStack(spacing: 12) {
-                        if let format = entry.imageFormat {
-                            Text(L("tooltip_archive_type") + ": " + format)
-                                .font(.caption2)
-                                .foregroundColor(.gray)
-                        }
-                        if let resolution = entry.resolutionString {
-                            Text(L("tooltip_resolution") + ": " + resolution)
-                                .font(.caption2)
-                                .foregroundColor(.gray)
-                        }
-                        if let size = entry.fileSizeString {
-                            Text(L("tooltip_file_size") + ": " + size)
-                                .font(.caption2)
-                                .foregroundColor(.gray)
-                        }
-                    }
-
-                    Text(L("tooltip_last_access") + ": " + formattedDate(entry.lastAccessDate))
-                        .font(.caption2)
-                        .foregroundColor(.gray)
                 }
                 .padding(.horizontal, 12)
                 .padding(.bottom, 6)
@@ -1268,31 +1278,38 @@ struct HistoryEntryRow: View {
 
             // 展開詳細
             if isExpanded {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(entry.filePath)
-                        .font(.caption2)
-                        .foregroundColor(.gray)
-                        .lineLimit(2)
-                        .textSelection(.enabled)
+                HStack(alignment: .top, spacing: 8) {
+                    CoverThumbnailView(source: .archiveCover(
+                        id: entry.id,
+                        filePath: entry.filePath,
+                        isPasswordProtected: entry.isPasswordProtected == true
+                    ))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(entry.filePath)
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                            .lineLimit(2)
+                            .textSelection(.enabled)
 
-                    HStack(spacing: 12) {
-                        let ext = URL(fileURLWithPath: entry.filePath).pathExtension.lowercased()
-                        let archiveType = archiveTypeDescription(for: ext)
-                        if !archiveType.isEmpty {
-                            Text(L("tooltip_archive_type") + ": " + archiveType)
-                                .font(.caption2)
-                                .foregroundColor(.gray)
+                        HStack(spacing: 12) {
+                            let ext = URL(fileURLWithPath: entry.filePath).pathExtension.lowercased()
+                            let archiveType = archiveTypeDescription(for: ext)
+                            if !archiveType.isEmpty {
+                                Text(L("tooltip_archive_type") + ": " + archiveType)
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                            }
+                            if let size = entry.fileSizeString {
+                                Text(L("tooltip_file_size") + ": " + size)
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                            }
                         }
-                        if let size = entry.fileSizeString {
-                            Text(L("tooltip_file_size") + ": " + size)
-                                .font(.caption2)
-                                .foregroundColor(.gray)
-                        }
+
+                        Text(L("tooltip_last_access") + ": " + formattedDate(entry.lastAccessDate))
+                            .font(.caption2)
+                            .foregroundColor(.gray)
                     }
-
-                    Text(L("tooltip_last_access") + ": " + formattedDate(entry.lastAccessDate))
-                        .font(.caption2)
-                        .foregroundColor(.gray)
                 }
                 .padding(.horizontal, 12)
                 .padding(.bottom, 6)
@@ -1369,5 +1386,59 @@ struct HistoryEntryRow: View {
     private func revealInFinder() {
         let url = URL(fileURLWithPath: entry.filePath)
         NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+}
+
+/// カバー画像サムネイルビュー
+private struct CoverThumbnailView: View {
+    enum Source {
+        case archiveCover(id: String, filePath: String, isPasswordProtected: Bool)
+        case imageThumbnail(id: String, filePath: String)
+        case archivedImageThumbnail(id: String, archivePath: String, relativePath: String)
+    }
+
+    let source: Source
+
+    @State private var image: NSImage?
+    @State private var isLoading = true
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxHeight: 80)
+            } else if isLoading {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(width: 40, height: 40)
+            }
+        }
+        .task {
+            image = await loadImage()
+            isLoading = false
+        }
+    }
+
+    private func loadImage() async -> NSImage? {
+        switch source {
+        case .archiveCover(let id, let filePath, let isPasswordProtected):
+            let password: String? = isPasswordProtected
+                ? PasswordStorage.shared.getPassword(forArchive: filePath)
+                : nil
+            return await CoverImageLoader.shared.loadArchiveCover(
+                id: id, filePath: filePath, password: password
+            )
+        case .imageThumbnail(let id, let filePath):
+            return await CoverImageLoader.shared.loadImageThumbnail(
+                id: id, filePath: filePath
+            )
+        case .archivedImageThumbnail(let id, let archivePath, let relativePath):
+            let password = PasswordStorage.shared.getPassword(forArchive: archivePath)
+            return await CoverImageLoader.shared.loadArchivedImageThumbnail(
+                id: id, archivePath: archivePath, relativePath: relativePath, password: password
+            )
+        }
     }
 }
