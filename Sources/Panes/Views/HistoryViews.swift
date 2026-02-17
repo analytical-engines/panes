@@ -1408,12 +1408,13 @@ private struct CoverThumbnailView: View {
                 Image(nsImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
+                    .frame(height: 96)
+                    .fixedSize(horizontal: true, vertical: false)
             } else if isLoading {
                 ProgressView()
                     .controlSize(.small)
             }
         }
-        .frame(width: 80, height: 120)
         .task {
             image = await loadImage()
             isLoading = false
