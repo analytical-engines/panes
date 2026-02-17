@@ -1277,12 +1277,16 @@ struct HistoryEntryRow: View {
 
             // 展開詳細
             if isExpanded {
+                let pageSettings = historyManager.loadPageDisplaySettingsWithRef(for: entry)
+                let coverIndex = pageSettings?.coverPageIndex() ?? 0
+
                 HStack(alignment: .top, spacing: 8) {
                     CoverThumbnailView(
                         source: .archiveCover(
                             id: entry.id,
                             filePath: entry.filePath,
-                            isPasswordProtected: entry.isPasswordProtected == true
+                            isPasswordProtected: entry.isPasswordProtected == true,
+                            coverIndex: coverIndex
                         ),
                         imageCount: $imageCount
                     )
@@ -1310,7 +1314,7 @@ struct HistoryEntryRow: View {
 
                         // 画像数・ページ数
                         if let count = imageCount {
-                            let hiddenCount = historyManager.loadPageDisplaySettingsWithRef(for: entry)?.hiddenPageCount ?? 0
+                            let hiddenCount = pageSettings?.hiddenPageCount ?? 0
                             HStack(spacing: 0) {
                                 Text(L("tooltip_image_count") + ": \(count)" + L("tooltip_image_count_suffix"))
                                     .font(.caption2)
@@ -1410,7 +1414,7 @@ struct HistoryEntryRow: View {
 /// カバー画像サムネイルビュー
 private struct CoverThumbnailView: View {
     enum Source {
-        case archiveCover(id: String, filePath: String, isPasswordProtected: Bool)
+        case archiveCover(id: String, filePath: String, isPasswordProtected: Bool, coverIndex: Int)
         case imageThumbnail(id: String, filePath: String)
         case archivedImageThumbnail(id: String, archivePath: String, relativePath: String)
     }
@@ -1436,7 +1440,7 @@ private struct CoverThumbnailView: View {
         }
         .task {
             image = await loadImage()
-            if case .archiveCover(let id, _, _) = source {
+            if case .archiveCover(let id, _, _, _) = source {
                 imageCount = CoverImageLoader.shared.imageCount(for: id)
             }
             isLoading = false
@@ -1445,12 +1449,12 @@ private struct CoverThumbnailView: View {
 
     private func loadImage() async -> NSImage? {
         switch source {
-        case .archiveCover(let id, let filePath, let isPasswordProtected):
+        case .archiveCover(let id, let filePath, let isPasswordProtected, let coverIndex):
             let password: String? = isPasswordProtected
                 ? PasswordStorage.shared.getPassword(forArchive: filePath)
                 : nil
             return await CoverImageLoader.shared.loadArchiveCover(
-                id: id, filePath: filePath, password: password
+                id: id, filePath: filePath, password: password, coverIndex: coverIndex
             )
         case .imageThumbnail(let id, let filePath):
             return await CoverImageLoader.shared.loadImageThumbnail(

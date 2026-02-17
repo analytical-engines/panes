@@ -343,6 +343,30 @@ struct PageDisplaySettings: Codable {
         return hiddenPageIndices.count
     }
 
+    // MARK: - カバーページ
+
+    /// 表示上の1ページ目のソースインデックス（カスタム順序・非表示を考慮）
+    func coverPageIndex() -> Int {
+        if hasCustomDisplayOrder {
+            // カスタム順序の中から最初の非表示でないページ
+            for index in customDisplayOrder {
+                if !hiddenPageIndices.contains(index) {
+                    return index
+                }
+            }
+            // すべて非表示の場合はカスタム順序の先頭にフォールバック
+            return customDisplayOrder.first ?? 0
+        } else {
+            // デフォルト順序：最初の非表示でないインデックス
+            var index = 0
+            while hiddenPageIndices.contains(index) {
+                index += 1
+                if index > hiddenPageIndices.count { break }
+            }
+            return index
+        }
+    }
+
     // MARK: - カスタム表示順序
 
     /// カスタム表示順序が設定されているかどうか

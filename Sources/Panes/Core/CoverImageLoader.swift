@@ -24,14 +24,14 @@ final class CoverImageLoader {
         imageCountCache[id]
     }
 
-    /// 書庫の先頭画像を読み込み
-    func loadArchiveCover(id: String, filePath: String, password: String?) async -> NSImage? {
+    /// 書庫のカバー画像を読み込み（coverIndex: ページ設定を考慮した表示上の1ページ目）
+    func loadArchiveCover(id: String, filePath: String, password: String?, coverIndex: Int = 0) async -> NSImage? {
         if let cached = cache.object(forKey: id as NSString) { return cached }
         guard loadingIds.insert(id).inserted else { return nil }
         defer { loadingIds.remove(id) }
 
         let result = await Self.extractAndResize(
-            filePath: filePath, password: password, mode: .cover
+            filePath: filePath, password: password, mode: .cover(index: coverIndex)
         )
         if let count = result.imageCount {
             imageCountCache[id] = count
@@ -70,7 +70,7 @@ final class CoverImageLoader {
     // MARK: - Private
 
     private enum ExtractMode: Sendable {
-        case cover
+        case cover(index: Int)
         case specific(String)
     }
 
@@ -87,8 +87,8 @@ final class CoverImageLoader {
             if let reader = await SwiftZipReader.create(url: url, password: password) {
                 imageCount = reader.imageCount
                 switch mode {
-                case .cover:
-                    raw = reader.loadImage(at: 0)
+                case .cover(let index):
+                    raw = reader.loadImage(at: index)
                 case .specific(let path):
                     if let i = reader.imageIndex(forName: path) {
                         raw = reader.loadImage(at: i)
@@ -99,8 +99,8 @@ final class CoverImageLoader {
             if let reader = RarReader(url: url, password: password) {
                 imageCount = reader.imageCount
                 switch mode {
-                case .cover:
-                    raw = reader.loadImage(at: 0)
+                case .cover(let index):
+                    raw = reader.loadImage(at: index)
                 case .specific(let path):
                     if let i = reader.imageIndex(forName: path) {
                         raw = reader.loadImage(at: i)
@@ -111,8 +111,8 @@ final class CoverImageLoader {
             if let reader = SevenZipReader(url: url) {
                 imageCount = reader.imageCount
                 switch mode {
-                case .cover:
-                    raw = reader.loadImage(at: 0)
+                case .cover(let index):
+                    raw = reader.loadImage(at: index)
                 case .specific(let path):
                     if let i = reader.imageIndex(forName: path) {
                         raw = reader.loadImage(at: i)
@@ -120,14 +120,14 @@ final class CoverImageLoader {
                 }
             }
         default:
-            // フォルダの場合：先頭の画像ファイルを読み込む
+            // フォルダの場合
             var isDirectory: ObjCBool = false
             if FileManager.default.fileExists(atPath: filePath, isDirectory: &isDirectory),
                isDirectory.boolValue,
                let source = FileImageSource(urls: [url]) {
                 imageCount = source.imageCount
-                if case .cover = mode {
-                    raw = source.loadImage(at: 0)
+                if case .cover(let index) = mode {
+                    raw = source.loadImage(at: index)
                 }
             }
         }
