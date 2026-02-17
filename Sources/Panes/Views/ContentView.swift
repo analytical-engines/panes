@@ -1484,10 +1484,9 @@ struct ContentView: View {
             DebugLogger.log("📐 Target frame saved: \(frame) windowID: \(windowID)", level: .normal)
         }
 
-        // ファイルを開く
+        // ファイルを開く（共通経路を使用）
         let url = URL(fileURLWithPath: fileOpen.filePath)
-        isWaitingForFile = true
-        pendingURLs = [url]
+        openFilesInCurrentWindow(urls: [url])
     }
 
     /// ウィンドウフレームが画面内に収まるか検証
@@ -1922,8 +1921,7 @@ struct ContentView: View {
                 }
             } else if !extend {
                 // 先頭にいる場合は検索フィールドにフォーカス
-                historyState.clearSelection()
-                isHistorySearchFocused = true
+                focusSearchField()
             }
         } else if let last = historyState.visibleItems.last {
             historyState.select(last)

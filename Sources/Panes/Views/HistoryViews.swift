@@ -482,12 +482,7 @@ struct HistoryListView: View {
                     .frame(maxHeight: 400)
                     .focusable()
                     // 注: ⌘F（履歴トグル）はメニューショートカットで処理
-                    .onKeyPress(.escape) {
-                        // Escape: 履歴を閉じる
-                        historyState.closeHistory()
-                        isSearchFocused.wrappedValue = false
-                        return .handled
-                    }
+                    // 注: Escapeは中央集約キーハンドラ（ContentView.setupKeyDownMonitor）で処理
                     .onChange(of: historyState.selectedItem?.id) { _, newId in
                         if let id = newId {
                             withAnimation(.easeInOut(duration: 0.2)) {
