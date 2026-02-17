@@ -98,8 +98,15 @@ struct ImageViewerApp: App {
                 }
             }
 
-            // ファイルメニューにClose/履歴Export/Importを追加
+            // ファイルメニューにOpen/Close/履歴Export/Importを追加
             CommandGroup(after: .newItem) {
+                Button(action: {
+                    WindowCoordinator.shared.openFilePicker()
+                }) {
+                    Label(L("open_file"), systemImage: "doc")
+                }
+                .keyboardShortcut("o", modifiers: .command)
+
                 // Note: .disabled()はAppDelegateのmenuNeedsUpdateで動的に制御
                 // SwiftUIのCommands内でObservableを監視すると全ウィンドウ再描画が発生するため
 

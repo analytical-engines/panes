@@ -954,6 +954,10 @@ struct ContentView: View {
                     windowNumber: newNumber,
                     callback: { self.focusMainView() }
                 )
+                WindowCoordinator.shared.registerOpenFilePicker(
+                    windowNumber: newNumber,
+                    callback: { self.openFilePicker() }
+                )
             }
         }
         .onChange(of: historyState.showHistoryFilter) { _, newValue in

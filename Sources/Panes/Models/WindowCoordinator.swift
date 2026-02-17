@@ -25,6 +25,9 @@ final class WindowCoordinator {
     /// ウィンドウ番号からメインビューフォーカスのコールバック
     private var focusMainViewCallbacks: [Int: () -> Void] = [:]
 
+    /// ウィンドウ番号からファイルを開くダイアログのコールバック
+    private var openFilePickerCallbacks: [Int: () -> Void] = [:]
+
     /// 現在アクティブなウィンドウ番号（markAsActiveで明示的に設定）
     private var activeWindowNumber: Int?
 
@@ -79,6 +82,11 @@ final class WindowCoordinator {
         DebugLogger.log("📋 WindowCoordinator: registered focusMainView for window \(windowNumber)", level: .verbose)
     }
 
+    /// ファイルを開くダイアログのコールバックを登録する
+    func registerOpenFilePicker(windowNumber: Int, callback: @escaping () -> Void) {
+        openFilePickerCallbacks[windowNumber] = callback
+    }
+
     /// 登録を解除する
     func unregister(windowNumber: Int) {
         windowViewModels.removeValue(forKey: windowNumber)
@@ -88,6 +96,7 @@ final class WindowCoordinator {
         searchFocusSetters.removeValue(forKey: windowNumber)
         clearSelectionCallbacks.removeValue(forKey: windowNumber)
         focusMainViewCallbacks.removeValue(forKey: windowNumber)
+        openFilePickerCallbacks.removeValue(forKey: windowNumber)
         DebugLogger.log("📋 WindowCoordinator: unregistered window \(windowNumber)", level: .verbose)
     }
 
@@ -174,6 +183,12 @@ final class WindowCoordinator {
             showHistorySetters[windowNumber]?(false)
             focusMainViewCallbacks[windowNumber]?()
         }
+    }
+
+    /// キーウィンドウでファイルを開くダイアログを表示する
+    func openFilePicker() {
+        guard let keyWindow = NSApp.keyWindow else { return }
+        openFilePickerCallbacks[keyWindow.windowNumber]?()
     }
 
     /// キーウィンドウがファイルを開いているかどうか
