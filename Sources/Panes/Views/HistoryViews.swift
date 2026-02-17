@@ -436,34 +436,51 @@ struct HistoryListView: View {
                     .padding(.top, 20)
                     .zIndex(1)
 
-                    // 検索結果のセクション表示
+                    // セクションヘッダー（常に表示）
+                    VStack(alignment: .leading, spacing: 4) {
+                        if parsedQuery.includesArchives && !searchResult.archives.isEmpty {
+                            archivesSectionHeaderView(
+                                archives: searchResult.archives,
+                                totalCount: recentHistory.count,
+                                isFiltering: parsedQuery.hasKeyword
+                            )
+                        }
+                        if parsedQuery.includesImages && !searchResult.images.isEmpty {
+                            imagesSectionHeaderView(
+                                images: searchResult.images
+                            )
+                        }
+                        if parsedQuery.includesSessions && !searchResult.sessions.isEmpty {
+                            sessionsSectionHeaderView(
+                                sessions: searchResult.sessions,
+                                totalCount: sessionGroups.count,
+                                isFiltering: parsedQuery.hasKeyword
+                            )
+                        }
+                    }
+
+                    // 検索結果のエントリ表示
                     ScrollViewReader { proxy in
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 12) {
-                                // 書庫セクション
+                                // 書庫エントリ
                                 if parsedQuery.includesArchives && !searchResult.archives.isEmpty {
-                                    archivesSectionView(
-                                        archives: searchResult.archives,
-                                        totalCount: recentHistory.count,
-                                        isFiltering: parsedQuery.hasKeyword
+                                    archivesEntriesView(
+                                        archives: searchResult.archives
                                     )
                                 }
 
-                                // 画像セクション
+                                // 画像エントリ
                                 if parsedQuery.includesImages && !searchResult.images.isEmpty {
-                                    imagesSectionView(
-                                        images: searchResult.images,
-                                        totalCount: imageCatalog.count,
-                                        isFiltering: parsedQuery.hasKeyword
+                                    imagesEntriesView(
+                                        images: searchResult.images
                                     )
                                 }
 
-                            // セッションセクション
+                            // セッションエントリ
                             if parsedQuery.includesSessions && !searchResult.sessions.isEmpty {
-                                sessionsSectionView(
-                                    sessions: searchResult.sessions,
-                                    totalCount: sessionGroups.count,
-                                    isFiltering: parsedQuery.hasKeyword
+                                sessionsEntriesView(
+                                    sessions: searchResult.sessions
                                 )
                             }
 
@@ -662,10 +679,9 @@ struct HistoryListView: View {
         historyState.isShowingSuggestions = false
     }
 
-    /// 書庫セクションビュー
+    /// 書庫セクションヘッダー
     @ViewBuilder
-    private func archivesSectionView(archives: [FileHistoryEntry], totalCount: Int, isFiltering: Bool) -> some View {
-        // セクションヘッダー
+    private func archivesSectionHeaderView(archives: [FileHistoryEntry], totalCount: Int, isFiltering: Bool) -> some View {
         HStack {
             HStack(spacing: 4) {
                 Image(systemName: "archivebox")
@@ -690,7 +706,11 @@ struct HistoryListView: View {
             }
         }
         .padding(.horizontal, 4)
+    }
 
+    /// 書庫エントリリスト
+    @ViewBuilder
+    private func archivesEntriesView(archives: [FileHistoryEntry]) -> some View {
         ForEach(Array(archives.enumerated()), id: \.element.id) { index, entry in
                 HistoryEntryRow(
                     entry: entry,
@@ -739,13 +759,12 @@ struct HistoryListView: View {
             }
     }
 
-    /// 画像セクションビュー
+    /// 画像セクションヘッダー
     @ViewBuilder
-    private func imagesSectionView(images: [ImageCatalogEntry], totalCount: Int, isFiltering: Bool) -> some View {
+    private func imagesSectionHeaderView(images: [ImageCatalogEntry]) -> some View {
         let standaloneCount = images.filter { $0.catalogType == .individual }.count
         let archivedCount = images.filter { $0.catalogType == .archived }.count
 
-        // セクションヘッダー
         HStack {
             HStack(spacing: 4) {
                 if standaloneCount > 0 && archivedCount > 0 {
@@ -789,7 +808,11 @@ struct HistoryListView: View {
             .foregroundColor(.gray)
         }
         .padding(.horizontal, 4)
+    }
 
+    /// 画像エントリリスト
+    @ViewBuilder
+    private func imagesEntriesView(images: [ImageCatalogEntry]) -> some View {
         ForEach(Array(images.enumerated()), id: \.element.id) { index, entry in
                 let selectableItem: SelectableHistoryItem = entry.catalogType == .individual
                     ? .standaloneImage(id: entry.id, filePath: entry.filePath)
@@ -840,10 +863,9 @@ struct HistoryListView: View {
             }
     }
 
-    /// セッションセクションビュー
+    /// セッションセクションヘッダー
     @ViewBuilder
-    private func sessionsSectionView(sessions: [SessionGroup], totalCount: Int, isFiltering: Bool) -> some View {
-        // セクションヘッダー
+    private func sessionsSectionHeaderView(sessions: [SessionGroup], totalCount: Int, isFiltering: Bool) -> some View {
         HStack {
             HStack(spacing: 4) {
                 Image(systemName: "square.stack.3d.up")
@@ -868,7 +890,11 @@ struct HistoryListView: View {
             }
         }
         .padding(.horizontal, 4)
+    }
 
+    /// セッションエントリリスト
+    @ViewBuilder
+    private func sessionsEntriesView(sessions: [SessionGroup]) -> some View {
         ForEach(sessions) { session in
             SessionGroupRow(
                     session: session,

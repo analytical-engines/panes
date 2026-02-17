@@ -83,9 +83,9 @@ struct ImageViewerApp: App {
                     imageCatalogManager.loadCatalog()
 
                     // SessionGroupManagerにModelContextを設定（SwiftData共有）
-                    sessionGroupManager.setModelContext(historyManager.modelContext)
                     sessionGroupManager.workspaceId = wid
                     sessionGroupManager.maxSessionGroupCount = appSettings.maxSessionGroupCount
+                    sessionGroupManager.setModelContext(historyManager.modelContext)
                 }
         }
         .windowStyle(.hiddenTitleBar)
@@ -358,7 +358,7 @@ struct ImageViewerApp: App {
                     Label(L("menu_save_session"), systemImage: "square.stack.3d.up")
                 }
                 .keyboardShortcut("s", modifiers: [.command, .shift])
-                .disabled(sessionManager.activeWindows.isEmpty)
+                .disabled(!sessionManager.hasActiveWindows)
 
                 Divider()
             }

@@ -45,6 +45,9 @@ class SessionManager {
     @ObservationIgnored
     private(set) var activeWindows: [UUID: WindowSessionEntry] = [:]
 
+    /// アクティブウィンドウが存在するか（メニュー有効/無効判定用）
+    private(set) var hasActiveWindows: Bool = false
+
     /// 現在読み込み中のウィンドウ数
     @ObservationIgnored
     private(set) var currentLoadingCount: Int = 0
@@ -234,6 +237,7 @@ class SessionManager {
             windowFrame: frame
         )
         activeWindows[id] = entry
+        hasActiveWindows = !activeWindows.isEmpty
         DebugLogger.log("📝 Window registered: \(id) frame: \(frame)", level: .normal)
     }
 
@@ -268,6 +272,7 @@ class SessionManager {
     /// ウィンドウを削除する
     func removeWindow(id: UUID) {
         activeWindows.removeValue(forKey: id)
+        hasActiveWindows = !activeWindows.isEmpty
         DebugLogger.log("🗑️ Window removed: \(id)", level: .verbose)
     }
 
