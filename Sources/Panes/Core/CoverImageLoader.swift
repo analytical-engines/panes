@@ -120,7 +120,16 @@ final class CoverImageLoader {
                 }
             }
         default:
-            break
+            // フォルダの場合：先頭の画像ファイルを読み込む
+            var isDirectory: ObjCBool = false
+            if FileManager.default.fileExists(atPath: filePath, isDirectory: &isDirectory),
+               isDirectory.boolValue,
+               let source = FileImageSource(urls: [url]) {
+                imageCount = source.imageCount
+                if case .cover = mode {
+                    raw = source.loadImage(at: 0)
+                }
+            }
         }
 
         guard let raw else { return (nil, imageCount) }
