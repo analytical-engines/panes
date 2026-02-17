@@ -7,6 +7,7 @@ final class CoverImageLoader {
     static let shared = CoverImageLoader()
 
     private let cache = NSCache<NSString, NSImage>()
+    private var imageCountCache: [String: Int] = [:]
     private var loadingIds: Set<String> = []
 
     private init() {
@@ -18,15 +19,24 @@ final class CoverImageLoader {
         cache.object(forKey: id as NSString)
     }
 
+    /// 書庫の画像数を取得（カバー画像読み込み後に利用可能）
+    func imageCount(for id: String) -> Int? {
+        imageCountCache[id]
+    }
+
     /// 書庫の先頭画像を読み込み
     func loadArchiveCover(id: String, filePath: String, password: String?) async -> NSImage? {
         if let cached = cache.object(forKey: id as NSString) { return cached }
         guard loadingIds.insert(id).inserted else { return nil }
         defer { loadingIds.remove(id) }
 
-        guard let resized = await Self.extractAndResize(
+        let result = await Self.extractAndResize(
             filePath: filePath, password: password, mode: .cover
-        ) else { return nil }
+        )
+        if let count = result.imageCount {
+            imageCountCache[id] = count
+        }
+        guard let resized = result.image else { return nil }
         cache.setObject(resized, forKey: id as NSString)
         return resized
     }
@@ -52,7 +62,7 @@ final class CoverImageLoader {
 
         guard let resized = await Self.extractAndResize(
             filePath: archivePath, password: password, mode: .specific(relativePath)
-        ) else { return nil }
+        ).image else { return nil }
         cache.setObject(resized, forKey: id as NSString)
         return resized
     }
@@ -66,14 +76,16 @@ final class CoverImageLoader {
 
     nonisolated private static func extractAndResize(
         filePath: String, password: String?, mode: ExtractMode
-    ) async -> NSImage? {
+    ) async -> (image: NSImage?, imageCount: Int?) {
         let url = URL(fileURLWithPath: filePath)
         let ext = url.pathExtension.lowercased()
 
         var raw: NSImage?
+        var imageCount: Int?
         switch ext {
         case "zip", "cbz":
             if let reader = await SwiftZipReader.create(url: url, password: password) {
+                imageCount = reader.imageCount
                 switch mode {
                 case .cover:
                     raw = reader.loadImage(at: 0)
@@ -85,6 +97,7 @@ final class CoverImageLoader {
             }
         case "rar", "cbr":
             if let reader = RarReader(url: url, password: password) {
+                imageCount = reader.imageCount
                 switch mode {
                 case .cover:
                     raw = reader.loadImage(at: 0)
@@ -96,6 +109,7 @@ final class CoverImageLoader {
             }
         case "7z", "cb7":
             if let reader = SevenZipReader(url: url) {
+                imageCount = reader.imageCount
                 switch mode {
                 case .cover:
                     raw = reader.loadImage(at: 0)
@@ -109,8 +123,8 @@ final class CoverImageLoader {
             break
         }
 
-        guard let raw else { return nil }
-        return resize(raw, maxHeight: 192)
+        guard let raw else { return (nil, imageCount) }
+        return (resize(raw, maxHeight: 192), imageCount)
     }
 
     nonisolated private static func loadAndResize(filePath: String) async -> NSImage? {

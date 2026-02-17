@@ -303,6 +303,9 @@
 "tooltip_archive_type" = "Type";
 "tooltip_last_access" = "Last Access";
 "tooltip_resolution" = "Resolution";
+"tooltip_image_count" = "Images";
+"tooltip_image_count_suffix" = "";
+"tooltip_page_count" = "Pages";
 
 // MARK: - Sort Methods
 

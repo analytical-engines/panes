@@ -303,6 +303,9 @@
 "tooltip_archive_type" = "種類";
 "tooltip_last_access" = "最終アクセス";
 "tooltip_resolution" = "解像度";
+"tooltip_image_count" = "画像";
+"tooltip_image_count_suffix" = "枚";
+"tooltip_page_count" = "ページ";
 
 // MARK: - Sort Methods
 

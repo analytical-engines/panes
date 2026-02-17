@@ -1107,13 +1107,15 @@ struct ImageCatalogEntryRow: View {
             // 展開詳細
             if isExpanded {
                 HStack(alignment: .top, spacing: 8) {
-                    CoverThumbnailView(source: entry.catalogType == .individual
-                        ? .imageThumbnail(id: entry.id, filePath: entry.filePath)
-                        : .archivedImageThumbnail(
-                            id: entry.id,
-                            archivePath: entry.filePath,
-                            relativePath: entry.relativePath ?? ""
-                        )
+                    CoverThumbnailView(
+                        source: entry.catalogType == .individual
+                            ? .imageThumbnail(id: entry.id, filePath: entry.filePath)
+                            : .archivedImageThumbnail(
+                                id: entry.id,
+                                archivePath: entry.filePath,
+                                relativePath: entry.relativePath ?? ""
+                            ),
+                        imageCount: .constant(nil)
                     )
                     VStack(alignment: .leading, spacing: 4) {
                         // パス
@@ -1214,6 +1216,8 @@ struct HistoryEntryRow: View {
     let onOpenInNewWindow: (String) -> Void  // filePath
     let onEditMemo: (String, String?) -> Void  // (fileKey, currentMemo)
 
+    @State private var imageCount: Int?
+
     var body: some View {
         // FileHistoryManagerのキャッシュを使用（一度チェックしたらセッション中保持）
         let isAccessible = historyManager.isAccessible(for: entry)
@@ -1279,11 +1283,14 @@ struct HistoryEntryRow: View {
             // 展開詳細
             if isExpanded {
                 HStack(alignment: .top, spacing: 8) {
-                    CoverThumbnailView(source: .archiveCover(
-                        id: entry.id,
-                        filePath: entry.filePath,
-                        isPasswordProtected: entry.isPasswordProtected == true
-                    ))
+                    CoverThumbnailView(
+                        source: .archiveCover(
+                            id: entry.id,
+                            filePath: entry.filePath,
+                            isPasswordProtected: entry.isPasswordProtected == true
+                        ),
+                        imageCount: $imageCount
+                    )
                     VStack(alignment: .leading, spacing: 4) {
                         Text(entry.filePath)
                             .font(.caption2)
@@ -1303,6 +1310,22 @@ struct HistoryEntryRow: View {
                                 Text(L("tooltip_file_size") + ": " + size)
                                     .font(.caption2)
                                     .foregroundColor(.gray)
+                            }
+                        }
+
+                        // 画像数・ページ数
+                        if let count = imageCount {
+                            let hiddenCount = historyManager.loadPageDisplaySettingsWithRef(for: entry)?.hiddenPageCount ?? 0
+                            HStack(spacing: 0) {
+                                Text(L("tooltip_image_count") + ": \(count)" + L("tooltip_image_count_suffix"))
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                                if hiddenCount > 0 {
+                                    let pageCount = count - hiddenCount
+                                    Text(" (" + L("tooltip_page_count") + ": \(pageCount))")
+                                        .font(.caption2)
+                                        .foregroundColor(.gray)
+                                }
                             }
                         }
 
@@ -1398,6 +1421,7 @@ private struct CoverThumbnailView: View {
     }
 
     let source: Source
+    @Binding var imageCount: Int?
 
     @State private var image: NSImage?
     @State private var isLoading = true
@@ -1417,6 +1441,9 @@ private struct CoverThumbnailView: View {
         }
         .task {
             image = await loadImage()
+            if case .archiveCover(let id, _, _) = source {
+                imageCount = CoverImageLoader.shared.imageCount(for: id)
+            }
             isLoading = false
         }
     }
