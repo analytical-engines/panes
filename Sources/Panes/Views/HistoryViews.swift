@@ -128,12 +128,6 @@ struct HistoryListView: View {
     var isSearchFocused: FocusState<Bool>.Binding
 
     @State private var dismissedError = false
-    /// セクションの折りたたみ状態
-    @State private var isArchivesSectionCollapsed = false
-    @State private var isImagesSectionCollapsed = false
-    @State private var isStandaloneSectionCollapsed = false
-    @State private var isArchiveContentSectionCollapsed = false
-    @State private var isSessionsSectionCollapsed = false
 
     /// 入力補完用
     @State private var selectedSuggestionIndex: Int = 0
@@ -515,21 +509,6 @@ struct HistoryListView: View {
                 .onChange(of: searchResult.sessions.map { $0.id }) { _, _ in
                     updateVisibleItems(archives: searchResult.archives, images: searchResult.images, sessions: searchResult.sessions, parsedQuery: parsedQuery)
                 }
-                .onChange(of: isArchivesSectionCollapsed) { _, _ in
-                    updateVisibleItems(archives: searchResult.archives, images: searchResult.images, sessions: searchResult.sessions, parsedQuery: parsedQuery)
-                }
-                .onChange(of: isImagesSectionCollapsed) { _, _ in
-                    updateVisibleItems(archives: searchResult.archives, images: searchResult.images, sessions: searchResult.sessions, parsedQuery: parsedQuery)
-                }
-                .onChange(of: isStandaloneSectionCollapsed) { _, _ in
-                    updateVisibleItems(archives: searchResult.archives, images: searchResult.images, sessions: searchResult.sessions, parsedQuery: parsedQuery)
-                }
-                .onChange(of: isArchiveContentSectionCollapsed) { _, _ in
-                    updateVisibleItems(archives: searchResult.archives, images: searchResult.images, sessions: searchResult.sessions, parsedQuery: parsedQuery)
-                }
-                .onChange(of: isSessionsSectionCollapsed) { _, _ in
-                    updateVisibleItems(archives: searchResult.archives, images: searchResult.images, sessions: searchResult.sessions, parsedQuery: parsedQuery)
-                }
                 .onChange(of: historyState.scrollTrigger) { _, _ in
                     // ウィンドウフォーカス時などにvisibleItemsを再構築
                     updateVisibleItems(archives: searchResult.archives, images: searchResult.images, sessions: searchResult.sessions, parsedQuery: parsedQuery)
@@ -546,34 +525,25 @@ struct HistoryListView: View {
         var items: [SelectableHistoryItem] = []
 
         // 書庫セクション
-        if parsedQuery.includesArchives && !archives.isEmpty && !isArchivesSectionCollapsed {
+        if parsedQuery.includesArchives {
             for entry in archives {
                 items.append(.archive(id: entry.id, filePath: entry.filePath))
             }
         }
 
         // 画像セクション
-        if parsedQuery.includesImages && !images.isEmpty && !isImagesSectionCollapsed {
-            let standaloneImages = images.filter { $0.catalogType == .individual }
-            let archiveContentImages = images.filter { $0.catalogType == .archived }
-
-            // 個別画像
-            if !standaloneImages.isEmpty && !isStandaloneSectionCollapsed {
-                for entry in standaloneImages {
+        if parsedQuery.includesImages {
+            for entry in images {
+                if entry.catalogType == .individual {
                     items.append(.standaloneImage(id: entry.id, filePath: entry.filePath))
-                }
-            }
-
-            // 書庫内画像
-            if !archiveContentImages.isEmpty && !isArchiveContentSectionCollapsed {
-                for entry in archiveContentImages {
+                } else {
                     items.append(.archivedImage(id: entry.id, parentPath: entry.filePath, relativePath: entry.relativePath ?? ""))
                 }
             }
         }
 
         // セッションセクション
-        if parsedQuery.includesSessions && !sessions.isEmpty && !isSessionsSectionCollapsed {
+        if parsedQuery.includesSessions {
             for session in sessions {
                 items.append(.session(id: session.id))
             }
@@ -702,19 +672,14 @@ struct HistoryListView: View {
     private func archivesSectionView(archives: [FileHistoryEntry], totalCount: Int, isFiltering: Bool) -> some View {
         // セクションヘッダー
         HStack {
-            Button(action: { isArchivesSectionCollapsed.toggle() }) {
-                HStack(spacing: 4) {
-                    Image(systemName: isArchivesSectionCollapsed ? "chevron.right" : "chevron.down")
-                        .font(.caption)
-                    Image(systemName: "archivebox")
-                    Text(L("tab_archives"))
-                        .font(.subheadline.bold())
-                    Text("(\(archives.count))")
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                }
+            HStack(spacing: 4) {
+                Image(systemName: "archivebox")
+                Text(L("tab_archives"))
+                    .font(.subheadline.bold())
+                Text("(\(archives.count))")
+                    .font(.caption)
+                    .foregroundColor(.gray)
             }
-            .buttonStyle(.plain)
             .foregroundColor(.white)
 
             Spacer()
@@ -731,8 +696,7 @@ struct HistoryListView: View {
         }
         .padding(.horizontal, 4)
 
-        if !isArchivesSectionCollapsed {
-            ForEach(Array(archives.enumerated()), id: \.element.id) { index, entry in
+        ForEach(Array(archives.enumerated()), id: \.element.id) { index, entry in
                 HistoryEntryRow(
                     entry: entry,
                     isExpanded: historyState.isExpanded(entry.id),
@@ -778,99 +742,64 @@ struct HistoryListView: View {
                 .cornerRadius(4)
                 .id(entry.id)
             }
-        }
     }
 
     /// 画像セクションビュー
     @ViewBuilder
     private func imagesSectionView(images: [ImageCatalogEntry], totalCount: Int, isFiltering: Bool) -> some View {
-        let standaloneImages = images.filter { $0.catalogType == .individual }
-        let archiveContentImages = images.filter { $0.catalogType == .archived }
+        let standaloneCount = images.filter { $0.catalogType == .individual }.count
+        let archivedCount = images.filter { $0.catalogType == .archived }.count
 
         // セクションヘッダー
         HStack {
-            Button(action: { isImagesSectionCollapsed.toggle() }) {
-                HStack(spacing: 4) {
-                    Image(systemName: isImagesSectionCollapsed ? "chevron.right" : "chevron.down")
-                        .font(.caption)
+            HStack(spacing: 4) {
+                if standaloneCount > 0 && archivedCount > 0 {
                     Image(systemName: "photo")
                     Text(L("tab_images"))
                         .font(.subheadline.bold())
-                    Text("(\(images.count))")
-                        .font(.caption)
-                        .foregroundColor(.gray)
+                } else if standaloneCount > 0 {
+                    Image(systemName: "doc.richtext")
+                    Text(L("search_type_individual"))
+                        .font(.subheadline.bold())
+                } else {
+                    Image(systemName: "doc.zipper")
+                    Text(L("search_type_archived"))
+                        .font(.subheadline.bold())
                 }
+                Text("(\(images.count))")
+                    .font(.caption)
+                    .foregroundColor(.gray)
             }
-            .buttonStyle(.plain)
             .foregroundColor(.white)
 
             Spacer()
 
-            if isFiltering {
-                Text(L("history_filter_result_format", images.count, totalCount))
-                    .font(.caption)
-                    .foregroundColor(.gray)
-            } else {
-                Text("[\(standaloneImages.count)/\(appSettings.maxStandaloneImageCount) + \(archiveContentImages.count)/\(appSettings.maxArchiveContentImageCount)]")
-                    .font(.caption)
-                    .foregroundColor(.gray)
-            }
-        }
-        .padding(.horizontal, 4)
-
-        if !isImagesSectionCollapsed {
-            // 個別画像サブセクション
-            if !standaloneImages.isEmpty {
-                standaloneSubsectionView(
-                    images: standaloneImages,
-                    isFiltering: isFiltering
-                )
-            }
-
-            // 書庫/フォルダ内画像サブセクション
-            if !archiveContentImages.isEmpty {
-                archiveContentSubsectionView(
-                    images: archiveContentImages,
-                    isFiltering: isFiltering
-                )
-            }
-        }
-    }
-
-    /// 個別画像サブセクションビュー
-    @ViewBuilder
-    private func standaloneSubsectionView(images: [ImageCatalogEntry], isFiltering: Bool) -> some View {
-        HStack {
-            Button(action: { isStandaloneSectionCollapsed.toggle() }) {
-                HStack(spacing: 4) {
-                    Image(systemName: isStandaloneSectionCollapsed ? "chevron.right" : "chevron.down")
-                        .font(.caption2)
-                    Image(systemName: "doc.richtext")
-                        .font(.caption)
-                    Text(L("search_type_individual"))
-                        .font(.caption.bold())
-                    Text("(\(images.count))")
-                        .font(.caption2)
-                        .foregroundColor(.gray)
+            HStack(spacing: 8) {
+                if standaloneCount > 0 {
+                    HStack(spacing: 2) {
+                        Image(systemName: "doc.richtext")
+                            .font(.caption2)
+                        Text("[\(standaloneCount)/\(appSettings.maxStandaloneImageCount)]")
+                    }
+                }
+                if archivedCount > 0 {
+                    HStack(spacing: 2) {
+                        Image(systemName: "doc.zipper")
+                            .font(.caption2)
+                        Text("[\(archivedCount)/\(appSettings.maxArchiveContentImageCount)]")
+                    }
                 }
             }
-            .buttonStyle(.plain)
-            .foregroundColor(.white.opacity(0.9))
-
-            Spacer()
-
-            if !isFiltering {
-                Text("[\(images.count)/\(appSettings.maxStandaloneImageCount)]")
-                    .font(.caption2)
-                    .foregroundColor(.gray)
-            }
+            .font(.caption)
+            .foregroundColor(.gray)
         }
-        .padding(.leading, 16)
         .padding(.horizontal, 4)
-        .padding(.top, 4)
 
-        if !isStandaloneSectionCollapsed {
-            ForEach(Array(images.enumerated()), id: \.element.id) { index, entry in
+        ForEach(Array(images.enumerated()), id: \.element.id) { index, entry in
+                let selectableItem: SelectableHistoryItem = entry.catalogType == .individual
+                    ? .standaloneImage(id: entry.id, filePath: entry.filePath)
+                    : .archivedImage(id: entry.id, parentPath: entry.filePath, relativePath: entry.relativePath ?? "")
+
                 ImageCatalogEntryRow(
                     entry: entry,
                     isExpanded: historyState.isExpanded(entry.id),
@@ -895,108 +824,25 @@ struct HistoryListView: View {
                 )
                 .padding(.horizontal, 4)
                 .padding(.vertical, 2)
-                .background(historyState.isSelected(.standaloneImage(id: entry.id, filePath: entry.filePath)) ? Color.accentColor.opacity(0.3) : Color.clear)
+                .background(historyState.isSelected(selectableItem) ? Color.accentColor.opacity(0.3) : Color.clear)
                 .overlay(
                     RoundedRectangle(cornerRadius: 4)
                         .stroke(Color.accentColor, lineWidth: 2)
-                        .opacity(historyState.isCursorOnly(.standaloneImage(id: entry.id, filePath: entry.filePath)) ? 1 : 0)
+                        .opacity(historyState.isCursorOnly(selectableItem) ? 1 : 0)
                 )
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    let item = SelectableHistoryItem.standaloneImage(id: entry.id, filePath: entry.filePath)
                     if NSEvent.modifierFlags.contains(.command) {
-                        historyState.toggleSelection(item)
+                        historyState.toggleSelection(selectableItem)
                     } else if NSEvent.modifierFlags.contains(.shift) {
-                        historyState.extendSelection(to: item)
+                        historyState.extendSelection(to: selectableItem)
                     } else {
-                        historyState.select(item)
+                        historyState.select(selectableItem)
                     }
                 }
                 .cornerRadius(4)
                 .id(entry.id)
             }
-        }
-    }
-
-    /// 書庫/フォルダ内画像サブセクションビュー
-    @ViewBuilder
-    private func archiveContentSubsectionView(images: [ImageCatalogEntry], isFiltering: Bool) -> some View {
-        HStack {
-            Button(action: { isArchiveContentSectionCollapsed.toggle() }) {
-                HStack(spacing: 4) {
-                    Image(systemName: isArchiveContentSectionCollapsed ? "chevron.right" : "chevron.down")
-                        .font(.caption2)
-                    Image(systemName: "doc.zipper")
-                        .font(.caption)
-                    Text(L("search_type_archived"))
-                        .font(.caption.bold())
-                    Text("(\(images.count))")
-                        .font(.caption2)
-                        .foregroundColor(.gray)
-                }
-            }
-            .buttonStyle(.plain)
-            .foregroundColor(.white.opacity(0.9))
-
-            Spacer()
-
-            if !isFiltering {
-                Text("[\(images.count)/\(appSettings.maxArchiveContentImageCount)]")
-                    .font(.caption2)
-                    .foregroundColor(.gray)
-            }
-        }
-        .padding(.leading, 16)
-        .padding(.horizontal, 4)
-        .padding(.top, 4)
-
-        if !isArchiveContentSectionCollapsed {
-            ForEach(Array(images.enumerated()), id: \.element.id) { index, entry in
-                ImageCatalogEntryRow(
-                    entry: entry,
-                    isExpanded: historyState.isExpanded(entry.id),
-                    onToggleExpand: { shiftHeld in
-                        if shiftHeld {
-                            historyState.toggleExpandKeeping(entry.id)
-                        } else {
-                            historyState.toggleExpand(entry.id)
-                        }
-                    },
-                    onOpenImageFile: { filePath, relativePath in
-                        if index > 0 {
-                            historyState.lastOpenedImageId = images[index - 1].id
-                        } else if index + 1 < images.count {
-                            historyState.lastOpenedImageId = images[index + 1].id
-                        } else {
-                            historyState.lastOpenedImageId = nil
-                        }
-                        onOpenImageFile(filePath, relativePath)
-                    },
-                    onEditMemo: onEditImageMemo
-                )
-                .padding(.horizontal, 4)
-                .padding(.vertical, 2)
-                .background(historyState.isSelected(.archivedImage(id: entry.id, parentPath: entry.filePath, relativePath: entry.relativePath ?? "")) ? Color.accentColor.opacity(0.3) : Color.clear)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4)
-                        .stroke(Color.accentColor, lineWidth: 2)
-                        .opacity(historyState.isCursorOnly(.archivedImage(id: entry.id, parentPath: entry.filePath, relativePath: entry.relativePath ?? "")) ? 1 : 0)
-                )
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    let item = SelectableHistoryItem.archivedImage(id: entry.id, parentPath: entry.filePath, relativePath: entry.relativePath ?? "")
-                    if NSEvent.modifierFlags.contains(.command) {
-                        historyState.toggleSelection(item)
-                    } else if NSEvent.modifierFlags.contains(.shift) {
-                        historyState.extendSelection(to: item)
-                    } else {
-                        historyState.select(item)
-                    }
-                }
-                .cornerRadius(4)
-                .id(entry.id)
-            }
-        }
     }
 
     /// セッションセクションビュー
@@ -1004,19 +850,14 @@ struct HistoryListView: View {
     private func sessionsSectionView(sessions: [SessionGroup], totalCount: Int, isFiltering: Bool) -> some View {
         // セクションヘッダー
         HStack {
-            Button(action: { isSessionsSectionCollapsed.toggle() }) {
-                HStack(spacing: 4) {
-                    Image(systemName: isSessionsSectionCollapsed ? "chevron.right" : "chevron.down")
-                        .font(.caption)
-                    Image(systemName: "square.stack.3d.up")
-                    Text(L("tab_sessions"))
-                        .font(.subheadline.bold())
-                    Text("(\(sessions.count))")
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                }
+            HStack(spacing: 4) {
+                Image(systemName: "square.stack.3d.up")
+                Text(L("tab_sessions"))
+                    .font(.subheadline.bold())
+                Text("(\(sessions.count))")
+                    .font(.caption)
+                    .foregroundColor(.gray)
             }
-            .buttonStyle(.plain)
             .foregroundColor(.white)
 
             Spacer()
@@ -1033,9 +874,8 @@ struct HistoryListView: View {
         }
         .padding(.horizontal, 4)
 
-        if !isSessionsSectionCollapsed {
-            ForEach(sessions) { session in
-                SessionGroupRow(
+        ForEach(sessions) { session in
+            SessionGroupRow(
                     session: session,
                     onRestore: {
                         onRestoreSession?(session)
@@ -1069,7 +909,6 @@ struct HistoryListView: View {
                 .cornerRadius(4)
                 .id(session.id.uuidString)
             }
-        }
     }
 
     /// データベースリセットの確認ダイアログを表示
