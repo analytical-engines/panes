@@ -735,6 +735,14 @@ struct HistoryListView: View {
             ForEach(Array(archives.enumerated()), id: \.element.id) { index, entry in
                 HistoryEntryRow(
                     entry: entry,
+                    isExpanded: historyState.isExpanded(entry.id),
+                    onToggleExpand: { shiftHeld in
+                        if shiftHeld {
+                            historyState.toggleExpandKeeping(entry.id)
+                        } else {
+                            historyState.toggleExpand(entry.id)
+                        }
+                    },
                     onOpenHistoryFile: { filePath in
                         if index > 0 {
                             historyState.lastOpenedArchiveId = archives[index - 1].id
@@ -865,6 +873,14 @@ struct HistoryListView: View {
             ForEach(Array(images.enumerated()), id: \.element.id) { index, entry in
                 ImageCatalogEntryRow(
                     entry: entry,
+                    isExpanded: historyState.isExpanded(entry.id),
+                    onToggleExpand: { shiftHeld in
+                        if shiftHeld {
+                            historyState.toggleExpandKeeping(entry.id)
+                        } else {
+                            historyState.toggleExpand(entry.id)
+                        }
+                    },
                     onOpenImageFile: { filePath, relativePath in
                         if index > 0 {
                             historyState.lastOpenedImageId = images[index - 1].id
@@ -938,6 +954,14 @@ struct HistoryListView: View {
             ForEach(Array(images.enumerated()), id: \.element.id) { index, entry in
                 ImageCatalogEntryRow(
                     entry: entry,
+                    isExpanded: historyState.isExpanded(entry.id),
+                    onToggleExpand: { shiftHeld in
+                        if shiftHeld {
+                            historyState.toggleExpandKeeping(entry.id)
+                        } else {
+                            historyState.toggleExpand(entry.id)
+                        }
+                    },
                     onOpenImageFile: { filePath, relativePath in
                         if index > 0 {
                             historyState.lastOpenedImageId = images[index - 1].id
@@ -1169,74 +1193,132 @@ struct ImageCatalogEntryRow: View {
     @Environment(ImageCatalogManager.self) private var catalogManager
 
     let entry: ImageCatalogEntry
+    var isExpanded: Bool = false
+    var onToggleExpand: ((Bool) -> Void)? = nil  // (shiftHeld) -> Void
     let onOpenImageFile: (String, String?) -> Void  // (filePath, relativePath)
     let onEditMemo: (String, String?) -> Void  // (id, currentMemo)
-
-    // ツールチップ用（一度だけ生成してキャッシュ）
-    @State private var cachedTooltip: String?
 
     var body: some View {
         let isAccessible = catalogManager.isAccessible(for: entry)
 
-        HStack(spacing: 0) {
-            Button(action: {
-                if isAccessible {
-                    onOpenImageFile(entry.filePath, entry.relativePath)
-                }
-            }) {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack {
-                        Text(entry.fileName)
-                            .foregroundColor(isAccessible ? .white : .gray)
-                        Spacer()
-                        // 解像度があれば表示
-                        if let resolution = entry.resolutionString {
-                            Text(resolution)
-                                .foregroundColor(.gray)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 0) {
+                Button(action: {
+                    if isAccessible {
+                        onOpenImageFile(entry.filePath, entry.relativePath)
+                    }
+                }) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Text(entry.fileName)
+                                .foregroundColor(isAccessible ? .white : .gray)
+                            Spacer()
+                            // 解像度があれば表示
+                            if let resolution = entry.resolutionString {
+                                Text(resolution)
+                                    .foregroundColor(.gray)
+                                    .font(.caption)
+                            }
+                        }
+                        // 親（書庫/フォルダ）名を表示
+                        if let parentName = entry.parentName {
+                            Text(parentName)
                                 .font(.caption)
+                                .foregroundColor(.gray.opacity(0.8))
+                                .lineLimit(1)
+                        }
+                        // メモがある場合は表示
+                        if let memo = entry.memo, !memo.isEmpty {
+                            Text(memo)
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                                .lineLimit(1)
                         }
                     }
-                    // 親（書庫/フォルダ）名を表示
-                    if let parentName = entry.parentName {
-                        Text(parentName)
-                            .font(.caption)
-                            .foregroundColor(.gray.opacity(0.8))
-                            .lineLimit(1)
-                    }
-                    // メモがある場合は表示
-                    if let memo = entry.memo, !memo.isEmpty {
-                        Text(memo)
-                            .font(.caption)
-                            .foregroundColor(.orange)
-                            .lineLimit(1)
-                    }
                 }
-            }
-            .buttonStyle(.plain)
-            .disabled(!isAccessible)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+                .buttonStyle(.plain)
+                .disabled(!isAccessible)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
 
-            // 削除ボタン
-            Button(action: {
-                catalogManager.removeEntry(withId: entry.id)
-            }) {
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundColor(.gray)
-                    .opacity(0.6)
+                // 削除ボタン
+                Button(action: {
+                    catalogManager.removeEntry(withId: entry.id)
+                }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.gray)
+                        .opacity(0.6)
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 4)
+
+                // トグルアイコン
+                Button {
+                    let shiftHeld = NSEvent.modifierFlags.contains(.shift)
+                    onToggleExpand?(shiftHeld)
+                } label: {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .foregroundColor(.gray)
+                        .opacity(0.6)
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 8)
             }
-            .buttonStyle(.plain)
-            .padding(.trailing, 8)
+
+            // 展開詳細
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 4) {
+                    // パス
+                    if entry.catalogType == .archived, let relativePath = entry.relativePath {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(entry.filePath)
+                                .font(.caption2)
+                                .foregroundColor(.gray)
+                                .lineLimit(2)
+                                .textSelection(.enabled)
+                            Text("  → " + relativePath)
+                                .font(.caption2)
+                                .foregroundColor(.gray)
+                                .lineLimit(1)
+                                .textSelection(.enabled)
+                        }
+                    } else {
+                        Text(entry.filePath)
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                            .lineLimit(2)
+                            .textSelection(.enabled)
+                    }
+
+                    HStack(spacing: 12) {
+                        if let format = entry.imageFormat {
+                            Text(L("tooltip_archive_type") + ": " + format)
+                                .font(.caption2)
+                                .foregroundColor(.gray)
+                        }
+                        if let resolution = entry.resolutionString {
+                            Text(L("tooltip_resolution") + ": " + resolution)
+                                .font(.caption2)
+                                .foregroundColor(.gray)
+                        }
+                        if let size = entry.fileSizeString {
+                            Text(L("tooltip_file_size") + ": " + size)
+                                .font(.caption2)
+                                .foregroundColor(.gray)
+                        }
+                    }
+
+                    Text(L("tooltip_last_access") + ": " + formattedDate(entry.lastAccessDate))
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 6)
+                .transition(.opacity)
+            }
         }
         .background(Color.white.opacity(isAccessible ? 0.1 : 0.05))
         .cornerRadius(4)
-        .help(Text(cachedTooltip ?? ""))
-        .onAppear {
-            // 表示時に一度だけツールチップを生成してキャッシュ
-            if cachedTooltip == nil {
-                cachedTooltip = generateTooltip()
-            }
-        }
         .contextMenu {
             Button(action: {
                 onOpenImageFile(entry.filePath, entry.relativePath)
@@ -1264,40 +1346,11 @@ struct ImageCatalogEntryRow: View {
         }
     }
 
-    /// ツールチップ用のテキストを生成
-    private func generateTooltip() -> String {
-        var lines: [String] = []
-
-        // ファイルパス（書庫/フォルダ内の場合は親パス + 相対パス）
-        if entry.catalogType == .archived, let relativePath = entry.relativePath {
-            lines.append(entry.filePath)
-            lines.append("  → " + relativePath)
-        } else {
-            lines.append(entry.filePath)
-        }
-
-        // 画像フォーマット
-        if let format = entry.imageFormat {
-            lines.append(L("tooltip_archive_type") + ": " + format)
-        }
-
-        // 解像度
-        if let resolution = entry.resolutionString {
-            lines.append(L("tooltip_resolution") + ": " + resolution)
-        }
-
-        // ファイルサイズ
-        if let sizeStr = entry.fileSizeString {
-            lines.append(L("tooltip_file_size") + ": " + sizeStr)
-        }
-
-        // 最終アクセス日時
+    private func formattedDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
-        lines.append(L("tooltip_last_access") + ": " + formatter.string(from: entry.lastAccessDate))
-
-        return lines.joined(separator: "\n")
+        return formatter.string(from: date)
     }
 }
 
@@ -1306,70 +1359,109 @@ struct HistoryEntryRow: View {
     @Environment(FileHistoryManager.self) private var historyManager
 
     let entry: FileHistoryEntry
+    var isExpanded: Bool = false
+    var onToggleExpand: ((Bool) -> Void)? = nil  // (shiftHeld) -> Void
     let onOpenHistoryFile: (String) -> Void
     let onOpenInNewWindow: (String) -> Void  // filePath
     let onEditMemo: (String, String?) -> Void  // (fileKey, currentMemo)
-
-    // ツールチップ用（一度だけ生成してキャッシュ）
-    @State private var cachedTooltip: String?
 
     var body: some View {
         // FileHistoryManagerのキャッシュを使用（一度チェックしたらセッション中保持）
         let isAccessible = historyManager.isAccessible(for: entry)
 
-        HStack(spacing: 0) {
-            Button(action: {
-                if isAccessible {
-                    onOpenHistoryFile(entry.filePath)
-                }
-            }) {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack {
-                        Text(entry.fileName)
-                            .foregroundColor(isAccessible ? .white : .gray)
-                        // パスワード保護マーク
-                        if entry.isPasswordProtected == true {
-                            Text("🔒")
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 0) {
+                Button(action: {
+                    if isAccessible {
+                        onOpenHistoryFile(entry.filePath)
+                    }
+                }) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Text(entry.fileName)
+                                .foregroundColor(isAccessible ? .white : .gray)
+                            // パスワード保護マーク
+                            if entry.isPasswordProtected == true {
+                                Text("🔒")
+                                    .font(.caption)
+                            }
+                            Spacer()
+                            Text(L("access_count_format", entry.accessCount))
+                                .foregroundColor(.gray)
                                 .font(.caption)
                         }
-                        Spacer()
-                        Text(L("access_count_format", entry.accessCount))
-                            .foregroundColor(.gray)
-                            .font(.caption)
-                    }
-                    // メモがある場合は表示
-                    if let memo = entry.memo, !memo.isEmpty {
-                        Text(memo)
-                            .font(.caption)
-                            .foregroundColor(.orange)
-                            .lineLimit(1)
+                        // メモがある場合は表示
+                        if let memo = entry.memo, !memo.isEmpty {
+                            Text(memo)
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                                .lineLimit(1)
+                        }
                     }
                 }
-            }
-            .buttonStyle(.plain)
-            .disabled(!isAccessible)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+                .buttonStyle(.plain)
+                .disabled(!isAccessible)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
 
-            Button(action: {
-                historyManager.removeEntry(withId: entry.id)
-            }) {
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundColor(.gray)
-                    .opacity(0.6)
+                Button(action: {
+                    historyManager.removeEntry(withId: entry.id)
+                }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.gray)
+                        .opacity(0.6)
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 4)
+
+                // トグルアイコン
+                Button {
+                    let shiftHeld = NSEvent.modifierFlags.contains(.shift)
+                    onToggleExpand?(shiftHeld)
+                } label: {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .foregroundColor(.gray)
+                        .opacity(0.6)
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 8)
             }
-            .buttonStyle(.plain)
-            .padding(.trailing, 8)
+
+            // 展開詳細
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(entry.filePath)
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                        .lineLimit(2)
+                        .textSelection(.enabled)
+
+                    HStack(spacing: 12) {
+                        let ext = URL(fileURLWithPath: entry.filePath).pathExtension.lowercased()
+                        let archiveType = archiveTypeDescription(for: ext)
+                        if !archiveType.isEmpty {
+                            Text(L("tooltip_archive_type") + ": " + archiveType)
+                                .font(.caption2)
+                                .foregroundColor(.gray)
+                        }
+                        if let size = entry.fileSizeString {
+                            Text(L("tooltip_file_size") + ": " + size)
+                                .font(.caption2)
+                                .foregroundColor(.gray)
+                        }
+                    }
+
+                    Text(L("tooltip_last_access") + ": " + formattedDate(entry.lastAccessDate))
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 6)
+                .transition(.opacity)
+            }
         }
         .background(Color.white.opacity(isAccessible ? 0.1 : 0.05))
         .cornerRadius(4)
-        .help(Text(cachedTooltip ?? ""))
-        .onAppear {
-            // 表示時に一度だけツールチップを生成してキャッシュ
-            if cachedTooltip == nil {
-                cachedTooltip = generateTooltip()
-            }
-        }
         .contextMenu {
             Button(action: {
                 onOpenInNewWindow(entry.filePath)
@@ -1397,32 +1489,11 @@ struct HistoryEntryRow: View {
         }
     }
 
-    /// ツールチップ用のテキストを生成（ファイルアクセスなし）
-    private func generateTooltip() -> String {
-        var lines: [String] = []
-
-        // ファイルパス
-        lines.append(entry.filePath)
-
-        // 書庫の種類（拡張子から判断、ファイルアクセス不要）
-        let ext = URL(fileURLWithPath: entry.filePath).pathExtension.lowercased()
-        let archiveType = archiveTypeDescription(for: ext)
-        if !archiveType.isEmpty {
-            lines.append(L("tooltip_archive_type") + ": " + archiveType)
-        }
-
-        // ファイルサイズ（fileKeyから取得、ファイルアクセス不要）
-        if let sizeStr = entry.fileSizeString {
-            lines.append(L("tooltip_file_size") + ": " + sizeStr)
-        }
-
-        // 最終アクセス日時（履歴データから、ファイルアクセス不要）
+    private func formattedDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
-        lines.append(L("tooltip_last_access") + ": " + formatter.string(from: entry.lastAccessDate))
-
-        return lines.joined(separator: "\n")
+        return formatter.string(from: date)
     }
 
     /// 拡張子から書庫の種類を取得

@@ -40,6 +40,33 @@ final class HistoryUIState {
     /// 表示中アイテム一覧（キーボードナビゲーション用）
     var visibleItems: [SelectableHistoryItem] = []
 
+    // MARK: - 拡張表示
+
+    /// 展開中のアイテムID
+    var expandedItems: Set<String> = []
+
+    /// トグルアイコンクリック（排他的: 他を全て閉じる）
+    func toggleExpand(_ id: String) {
+        if expandedItems.contains(id) {
+            expandedItems.remove(id)
+        } else {
+            expandedItems = [id]
+        }
+    }
+
+    /// Shift+クリック（個別トグル: 他はそのまま）
+    func toggleExpandKeeping(_ id: String) {
+        if expandedItems.contains(id) {
+            expandedItems.remove(id)
+        } else {
+            expandedItems.insert(id)
+        }
+    }
+
+    func isExpanded(_ id: String) -> Bool {
+        expandedItems.contains(id)
+    }
+
     // MARK: - スクロール復元
 
     /// 最後に開いた書庫エントリのID
