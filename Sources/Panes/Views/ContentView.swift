@@ -103,7 +103,7 @@ struct ContentView: View {
                 isSearchFocused: $isHistorySearchFocused,
                 onOpenFile: openFilePicker,
                 onOpenHistoryFile: openHistoryFile,
-                onOpenInNewWindow: openInNewWindow,
+                onOpenInNewWindow: openSelectedInNewWindow,
                 onEditMemo: { fileKey, currentMemo in
                     if historyState.selectedItems.count > 1 {
                         openStructuredBatchMetadataEdit()
@@ -312,7 +312,7 @@ struct ContentView: View {
                     historyState: historyState,
                     isSearchFocused: $isHistorySearchFocused,
                     onOpenHistoryFile: openHistoryFile,
-                    onOpenInNewWindow: openInNewWindow,
+                    onOpenInNewWindow: openSelectedInNewWindow,
                     onEditMemo: { fileKey, currentMemo in
                         if historyState.selectedItems.count > 1 {
                             openStructuredBatchMetadataEdit()
@@ -2405,6 +2405,18 @@ struct ContentView: View {
         let url = URL(fileURLWithPath: path)
         // 新しいウィンドウでファイルを開く
         sessionManager.openInNewWindow(url: url)
+    }
+
+    /// 選択中のアイテムを全て新しいウィンドウで開く（複数選択対応）
+    private func openSelectedInNewWindow(path: String) {
+        let items = historyState.selectedItems
+        if items.count > 1 {
+            for item in items {
+                openItemInNewWindow(item)
+            }
+        } else {
+            openInNewWindow(path: path)
+        }
     }
 
     /// 画像カタログからファイルを開く（書庫/フォルダ内の特定画像にジャンプ）
