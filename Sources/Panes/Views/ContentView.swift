@@ -513,13 +513,13 @@ struct ContentView: View {
 
         // 画像メモを編集（構造化UI）
         Button(action: {
-            if let catalogId = viewModel.getCurrentImageCatalogId() {
-                modalState.openStructuredEditForSingle(fileKey: nil, catalogId: catalogId, memo: viewModel.getCurrentImageMemo())
+            if let catalogId = viewModel.getCurrentImageCatalogId(at: pageIndex) {
+                modalState.openStructuredEditForSingle(fileKey: nil, catalogId: catalogId, memo: viewModel.getCurrentImageMemo(at: pageIndex))
             }
         }) {
             Label(L("menu_edit_image_memo"), systemImage: "photo")
         }
-        .disabled(!viewModel.hasCurrentImageInCatalog())
+        .disabled(!viewModel.hasCurrentImageInCatalog(at: pageIndex))
 
         // 画像をクリップボードにコピー
         Button(action: {
@@ -1829,6 +1829,7 @@ struct ContentView: View {
     private func handleModalFocusChange(isShowing: Bool) {
         if isShowing {
             isHistorySearchFocused = false
+            isMainViewFocused = false
         } else {
             DispatchQueue.main.async {
                 self.focusMainView()
@@ -1838,6 +1839,8 @@ struct ContentView: View {
 
     /// メインビューにフォーカスを移す
     private func focusMainView(selectFirstHistoryItem: Bool = false) {
+        // モーダル表示中はフォーカスを奪わない
+        guard interactionMode != .modal else { return }
         isMainViewFocused = true
         if selectFirstHistoryItem, historyState.selectedItem == nil,
            let first = historyState.visibleItems.first {

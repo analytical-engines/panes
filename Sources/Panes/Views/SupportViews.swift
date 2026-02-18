@@ -414,6 +414,11 @@ struct StructuredMetadataEditor: View {
             }
         }
         .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(nsColor: .windowBackgroundColor).opacity(0.55))
+                .shadow(radius: 8)
+        )
         .contentShape(Rectangle())
         .onTapGesture { }  // エディタ内のタップが背景に伝播しないようにする
         .onAppear {

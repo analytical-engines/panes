@@ -436,8 +436,9 @@ class ImageCatalogManager {
             try context.save()
 
             // メモリ上の配列を直接更新（リロード不要）
+            let entryId = StandaloneImageData.generateId(fileKey: fileKey, workspaceId: workspaceId)
             let entry = ImageCatalogEntry(
-                id: fileKey,
+                id: entryId,
                 fileKey: fileKey,
                 filePath: filePath,
                 fileName: fileName,
@@ -526,8 +527,9 @@ class ImageCatalogManager {
             try context.save()
 
             // メモリ上の配列を直接更新（リロード不要）
+            let entryId = ArchiveContentImageData.generateId(fileKey: fileKey, workspaceId: workspaceId)
             let entry = ImageCatalogEntry(
-                id: fileKey,
+                id: entryId,
                 fileKey: fileKey,
                 filePath: parentPath,
                 fileName: fileName,
