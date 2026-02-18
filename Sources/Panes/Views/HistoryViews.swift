@@ -392,15 +392,8 @@ struct HistoryListView: View {
                                 Button(action: { insertSearchFilter("type:individual ") }) {
                                     Label(L("search_type_individual"), systemImage: "photo")
                                 }
-                                Button(action: { insertSearchFilter("type:archived ") }) {
-                                    Label(L("search_type_archived"), systemImage: "photo.on.rectangle")
-                                }
                                 Button(action: { insertSearchFilter("type:session ") }) {
                                     Label(L("search_type_session"), systemImage: "square.stack.3d.up")
-                                }
-                                Divider()
-                                Button(action: { insertSearchFilter("is:locked ") }) {
-                                    Label(L("search_filter_locked"), systemImage: "lock.fill")
                                 }
                                 Divider()
                                 Button(action: { insertSearchFilter("#") }) {
