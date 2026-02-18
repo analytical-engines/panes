@@ -335,7 +335,7 @@ struct StructuredMetadataEditor: View {
     let onCancel: () -> Void
 
     enum Tab { case tags, metadata }
-    @State private var selectedTab: Tab = .tags
+    @State private var selectedTab: Tab = .metadata
     @State private var newTagText: String = ""
     @State private var newAttrKey: String = ""
     @State private var newAttrValue: String = ""
@@ -383,8 +383,8 @@ struct StructuredMetadataEditor: View {
 
             // タブ
             Picker("", selection: $selectedTab) {
-                Text(L("metadata_tab_tags")).tag(Tab.tags)
                 Text(L("metadata_tab_metadata")).tag(Tab.metadata)
+                Text(L("metadata_tab_tags")).tag(Tab.tags)
             }
             .pickerStyle(.segmented)
             .frame(width: editorWidth)
@@ -399,6 +399,7 @@ struct StructuredMetadataEditor: View {
                 }
             }
             .frame(width: editorWidth)
+            .zIndex(1)
 
             // ボタン
             HStack(spacing: 12) {
@@ -503,6 +504,7 @@ struct StructuredMetadataEditor: View {
                         .offset(y: 28)
                     }
                 }
+                .zIndex(1)
         }
     }
 
@@ -536,7 +538,11 @@ struct StructuredMetadataEditor: View {
                         }
                     }
                     .onChange(of: isKeyFieldFocused) { _, focused in
-                        if !focused { showKeySuggestions = false }
+                        if focused {
+                            updateKeySuggestions(newAttrKey)
+                        } else {
+                            showKeySuggestions = false
+                        }
                     }
                     .onKeyPress(.tab) {
                         if showKeySuggestions && !keySuggestions.isEmpty {
@@ -591,7 +597,11 @@ struct StructuredMetadataEditor: View {
                         updateValueSuggestions(newValue)
                     }
                     .onChange(of: isValueFieldFocused) { _, focused in
-                        if !focused { showValueSuggestions = false }
+                        if focused {
+                            updateValueSuggestions(newAttrValue)
+                        } else {
+                            showValueSuggestions = false
+                        }
                     }
                     .onKeyPress(.tab) {
                         if showValueSuggestions && !valueSuggestions.isEmpty {
@@ -647,13 +657,16 @@ struct StructuredMetadataEditor: View {
                 .disabled(newAttrKey.trimmingCharacters(in: .whitespaces).isEmpty
                     || newAttrValue.trimmingCharacters(in: .whitespaces).isEmpty)
             }
+            .zIndex(1)
         }
     }
 
     // MARK: - Suggestions List
 
     private func suggestionsList(items: [String], selectedIndex: Int, onSelect: @escaping (String) -> Void) -> some View {
-        ScrollView {
+        let itemHeight: CGFloat = 28
+        let listHeight = min(CGFloat(items.count) * itemHeight, 120)
+        return ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                     Text(item)
@@ -667,7 +680,7 @@ struct StructuredMetadataEditor: View {
                 }
             }
         }
-        .frame(maxHeight: 120)
+        .frame(height: listHeight)
         .background(Color.black.opacity(0.8))
         .cornerRadius(6)
     }
@@ -822,9 +835,9 @@ struct StructuredMetadataEditor: View {
             return
         }
         let existing = tags.union(partialTags)
-        tagSuggestions = metadataIndex.tags
-            .filter { $0.contains(query) && !existing.contains($0) }
-            .sorted()
+        tagSuggestions = SearchSuggestionEngine.prefixMatch(
+            metadataIndex.tags.subtracting(existing), query: query
+        )
         showTagSuggestions = !tagSuggestions.isEmpty
         tagSuggestionIndex = 0
     }
@@ -862,14 +875,10 @@ struct StructuredMetadataEditor: View {
         let query = text
             .trimmingCharacters(in: .whitespaces)
             .lowercased()
-        guard !query.isEmpty else {
-            showKeySuggestions = false
-            return
-        }
         let existingKeys = Set(attributes.map(\.key))
-        keySuggestions = metadataIndex.keys
-            .filter { $0.contains(query) && !existingKeys.contains($0) }
-            .sorted()
+        keySuggestions = SearchSuggestionEngine.prefixMatch(
+            metadataIndex.keys.subtracting(existingKeys), query: query
+        )
         showKeySuggestions = !keySuggestions.isEmpty
         keySuggestionIndex = 0
     }
@@ -884,14 +893,12 @@ struct StructuredMetadataEditor: View {
     private func updateValueSuggestions(_ text: String) {
         let query = text.trimmingCharacters(in: .whitespaces).lowercased()
         let key = newAttrKey.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !query.isEmpty, !key.isEmpty,
+        guard !key.isEmpty,
               let availableValues = metadataIndex.values[key] else {
             showValueSuggestions = false
             return
         }
-        valueSuggestions = availableValues
-            .filter { $0.lowercased().contains(query) }
-            .sorted()
+        valueSuggestions = SearchSuggestionEngine.prefixMatch(availableValues, query: query)
         showValueSuggestions = !valueSuggestions.isEmpty
         valueSuggestionIndex = 0
     }

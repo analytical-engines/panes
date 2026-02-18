@@ -65,6 +65,7 @@
 		6474C906ED1F0C44C59538C2 /* MemoMetadataParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2EB4DC837A301CF9565F125 /* MemoMetadataParser.swift */; };
 		8F35F785C606CD98E5F4B6FB /* PanesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A184DF7F4434F4BE5245B17D /* PanesTests.swift */; };
 		16F278CC8AC6BFC5BDCB9547 /* MemoMetadataTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A4DB3AD10A6C29E1C0572AD /* MemoMetadataTests.swift */; };
+		DEFMETA0001 /* DefaultMetadataKeys.json in Resources */ = {isa = PBXBuildFile; fileRef = DEFMETA0002 /* DefaultMetadataKeys.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -125,6 +126,7 @@
 		6A3FCA4FD0DA96EF9C413F90 /* PanesTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PanesTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A184DF7F4434F4BE5245B17D /* PanesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanesTests.swift; sourceTree = "<group>"; };
 		0A4DB3AD10A6C29E1C0572AD /* MemoMetadataTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoMetadataTests.swift; sourceTree = "<group>"; };
+		DEFMETA0002 /* DefaultMetadataKeys.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = DefaultMetadataKeys.json; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXContainerItemProxy section */
@@ -299,6 +301,7 @@
 			isa = PBXGroup;
 			children = (
 				48926AE1DBA392C53021ABFB /* AppIcon.icns */,
+				DEFMETA0002 /* DefaultMetadataKeys.json */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -426,6 +429,7 @@
 			files = (
 				C1B4D6BEFC306B5E5184787A /* AppIcon.icns in Resources */,
 				C0DA8F55BA9DD426BE95E0DA /* Localizable.strings in Resources */,
+				DEFMETA0001 /* DefaultMetadataKeys.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

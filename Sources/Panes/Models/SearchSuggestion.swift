@@ -19,22 +19,13 @@ protocol SearchSuggestionProvider: Sendable {
 struct TypeFilterSuggestionProvider: SearchSuggestionProvider {
     let triggerPrefix = "type:"
 
-    private let candidates = [
-        "type:archive ",
-        "type:individual ",
-        "type:archived ",
-        "type:session "
-    ]
+    private let values = ["archive", "individual", "archived", "session"]
 
     func suggestions(for token: String) -> [String] {
-        let lowToken = token.lowercased()
-        guard lowToken.hasPrefix(triggerPrefix) else { return [] }
-
-        let afterPrefix = String(lowToken.dropFirst(triggerPrefix.count))
-        return candidates.filter { candidate in
-            let value = String(candidate.dropFirst(triggerPrefix.count).dropLast())
-            return value.hasPrefix(afterPrefix)
-        }
+        guard token.lowercased().hasPrefix(triggerPrefix) else { return [] }
+        let partial = String(token.dropFirst(triggerPrefix.count))
+        return SearchSuggestionEngine.prefixMatch(values, query: partial)
+            .map { "\(triggerPrefix)\($0) " }
     }
 }
 
@@ -44,19 +35,13 @@ struct TypeFilterSuggestionProvider: SearchSuggestionProvider {
 struct IsFilterSuggestionProvider: SearchSuggestionProvider {
     let triggerPrefix = "is:"
 
-    private let candidates = [
-        "is:locked "
-    ]
+    private let values = ["locked"]
 
     func suggestions(for token: String) -> [String] {
-        let lowToken = token.lowercased()
-        guard lowToken.hasPrefix(triggerPrefix) else { return [] }
-
-        let afterPrefix = String(lowToken.dropFirst(triggerPrefix.count))
-        return candidates.filter { candidate in
-            let value = String(candidate.dropFirst(triggerPrefix.count).dropLast())
-            return value.hasPrefix(afterPrefix)
-        }
+        guard token.lowercased().hasPrefix(triggerPrefix) else { return [] }
+        let partial = String(token.dropFirst(triggerPrefix.count))
+        return SearchSuggestionEngine.prefixMatch(values, query: partial)
+            .map { "\(triggerPrefix)\($0) " }
     }
 }
 
@@ -69,10 +54,8 @@ struct TagSuggestionProvider: SearchSuggestionProvider {
 
     func suggestions(for token: String) -> [String] {
         guard token.hasPrefix("#") else { return [] }
-        let partial = String(token.dropFirst()).lowercased()
-        return availableTags
-            .filter { partial.isEmpty || $0.hasPrefix(partial) }
-            .sorted()
+        let partial = String(token.dropFirst())
+        return SearchSuggestionEngine.prefixMatch(availableTags, query: partial)
             .map { "#\($0) " }
     }
 }
@@ -86,10 +69,8 @@ struct NegatedTagSuggestionProvider: SearchSuggestionProvider {
 
     func suggestions(for token: String) -> [String] {
         guard token.hasPrefix("!#") else { return [] }
-        let partial = String(token.dropFirst(2)).lowercased()
-        return availableTags
-            .filter { partial.isEmpty || $0.hasPrefix(partial) }
-            .sorted()
+        let partial = String(token.dropFirst(2))
+        return SearchSuggestionEngine.prefixMatch(availableTags, query: partial)
             .map { "!#\($0) " }
     }
 }
@@ -103,10 +84,8 @@ struct NegatedMetadataKeySuggestionProvider: SearchSuggestionProvider {
 
     func suggestions(for token: String) -> [String] {
         guard token.hasPrefix("!@") else { return [] }
-        let partial = String(token.dropFirst(2)).lowercased()
-        return availableKeys
-            .filter { partial.isEmpty || $0.hasPrefix(partial) }
-            .sorted()
+        let partial = String(token.dropFirst(2))
+        return SearchSuggestionEngine.prefixMatch(availableKeys, query: partial)
             .map { "!@\($0) " }
     }
 }
@@ -120,10 +99,8 @@ struct MetadataKeySuggestionProvider: SearchSuggestionProvider {
 
     func suggestions(for token: String) -> [String] {
         guard token.hasPrefix("@") else { return [] }
-        let partial = String(token.dropFirst()).lowercased()
-        return availableKeys
-            .filter { partial.isEmpty || $0.hasPrefix(partial) }
-            .sorted()
+        let partial = String(token.dropFirst())
+        return SearchSuggestionEngine.prefixMatch(availableKeys, query: partial)
             .map { "@\($0)=" }
     }
 }
@@ -139,11 +116,9 @@ struct MetadataValueSuggestionProvider: SearchSuggestionProvider {
     func suggestions(for token: String) -> [String] {
         let prefix = "@\(key)="
         guard token.lowercased().hasPrefix(prefix) else { return [] }
-        let partial = String(token.dropFirst(prefix.count)).lowercased()
+        let partial = String(token.dropFirst(prefix.count))
             .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
-        return availableValues
-            .filter { partial.isEmpty || $0.lowercased().hasPrefix(partial) }
-            .sorted()
+        return SearchSuggestionEngine.prefixMatch(availableValues, query: partial)
             .map { $0.contains(" ") ? "@\(key)=\"\($0)\" " : "@\(key)=\($0) " }
     }
 }
@@ -157,10 +132,8 @@ struct MemoMetadataKeySuggestionProvider: SearchSuggestionProvider {
 
     func suggestions(for token: String) -> [String] {
         guard token.hasPrefix("@") else { return [] }
-        let partial = String(token.dropFirst()).lowercased()
-        return availableKeys
-            .filter { partial.isEmpty || $0.hasPrefix(partial) }
-            .sorted()
+        let partial = String(token.dropFirst())
+        return SearchSuggestionEngine.prefixMatch(availableKeys, query: partial)
             .map { "@\($0):" }
     }
 }
@@ -174,11 +147,9 @@ struct MemoMetadataValueSuggestionProvider: SearchSuggestionProvider {
     func suggestions(for token: String) -> [String] {
         let prefix = "@\(key):"
         guard token.lowercased().hasPrefix(prefix) else { return [] }
-        let partial = String(token.dropFirst(prefix.count)).lowercased()
+        let partial = String(token.dropFirst(prefix.count))
             .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
-        return availableValues
-            .filter { partial.isEmpty || $0.lowercased().hasPrefix(partial) }
-            .sorted()
+        return SearchSuggestionEngine.prefixMatch(availableValues, query: partial)
             .map { $0.contains(" ") ? "@\(key):\"\($0)\" " : "@\(key):\($0) " }
     }
 }
@@ -199,6 +170,14 @@ struct SearchSuggestionItem: Equatable {
 
 /// 検索サジェストエンジン（静的メソッド群）
 enum SearchSuggestionEngine {
+
+    /// 前方一致フィルタ＋ソート（全プロバイダー・構造化エディタ共通）
+    static func prefixMatch(_ candidates: some Collection<String>, query: String) -> [String] {
+        let q = query.lowercased()
+        return candidates
+            .filter { q.isEmpty || $0.lowercased().hasPrefix(q) }
+            .sorted()
+    }
 
     /// デフォルトのプロバイダー一覧
     private static let defaultProviders: [any SearchSuggestionProvider] = [

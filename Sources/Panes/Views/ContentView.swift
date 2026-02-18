@@ -2108,7 +2108,7 @@ struct ContentView: View {
     private func currentMetadataIndex() -> MemoMetadataParser.MetadataIndex {
         MemoMetadataParser.collectIndex(
             from: historyManager.history.map(\.memo) + imageCatalogManager.catalog.map(\.memo)
-        )
+        ).merging(.loadDefaults())
     }
 
     /// 構造化メタデータ編集の結果を保存

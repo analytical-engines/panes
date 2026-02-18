@@ -80,6 +80,33 @@ enum MemoMetadataParser {
         let tags: Set<String>
         let keys: Set<String>
         let values: [String: Set<String>]
+
+        /// バンドルのDefaultMetadataKeys.jsonからデフォルトインデックスを読み込む
+        static func loadDefaults() -> MetadataIndex {
+            guard let url = Bundle.main.url(forResource: "DefaultMetadataKeys", withExtension: "json"),
+                  let data = try? Data(contentsOf: url),
+                  let dict = try? JSONDecoder().decode([String: [String]].self, from: data) else {
+                return MetadataIndex(tags: [], keys: [], values: [:])
+            }
+            var values: [String: Set<String>] = [:]
+            for (key, vals) in dict where !vals.isEmpty {
+                values[key] = Set(vals)
+            }
+            return MetadataIndex(tags: [], keys: Set(dict.keys), values: values)
+        }
+
+        /// 2つのインデックスを合成する（キー・タグ・値すべて和集合）
+        func merging(_ other: MetadataIndex) -> MetadataIndex {
+            var mergedValues = self.values
+            for (key, vals) in other.values {
+                mergedValues[key, default: []].formUnion(vals)
+            }
+            return MetadataIndex(
+                tags: self.tags.union(other.tags),
+                keys: self.keys.union(other.keys),
+                values: mergedValues
+            )
+        }
     }
 
     /// 複数メモからタグ・キー・値を一括収集する
