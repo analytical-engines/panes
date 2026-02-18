@@ -905,6 +905,10 @@ struct StructuredMetadataEditor: View {
     // MARK: - Save
 
     private func performSave() {
+        // 未確定のフォーム入力を保存前にコミット
+        addTag()
+        addAttribute()
+
         if isBatch {
             // 一括: 差分を計算
             let tagsToAdd = tags.subtracting(originalTags)
