@@ -59,6 +59,7 @@ class AppSettings {
         static let checkForUpdatesOnLaunch = "checkForUpdatesOnLaunch"
         static let currentWorkspaceId = "currentWorkspaceId"
         static let pageTransitionMode = "pageTransitionMode"
+        static let contentListExpandedByDefault = "contentListExpandedByDefault"
     }
 
     // MARK: - 表示設定
@@ -95,6 +96,11 @@ class AppSettings {
     /// ページめくりトランジションモード
     var pageTransitionMode: PageTransitionMode {
         didSet { defaults.set(pageTransitionMode.rawValue, forKey: Keys.pageTransitionMode) }
+    }
+
+    /// コンテンツリストをデフォルトで展開するか
+    var contentListExpandedByDefault: Bool {
+        didSet { defaults.set(contentListExpandedByDefault, forKey: Keys.contentListExpandedByDefault) }
     }
 
     // MARK: - 履歴設定
@@ -267,6 +273,13 @@ class AppSettings {
             pageTransitionMode = mode
         } else {
             pageTransitionMode = .always  // デフォルト: 常にトランジション
+        }
+
+        // コンテンツリストのデフォルト展開の読み込み
+        if defaults.object(forKey: Keys.contentListExpandedByDefault) != nil {
+            contentListExpandedByDefault = defaults.bool(forKey: Keys.contentListExpandedByDefault)
+        } else {
+            contentListExpandedByDefault = true  // デフォルト: 展開
         }
 
         // 書庫ファイル履歴最大件数の読み込み

@@ -231,6 +231,8 @@ struct HistorySettingsTab: View {
                     Text(L("history_display_always_hide")).tag(HistoryDisplayMode.alwaysHide)
                     Text(L("history_display_restore_last")).tag(HistoryDisplayMode.restoreLast)
                 }
+
+                Toggle(L("content_list_expanded_by_default"), isOn: $settings.contentListExpandedByDefault)
             }
 
             Section(L("section_history_management")) {

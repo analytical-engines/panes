@@ -42,15 +42,24 @@ final class HistoryUIState {
 
     // MARK: - 拡張表示
 
-    /// 展開中のアイテムID
+    /// デフォルトで展開するか（trueの場合、expandedItemsは「閉じたアイテム」を意味する）
+    var expandedByDefault: Bool = true
+
+    /// 展開/折りたたみ状態を明示的に変更したアイテムID
     var expandedItems: Set<String> = []
 
-    /// トグルアイコンクリック（排他的: 他を全て閉じる）
+    /// トグルアイコンクリック
     func toggleExpand(_ id: String) {
-        if expandedItems.contains(id) {
-            expandedItems.remove(id)
+        if expandedByDefault {
+            // デフォルト展開時: 常に個別トグル（排他動作なし）
+            toggleExpandKeeping(id)
         } else {
-            expandedItems = [id]
+            // デフォルト折りたたみ時: 排他的展開（他を全て閉じる）
+            if expandedItems.contains(id) {
+                expandedItems.remove(id)
+            } else {
+                expandedItems = [id]
+            }
         }
     }
 
@@ -64,7 +73,11 @@ final class HistoryUIState {
     }
 
     func isExpanded(_ id: String) -> Bool {
-        expandedItems.contains(id)
+        if expandedByDefault {
+            return !expandedItems.contains(id)
+        } else {
+            return expandedItems.contains(id)
+        }
     }
 
     // MARK: - スクロール復元

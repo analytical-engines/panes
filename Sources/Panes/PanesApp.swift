@@ -117,13 +117,6 @@ struct ImageViewerApp: App {
                 }
                 .modifier(DynamicShortcut(action: .closeFile, manager: shortcutManager))
 
-                Button(action: {
-                    editCurrentFileMemo()
-                }) {
-                    Label(L("menu_edit_memo"), systemImage: "square.and.pencil")
-                }
-                .keyboardShortcut("m", modifiers: [.command, .shift])
-
                 Divider()
 
                 Menu(L("menu_page_settings")) {
@@ -511,30 +504,6 @@ struct ImageViewerApp: App {
         }
     }
 
-    /// 現在のファイルのメモを編集
-    private func editCurrentFileMemo() {
-        guard let viewModel = focusedViewModel else { return }
-
-        let alert = NSAlert()
-        alert.messageText = L("memo_edit_title")
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: L("save"))
-        alert.addButton(withTitle: L("cancel"))
-
-        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
-        textField.stringValue = viewModel.getCurrentMemo() ?? ""
-        textField.placeholderString = L("memo_placeholder")
-        alert.accessoryView = textField
-
-        // テキストフィールドにフォーカスを設定
-        alert.window.initialFirstResponder = textField
-
-        if alert.runModal() == .alertFirstButtonReturn {
-            let newMemo = textField.stringValue
-            viewModel.updateCurrentMemo(newMemo.isEmpty ? nil : newMemo)
-        }
-    }
-
     /// 履歴をImport（統合形式：書庫ファイル + 個別画像 + セッション）
     private func importHistory(merge: Bool) {
         let openPanel = NSOpenPanel()
@@ -733,11 +702,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         DebugLogger.log("📁 updateFileMenu: hasOpenFile=\(hasOpenFile)", level: .verbose)
 
         let closeFileTitle = L("menu_close_file")
-        let editMemoTitle = L("menu_edit_memo")
         let pageSettingsTitle = L("menu_page_settings")
 
         for item in menu.items {
-            if item.title == closeFileTitle || item.title == editMemoTitle {
+            if item.title == closeFileTitle {
                 item.isEnabled = hasOpenFile
             }
             // サブメニューも確認（ページ設定メニュー内の項目）

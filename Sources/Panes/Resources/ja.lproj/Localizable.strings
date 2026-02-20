@@ -122,6 +122,7 @@
 "history_display_always_show" = "表示";
 "history_display_always_hide" = "非表示";
 "history_display_restore_last" = "終了時の状態を復元";
+"content_list_expanded_by_default" = "サムネイルをデフォルトで展開";
 
 // MARK: - SettingsView - Content Data Management
 

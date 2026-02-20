@@ -457,7 +457,11 @@ struct StructuredMetadataEditor: View {
                     updateTagSuggestions(newValue)
                 }
                 .onChange(of: isTagFieldFocused) { _, focused in
-                    if !focused { showTagSuggestions = false }
+                    if focused {
+                        updateTagSuggestions(newTagText)
+                    } else {
+                        showTagSuggestions = false
+                    }
                 }
                 .onKeyPress(.tab) {
                     if showTagSuggestions && !tagSuggestions.isEmpty {
@@ -830,10 +834,6 @@ struct StructuredMetadataEditor: View {
             .trimmingCharacters(in: .whitespaces)
             .lowercased()
             .replacingOccurrences(of: "^#+", with: "", options: .regularExpression)
-        guard !query.isEmpty else {
-            showTagSuggestions = false
-            return
-        }
         let existing = tags.union(partialTags)
         tagSuggestions = SearchSuggestionEngine.prefixMatch(
             metadataIndex.tags.subtracting(existing), query: query

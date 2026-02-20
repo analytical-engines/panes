@@ -1209,6 +1209,7 @@ struct ContentView: View {
 
         // 起動時の履歴表示状態を設定から初期化
         historyState.showHistory = appSettings.shouldShowHistoryOnLaunch
+        historyState.expandedByDefault = appSettings.contentListExpandedByDefault
 
         // このウィンドウを最後に作成されたウィンドウとして登録
         ContentView.lastCreatedWindowIDLock.lock()
