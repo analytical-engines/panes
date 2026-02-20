@@ -351,15 +351,12 @@ struct HistoryListView: View {
                                     return .ignored
                                 }
                                 .onKeyPress(.escape) {
-                                    // Escapeで候補リストを閉じる → 履歴を閉じる
+                                    // Escapeでサジェスト候補リストを閉じる
                                     if historyState.isShowingSuggestions {
                                         historyState.isShowingSuggestions = false
                                         return .handled
                                     }
-                                    // 候補がない場合は履歴を閉じる
-                                    historyState.showHistory = false
-                                    isSearchFocused.wrappedValue = false
-                                    return .handled
+                                    return .ignored
                                 }
                                 // 注: ⌘F（履歴トグル）はメニューショートカットで処理
                             }
@@ -1172,6 +1169,12 @@ struct ImageCatalogEntryRow: View {
                             }
                         }
 
+                        if let modDate = fileModificationDate(entry.filePath) {
+                            Text(L("tooltip_file_modified") + ": " + formattedDate(modDate))
+                                .font(.caption2)
+                                .foregroundColor(.gray)
+                        }
+
                         Text(L("tooltip_last_access") + ": " + formattedDate(entry.lastAccessDate))
                             .font(.caption2)
                             .foregroundColor(.gray)
@@ -1216,6 +1219,10 @@ struct ImageCatalogEntryRow: View {
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return formatter.string(from: date)
+    }
+
+    private func fileModificationDate(_ path: String) -> Date? {
+        try? FileManager.default.attributesOfItem(atPath: path)[.modificationDate] as? Date
     }
 }
 
@@ -1347,6 +1354,12 @@ struct HistoryEntryRow: View {
                             }
                         }
 
+                        if let modDate = fileModificationDate(entry.filePath) {
+                            Text(L("tooltip_file_modified") + ": " + formattedDate(modDate))
+                                .font(.caption2)
+                                .foregroundColor(.gray)
+                        }
+
                         Text(L("tooltip_last_access") + ": " + formattedDate(entry.lastAccessDate))
                             .font(.caption2)
                             .foregroundColor(.gray)
@@ -1391,6 +1404,10 @@ struct HistoryEntryRow: View {
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return formatter.string(from: date)
+    }
+
+    private func fileModificationDate(_ path: String) -> Date? {
+        try? FileManager.default.attributesOfItem(atPath: path)[.modificationDate] as? Date
     }
 
     /// 拡張子から書庫の種類を取得

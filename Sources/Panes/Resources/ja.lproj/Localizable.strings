@@ -32,8 +32,8 @@
 "section_shortcut" = "キーボードショートカット";
 "shortcut_next_page" = "次のページ";
 "shortcut_previous_page" = "前のページ";
-"shortcut_skip_forward" = "ページを進む";
-"shortcut_skip_backward" = "ページを戻る";
+"shortcut_skip_forward" = "先にスキップ";
+"shortcut_skip_backward" = "後ろにスキップ";
 "shortcut_first_page" = "最初のページ";
 "shortcut_last_page" = "最後のページ";
 "shortcut_fullscreen" = "フルスクリーン切替";
@@ -45,6 +45,10 @@
 "shortcut_close_file" = "ファイルを閉じる";
 "shortcut_shift_page_forward" = "見開きシフト（正方向）";
 "shortcut_shift_page_backward" = "見開きシフト（逆方向）";
+"shortcut_fit_to_window" = "ウィンドウに合わせる";
+"shortcut_fit_to_original" = "実際のサイズで表示";
+"shortcut_arrow_keys_note" = "矢印キーは読み方向に連動するため、カスタマイズ対象外です。";
+"shortcut_reset_defaults" = "デフォルトに戻す";
 "shortcut_add_button" = "追加";
 "shortcut_press_key" = "キーを入力してください";
 "shortcut_press_key_description" = "ショートカットに設定するキーを押してください\n（Escでキャンセル）";
@@ -302,6 +306,7 @@
 
 "tooltip_file_size" = "サイズ";
 "tooltip_archive_type" = "種類";
+"tooltip_file_modified" = "更新日時";
 "tooltip_last_access" = "最終アクセス";
 "tooltip_resolution" = "解像度";
 "tooltip_image_count" = "画像";
@@ -400,28 +405,6 @@
 "session_delete_confirm_title" = "セッションを削除";
 "session_delete_confirm_message" = "「%@」を削除してもよろしいですか？";
 "search_type_session" = "セッション";
-
-// MARK: - Keyboard Shortcuts
-
-"shortcut_next_page" = "次のページ";
-"shortcut_previous_page" = "前のページ";
-"shortcut_skip_forward" = "数ページ進む";
-"shortcut_skip_backward" = "数ページ戻る";
-"shortcut_first_page" = "最初のページ";
-"shortcut_last_page" = "最後のページ";
-"shortcut_fullscreen" = "フルスクリーン切替";
-"shortcut_view_mode" = "表示モード切替";
-"shortcut_reading_direction" = "読み方向切替";
-"shortcut_zoom_in" = "拡大";
-"shortcut_zoom_out" = "縮小";
-"shortcut_reset_zoom" = "表示サイズのリセット";
-"shortcut_close_file" = "ファイルを閉じる";
-"shortcut_fit_to_window" = "ウィンドウに合わせる";
-"shortcut_fit_to_original" = "実際のサイズで表示";
-"shortcut_shift_page_forward" = "見開きシフト（正方向）";
-"shortcut_shift_page_backward" = "見開きシフト（逆方向）";
-"shortcut_arrow_keys_note" = "矢印キーは読み方向に連動するため、カスタマイズ対象外です。";
-"shortcut_reset_defaults" = "デフォルトに戻す";
 
 // MARK: - Update Checker
 

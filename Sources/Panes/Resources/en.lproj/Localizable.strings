@@ -45,6 +45,10 @@
 "shortcut_close_file" = "Close File";
 "shortcut_shift_page_forward" = "Shift Page Forward";
 "shortcut_shift_page_backward" = "Shift Page Backward";
+"shortcut_fit_to_window" = "Fit to Window";
+"shortcut_fit_to_original" = "Original Size";
+"shortcut_arrow_keys_note" = "Arrow keys follow reading direction and are not customizable.";
+"shortcut_reset_defaults" = "Reset to Defaults";
 "shortcut_add_button" = "Add";
 "shortcut_press_key" = "Press a key";
 "shortcut_press_key_description" = "Press the key you want to assign\n(Esc to cancel)";
@@ -302,6 +306,7 @@
 
 "tooltip_file_size" = "Size";
 "tooltip_archive_type" = "Type";
+"tooltip_file_modified" = "Modified";
 "tooltip_last_access" = "Last Access";
 "tooltip_resolution" = "Resolution";
 "tooltip_image_count" = "Images";
@@ -400,28 +405,6 @@
 "session_delete_confirm_title" = "Delete Session";
 "session_delete_confirm_message" = "Are you sure you want to delete \"%@\"?";
 "search_type_session" = "Sessions";
-
-// MARK: - Keyboard Shortcuts
-
-"shortcut_next_page" = "Next Page";
-"shortcut_previous_page" = "Previous Page";
-"shortcut_skip_forward" = "Skip Forward";
-"shortcut_skip_backward" = "Skip Backward";
-"shortcut_first_page" = "First Page";
-"shortcut_last_page" = "Last Page";
-"shortcut_fullscreen" = "Toggle Fullscreen";
-"shortcut_view_mode" = "Toggle View Mode";
-"shortcut_reading_direction" = "Toggle Reading Direction";
-"shortcut_zoom_in" = "Zoom In";
-"shortcut_zoom_out" = "Zoom Out";
-"shortcut_reset_zoom" = "Reset Zoom";
-"shortcut_close_file" = "Close File";
-"shortcut_fit_to_window" = "Fit to Window";
-"shortcut_fit_to_original" = "Original Size";
-"shortcut_shift_page_forward" = "Shift Page Forward";
-"shortcut_shift_page_backward" = "Shift Page Backward";
-"shortcut_arrow_keys_note" = "Arrow keys follow reading direction and are not customizable.";
-"shortcut_reset_defaults" = "Reset to Defaults";
 
 // MARK: - Update Checker
 

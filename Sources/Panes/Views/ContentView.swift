@@ -2267,8 +2267,8 @@ struct ContentView: View {
     /// Escape（履歴閉じ）、M（メモ編集）、Return（履歴オープン）、Delete（一括削除）、⌘A（全選択）の共通処理
     /// historyList/viewing/initialで共有
     private func handleCommonKeys(_ event: NSEvent, viewModel: BookViewModel?) -> NSEvent? {
-        // Escape: 履歴を閉じる
-        if event.keyCode == 53 && historyState.showHistory {
+        // Escape: 履歴を閉じる（検索フォームにフォーカス中は無視）
+        if event.keyCode == 53 && historyState.showHistory && !isHistorySearchFocused {
             historyState.closeHistory()
             isHistorySearchFocused = false
             focusMainView()
@@ -2282,8 +2282,9 @@ struct ContentView: View {
             return nil
         }
 
-        // Delete/Backspace: 選択アイテムを一括削除（履歴表示中のみ）
-        if event.keyCode == 51 && historyState.showHistory && !isHistorySearchFocused
+        // ⌘Delete: 選択アイテムを一括削除（履歴表示中のみ）
+        if event.keyCode == 51 && event.modifierFlags.contains(.command)
+            && historyState.showHistory && !isHistorySearchFocused
             && !historyState.selectedItems.isEmpty {
             deleteSelectedItems()
             return nil
